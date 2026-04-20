@@ -149,7 +149,7 @@ Every call is hashed (keccak256) at creation time and anchored on Base L2 via da
 | Timeframes | 15m, 1h | All 11 | All 11 | All 11 | All 11 |
 | Funding arb results | Top 5 | Unlimited | Unlimited | Unlimited | Unlimited |
 | Track record | Full access | Full access | Full access | Full access | Full access |
-| Monthly calls | ~100/day | 3,000/mo | 15,000/mo | 100,000/mo | Unlimited |
+| Monthly calls | 100/mo | 3,000/mo | 15,000/mo | 100,000/mo | Unlimited |
 | Support | Community | Email | Priority | Dedicated | — |
 | Price | $0 | $9.99/mo | $49/mo | $299/mo | $0.01–0.05/call |
 | HOLD calls | Free | Free | Free | Free | Free |
