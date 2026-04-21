@@ -79,9 +79,24 @@ function markAlerted(state: AlertState, key: string): void {
 // ── Critical Checks ──
 
 async function checkServerHealth(): Promise<string | null> {
-  const { ok, status } = await fetchJson(`${API_BASE}/health`);
-  if (!ok) return `Server health check failed (HTTP ${status})`;
-  return null;
+  // Retry up to 3 times with 5s delay to avoid false-positive CRITICAL
+  // alerts on transient network blips (Cloudflare edge hiccup, brief DNS
+  // timeout, etc.). A single HTTP 0 is normal noise; 3 consecutive
+  // failures over ~15s is a real outage.
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAY_MS = 5_000;
+  let lastStatus = 0;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { ok, status } = await fetchJson(`${API_BASE}/health`);
+    if (ok) return null;
+    lastStatus = status;
+    if (attempt < MAX_ATTEMPTS) {
+      console.log(`[monitor] server health failed (HTTP ${status}), retry ${attempt}/${MAX_ATTEMPTS - 1} in ${RETRY_DELAY_MS / 1000}s...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
+  return `Server health check failed (HTTP ${lastStatus}) after ${MAX_ATTEMPTS} attempts`;
 }
 
 async function checkFacilitator(): Promise<string | null> {
@@ -89,9 +104,20 @@ async function checkFacilitator(): Promise<string | null> {
   const url = process.env.X402_FACILITATOR_URL
     ? `${process.env.X402_FACILITATOR_URL}/health`
     : 'http://facilitator:4022/health';
-  const { ok, status } = await fetchJson(url);
-  if (!ok) return `x402 facilitator down (HTTP ${status})`;
-  return null;
+  // Same retry pattern as checkServerHealth — 3 attempts, 5s delay.
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAY_MS = 5_000;
+  let lastStatus = 0;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { ok, status } = await fetchJson(url);
+    if (ok) return null;
+    lastStatus = status;
+    if (attempt < MAX_ATTEMPTS) {
+      console.log(`[monitor] facilitator health failed (HTTP ${status}), retry ${attempt}/${MAX_ATTEMPTS - 1}...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
+  return `x402 facilitator down (HTTP ${lastStatus}) after ${MAX_ATTEMPTS} attempts`;
 }
 
 async function checkGasWallet(): Promise<{ error: string | null; balance: number }> {
