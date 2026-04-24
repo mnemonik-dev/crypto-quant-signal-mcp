@@ -1,4 +1,4 @@
-import { getAdapter } from '../lib/exchange-adapter.js';
+import { getAdapter, type ExchangeAdapter } from '../lib/exchange-adapter.js';
 import { getFundingArbLimit, isFreeTier, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import type {
@@ -7,7 +7,110 @@ import type {
   FundingConviction,
   FundingUrgency,
   LicenseInfo,
+  FundingData,
 } from '../types.js';
+
+// ── LATENCY-W1 C5: TTL caches for adapter calls (LRU-capped) ──
+//
+// Why: cron monitor + dashboards call scan_funding_arb every 1-2 min. Without
+// caching, every call re-fetches identical predicted-funding data (HL updates
+// these on the minute) and per-coin funding history (24h-window data that's
+// largely static within a few minutes). With caching: warm-path p50 drops
+// from ~1093ms → ~500ms (cuts the two adapter roundtrips that dominate the
+// hot path).
+//
+// CPX22 RAM cap proof:
+//   - predictedFundingsCache: 1 entry, ~50KB max
+//   - fundingHistoryCache:    200 entries × ~20KB = 4MB max
+//   Total: <5MB worst case. Well inside CPX22 budget.
+
+const PREDICTED_FUNDINGS_TTL_MS = 30_000; // HL updates funding on the minute; 30s safe
+const FUNDING_HISTORY_TTL_MS = 60_000;    // 24h-window data; 60s + 1-min bucket = stable
+const FUNDING_HISTORY_CACHE_MAX = 200;    // LRU cap
+
+interface PredictedFundingsCacheEntry {
+  at: number;
+  data: FundingData[];
+}
+interface FundingHistoryCacheEntry {
+  at: number;
+  data: { time: number; fundingRate: number }[];
+}
+
+// Module-level singletons (process-lifetime). Reset via _resetScanFundingArbCaches().
+let predictedFundingsCache: PredictedFundingsCacheEntry | null = null;
+const fundingHistoryCache = new Map<string, FundingHistoryCacheEntry>();
+
+async function getCachedPredictedFundings(adapter: ExchangeAdapter): Promise<FundingData[]> {
+  const now = Date.now();
+  if (predictedFundingsCache && now - predictedFundingsCache.at <= PREDICTED_FUNDINGS_TTL_MS) {
+    return predictedFundingsCache.data;
+  }
+  const data = await adapter.getPredictedFundings();
+  predictedFundingsCache = { at: now, data };
+  return data;
+}
+
+async function getCachedFundingHistory(
+  adapter: ExchangeAdapter,
+  coin: string,
+  startTime: number,
+): Promise<{ time: number; fundingRate: number }[]> {
+  // 1-minute bucket so that small clock drift between concurrent calls collapses
+  // to the same cache key. startTime is `Date.now() - 24h` upstream → both
+  // calls 30s apart will round to the same bucket, sharing one fetch.
+  const bucket = Math.floor(startTime / 60_000);
+  const key = `${coin}:${bucket}`;
+  const now = Date.now();
+  const hit = fundingHistoryCache.get(key);
+  if (hit && now - hit.at <= FUNDING_HISTORY_TTL_MS) {
+    return hit.data;
+  }
+  const data = await adapter.getFundingHistory(coin, startTime);
+  fundingHistoryCache.set(key, { at: now, data });
+  // LRU eviction: when over cap, delete oldest by `at`.
+  // Map iteration is insertion order in JS, so the first key is the oldest
+  // INSERTED. Since we only set on miss, insertion order ≈ recency-of-fetch
+  // order — close enough to LRU for a 200-entry cap. (Strict LRU would re-set
+  // on hit; not worth the extra Map churn for this size.)
+  if (fundingHistoryCache.size > FUNDING_HISTORY_CACHE_MAX) {
+    const oldestKey = fundingHistoryCache.keys().next().value;
+    if (oldestKey !== undefined) fundingHistoryCache.delete(oldestKey);
+  }
+  return data;
+}
+
+/**
+ * Test-only reset hooks. Underscore-prefixed per project convention for
+ * test seams (matches _setSnapshotForTest / _setScorerOverride in
+ * cross-asset-grid.ts). Vitest must call _resetScanFundingArbCaches() in
+ * beforeEach to ensure test isolation — otherwise test N's cache pollutes
+ * test N+1. The granular _resetPredictedFundingsCache() is for tests that
+ * need to vary fundings per scan while observing fundingHistory growth.
+ */
+export function _resetScanFundingArbCaches(): void {
+  predictedFundingsCache = null;
+  fundingHistoryCache.clear();
+}
+export function _resetPredictedFundingsCache(): void {
+  predictedFundingsCache = null;
+}
+
+/**
+ * Test-only inspector. Returns current funding-history cache size for
+ * direct LRU-cap assertion. Not intended for production use.
+ */
+export function _getScanFundingArbCacheSizes(): {
+  predictedFundingsCached: boolean;
+  fundingHistorySize: number;
+  fundingHistoryCap: number;
+} {
+  return {
+    predictedFundingsCached: predictedFundingsCache !== null,
+    fundingHistorySize: fundingHistoryCache.size,
+    fundingHistoryCap: FUNDING_HISTORY_CACHE_MAX,
+  };
+}
 
 interface ScanFundingArbInput {
   minSpreadBps?: number;
@@ -47,7 +150,9 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
   const adapter = getAdapter();
   let fundings;
   try {
-    fundings = await adapter.getPredictedFundings();
+    // C5 (LATENCY-W1): cached, 30s TTL. Cache miss path falls through to the
+    // adapter's real getPredictedFundings(), so error semantics are identical.
+    fundings = await getCachedPredictedFundings(adapter);
   } catch {
     return {
       opportunities: [],
@@ -151,8 +256,10 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
   const nowMs = Date.now();
   const historyStartTime = nowMs - 24 * 3600 * 1000; // 24 hours ago
 
+  // C5 (LATENCY-W1): cached, 60s TTL keyed by ${coin}:${minute-bucket}, LRU(200).
+  // Same .catch(() => []) error swallow as before.
   const historyPromises = candidates.map(opp =>
-    adapter.getFundingHistory(opp.coin, historyStartTime).catch(() => [])
+    getCachedFundingHistory(adapter, opp.coin, historyStartTime).catch(() => [])
   );
   const histories = await Promise.all(historyPromises);
 

@@ -5,7 +5,7 @@ vi.mock('../src/lib/exchange-adapter.js', () => ({
   getAdapter: vi.fn(),
 }));
 
-import { scanFundingArb } from '../src/tools/scan-funding-arb.js';
+import { scanFundingArb, _resetScanFundingArbCaches, _resetPredictedFundingsCache, _getScanFundingArbCacheSizes } from '../src/tools/scan-funding-arb.js';
 import { getAdapter } from '../src/lib/exchange-adapter.js';
 import { resetLicenseCache } from '../src/lib/license.js';
 import type { ExchangeAdapter, FundingData } from '../src/types.js';
@@ -51,6 +51,7 @@ describe('scanFundingArb', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetLicenseCache();
+    _resetScanFundingArbCaches(); // C5: clear module-level TTL caches between tests
     process.env.CQS_API_KEY = 'test-key';
   });
 
@@ -193,5 +194,93 @@ describe('scanFundingArb', () => {
     const result = await scanFundingArb({ minSpreadBps: 0, limit: 5 });
     expect(historySpy.mock.calls.length).toBeLessThanOrEqual(10); // limit*2
     expect(result.opportunities.length).toBe(5);                  // exactly limit
+  });
+
+  // ── LATENCY-W1 C5: TTL caches (predictedFundings 30s + fundingHistory 60s LRU 200) ──
+
+  it('AC5.1: predictedFundings cache — back-to-back calls within TTL hit cache (1 fetch, not 2)', async () => {
+    const predictedSpy = vi.fn().mockResolvedValue(mockFundings());
+    const adapter = createMockAdapter();
+    adapter.getPredictedFundings = predictedSpy;
+    vi.mocked(getAdapter).mockReturnValue(adapter);
+
+    await scanFundingArb({ minSpreadBps: 0 });
+    await scanFundingArb({ minSpreadBps: 0 });
+    await scanFundingArb({ minSpreadBps: 0 });
+
+    expect(predictedSpy.mock.calls.length).toBe(1); // one fetch, two cache hits
+  });
+
+  it('AC5.1: fundingHistory cache — same coin within TTL hits cache', async () => {
+    const historySpy = vi.fn().mockResolvedValue([
+      { time: Date.now(), fundingRate: 0.0001 },
+    ]);
+    const adapter = createMockAdapter();
+    adapter.getFundingHistory = historySpy;
+    vi.mocked(getAdapter).mockReturnValue(adapter);
+
+    // First call: 3 unique coins → 3 history fetches
+    await scanFundingArb({ minSpreadBps: 0 });
+    const firstCallCount = historySpy.mock.calls.length;
+    expect(firstCallCount).toBeGreaterThan(0);
+
+    // Second call: same 3 coins → 0 additional fetches (all cache hits)
+    await scanFundingArb({ minSpreadBps: 0 });
+    expect(historySpy.mock.calls.length).toBe(firstCallCount);
+  });
+
+  it('AC5.2: LRU cap — fundingHistorySize never exceeds FUNDING_HISTORY_CACHE_MAX (200) after inserts', async () => {
+    // Use explicit pro-tier license to bypass free-tier limit cap of 5.
+    // With limit=10, candidates per scan = limit*SLICE_CUSHION = 20.
+    // 12 scans × 20 unique coins each = 240 attempted unique keys → cap should hold at 200.
+    const proLicense = { tier: 'pro' as const, key: 'test-pro-key' };
+
+    let scanIndex = 0;
+    const historySpy = vi.fn().mockResolvedValue([]);
+    vi.mocked(getAdapter).mockImplementation(() => {
+      const fundings: FundingData[] = Array.from({ length: 22 }, (_, i) => ({
+        coin: `LRU_${scanIndex}_${i}`,
+        venues: [
+          { venue: 'HlPerp',  fundingRate: 0.0001, nextFundingTime: 1712345600000 },
+          { venue: 'BinPerp', fundingRate: 0.001 + i * 0.0001, nextFundingTime: 1712348400000 },
+        ],
+      }));
+      const a = createMockAdapter(fundings);
+      a.getFundingHistory = historySpy;
+      return a;
+    });
+
+    for (let i = 0; i < 12; i++) {
+      scanIndex = i;
+      // Force fresh predictedFundings each iteration so each scan adds new
+      // unique coins to fundingHistoryCache (otherwise scan 0's predicted
+      // result would be cached and reused by scans 1-11). Doesn't touch
+      // fundingHistoryCache — that's what we're stress-testing.
+      _resetPredictedFundingsCache();
+      await scanFundingArb({ minSpreadBps: 0, limit: 10, license: proLicense });
+    }
+
+    const sizes = _getScanFundingArbCacheSizes();
+    // Cap MUST hold at 200 (240 attempted - 40 evicted = 200)
+    expect(sizes.fundingHistorySize).toBe(sizes.fundingHistoryCap);
+    expect(sizes.fundingHistorySize).toBe(200);
+    // Spy was called 240 times (each scan = 20 fetches; LRU evicts cache slots, not fetches)
+    expect(historySpy.mock.calls.length).toBe(240);
+  });
+
+  it('AC5: cache reset hook clears both caches (test isolation guarantee)', async () => {
+    const predictedSpy = vi.fn().mockResolvedValue(mockFundings());
+    const adapter = createMockAdapter();
+    adapter.getPredictedFundings = predictedSpy;
+    vi.mocked(getAdapter).mockReturnValue(adapter);
+
+    await scanFundingArb({ minSpreadBps: 0 });
+    expect(predictedSpy.mock.calls.length).toBe(1);
+
+    // Reset → next call must miss cache + re-fetch
+    _resetScanFundingArbCaches();
+
+    await scanFundingArb({ minSpreadBps: 0 });
+    expect(predictedSpy.mock.calls.length).toBe(2);
   });
 });
