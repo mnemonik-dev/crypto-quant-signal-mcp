@@ -535,6 +535,23 @@ ${rowsHtml}
       }
     });
 
+    // Skills analytics JSON (admin-only) — backs the Skills section of /dashboard.
+    // Same data the previous public /analytics/skills page consumed; that public
+    // route is being removed in the same wave (per Data Integrity two-commit
+    // pattern: this admin endpoint ships first, public is stripped in commit 2).
+    // Auth: shared isAdminAuthorized — Bearer header OR ?key= query OR admin cookie.
+    app.get('/dashboard/api/skills-analytics', async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      try {
+        const stats = await getSkillsAnalytics();
+        res.json(stats);
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch skills analytics' });
+      }
+    });
+
     // Signal performance dashboard (admin-only)
     app.get('/performance-dashboard', (req, res) => {
       const key = req.query.key as string;
@@ -858,6 +875,13 @@ function getDashboardHtml(): string {
     <div class="section"><h2>Top Assets</h2><table><thead><tr><th>Asset</th><th>Calls</th><th></th></tr></thead><tbody id="top-assets"></tbody></table></div>
     <div class="section"><h2>Avg Response Time</h2><table><thead><tr><th>Tool</th><th>ms</th></tr></thead><tbody id="avg-time"></tbody></table></div>
   </div>
+  <div class="section">
+    <h2>Skills Analytics (algovault-skills plugin) &middot; <span id="skills-summary" style="color:#8b949e;font-size:12px;text-transform:none;letter-spacing:0">loading...</span></h2>
+    <table>
+      <thead><tr><th>Slug</th><th style="text-align:right">24h</th><th style="text-align:right">7d</th><th style="text-align:right">All-time</th><th>Last invoked</th></tr></thead>
+      <tbody id="skills-rows"></tbody>
+    </table>
+  </div>
   <div class="refresh">Auto-refreshes every 30s &middot; <span id="updated"></span></div>
 </div>
 <script>
@@ -877,6 +901,39 @@ function renderAssets(data) {
   el.innerHTML = data.map(d =>
     '<tr><td>' + d.asset + '</td><td>' + d.calls + '</td><td style="width:50%"><div class="bar" style="width:' + Math.round(d.calls/max*100) + '%"></div></td></tr>'
   ).join('');
+}
+// Canonical 20 Skill slugs — table renders all 20 even with zero invocations.
+// Kept in sync with skills/manifest.json in github.com/AlgoVaultLabs/algovault-skills.
+const SKILL_SLUGS = ['quick-btc-check','portfolio-scanner','regime-aware-trading','funding-arb-monitor','full-3-tool-pipeline','multi-timeframe-confirmation','tradfi-rotation','risk-gated-entry','funding-sentiment-dashboard','contrarian-meme-scanner','divergence-detector','hourly-digest-bot','hedging-advisor','volatility-breakout-watch','cross-asset-correlation','funding-cash-and-carry','weekend-vs-weekday-patterns','agent-portfolio-rebalance','smart-dca-bot','multi-agent-war-room'];
+function escSlug(s) { return String(s).replace(/[<>&]/g,''); }
+function fmtTs(s) {
+  if (!s) return '<span style="color:#6e7681">never</span>';
+  const t = new Date(s);
+  return isNaN(t.getTime()) ? s : t.toISOString().slice(0,16).replace('T',' ') + 'Z';
+}
+async function loadSkills() {
+  try {
+    const r = await fetch('/dashboard/api/skills-analytics', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const bySlug = new Map((d.perSlug || []).map(x => [x.slug, x]));
+    const rows = SKILL_SLUGS.map(slug => {
+      const x = bySlug.get(slug) || { calls_24h:0, calls_7d:0, calls_all_time:0, last_seen:null };
+      return '<tr>'
+        + '<td><a style="color:#58a6ff;text-decoration:none" href="https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/'+escSlug(slug)+'/SKILL.md"><code>'+escSlug(slug)+'</code></a></td>'
+        + '<td style="text-align:right;color:#3fb950;font-variant-numeric:tabular-nums">'+x.calls_24h+'</td>'
+        + '<td style="text-align:right;color:#bc8cff;font-variant-numeric:tabular-nums">'+x.calls_7d+'</td>'
+        + '<td style="text-align:right;color:#58a6ff;font-variant-numeric:tabular-nums">'+x.calls_all_time+'</td>'
+        + '<td style="color:#8b949e">'+fmtTs(x.last_seen)+'</td>'
+        + '</tr>';
+    }).join('');
+    document.getElementById('skills-rows').innerHTML = rows;
+    document.getElementById('skills-summary').textContent =
+      d.totalInvocations + ' total invocations across ' + d.totalSlugs + '/20 active slugs';
+  } catch (e) {
+    document.getElementById('skills-rows').innerHTML =
+      '<tr><td colspan="5" style="color:#f85149">Failed to load skills analytics: ' + e.message + '</td></tr>';
+  }
 }
 async function load() {
   try {
@@ -898,6 +955,9 @@ async function load() {
     document.getElementById('updated').textContent = 'Updated: ' + new Date(d.generatedAt).toLocaleString();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
+    // Kick off skills section load in parallel — independent endpoint, won't
+    // block the main render even on slow DB query.
+    loadSkills();
   } catch(e) { document.getElementById('loading').textContent = 'Failed to load: ' + e.message; }
 }
 load();
