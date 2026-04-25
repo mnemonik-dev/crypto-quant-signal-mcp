@@ -326,6 +326,34 @@ async function startHttp() {
     res.json({ status: 'ok', server: 'crypto-quant-signal-mcp', version: PKG_VERSION, stripe: isStripeConfigured() });
   });
 
+  // ── Integration tutorial mirrors (INTEGRATIONS-W1 C6) ──
+  // Static HTML pre-rendered from algovault-skills/docs/integrations/<x>.md
+  // by scripts/render-integrations.mjs. Allowlist-only: anything outside the
+  // 4-exchange set 404s (no path traversal risk; no fs lookups for unknown
+  // slugs). Caddy routes /docs/integrations/* here ahead of the static
+  // catch-all (see Caddyfile algovault.com block).
+  const INTEGRATION_EXCHANGES = new Set(['binance', 'okx', 'bybit', 'bitget']);
+  app.get('/docs/integrations/:exchange', async (req, res) => {
+    const exchange = (req.params.exchange || '').toLowerCase().replace(/\.html$/, '');
+    if (!INTEGRATION_EXCHANGES.has(exchange)) {
+      return res.status(404).type('text/plain').send('Integration not found');
+    }
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const url = await import('node:url');
+      const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+      // dist/index.js → ../landing/integrations; src/index.ts (dev) → ../landing/integrations
+      const filePath = path.resolve(__dirname, '..', 'landing', 'integrations', `${exchange}.html`);
+      const html = await fs.readFile(filePath, 'utf8');
+      res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
+      res.type('text/html').send(html);
+    } catch (err) {
+      console.error(`integration mirror ${exchange} error:`, err instanceof Error ? err.message : err);
+      res.status(500).type('text/plain').send('Internal error rendering integration mirror');
+    }
+  });
+
   // (REMOVED 2026-04-24) Public per-Skill analytics page. Per-Skill funnel data
   // is competitive intel, not public moat-proof. Migrated to admin-gated tab on
   // /dashboard. New endpoint: /dashboard/api/skills-analytics (JSON, admin-only).

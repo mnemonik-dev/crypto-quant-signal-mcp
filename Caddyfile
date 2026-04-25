@@ -45,6 +45,12 @@ algovault.com {
     handle /api/verify-sample-ids {
         reverse_proxy localhost:3000
     }
+    # INTEGRATIONS-W1 C6 — proxy integration tutorial mirrors to Express.
+    # Allowlisted in src/index.ts. Placed BEFORE the static catch-all so
+    # /docs/integrations/* never falls through to a 404 from file_server.
+    handle /docs/integrations/* {
+        reverse_proxy localhost:3000
+    }
     handle {
         root * /var/www/algovault
         try_files {path} {path}.html {path}/index.html
