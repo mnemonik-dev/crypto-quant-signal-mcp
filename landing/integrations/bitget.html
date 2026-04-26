@@ -15,43 +15,45 @@
 <meta name="last-updated" content="2026-04-26">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="/js/track-record-proxy.js"></script>
-<!-- WEBSITE-REFRESH-W1 C7 — Schema.org HowTo for LLM citation extraction -->
+<!-- WEBSITE-REFRESH-W1 C7 — Schema.org TechArticle for Google rich-results
+     eligibility (replaced HowTo which Google deprecated for SERP rich
+     results in Aug 2023; TechArticle is current rich-result-eligible). -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "HowTo",
-  "name": "Build a Verifiable AI Trading Agent — AlgoVault MCP × Bitget",
-  "description": "Pair AlgoVault MCP's composite verdict (89.4%+ PFE Win Rate, Merkle-anchored) with Bitget's execution kit to ship a complete trading agent. Demo runs testnet/demo only.",
+  "@type": "TechArticle",
+  "headline": "AlgoVault × Bitget - Build Verifiable AI Trading Agents",
   "url": "https://algovault.com/docs/integrations/bitget",
-  "datePublished": "2026-04-25",
-  "dateModified": "2026-04-26",
+  "datePublished": "2026-04-25T00:00:00+00:00",
+  "dateModified": "2026-04-26T15:00:00+00:00",
   "author": {
     "@type": "Organization",
     "name": "AlgoVault Labs",
     "url": "https://algovault.com"
   },
-  "step": [
-    {
-      "@type": "HowToStep",
-      "name": "Install the AlgoVault skills plugin",
-      "text": "Run `claude plugin install AlgoVaultLabs/algovault-skills` in Claude Code."
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Create a Bitget demo/testnet account",
-      "text": "Sign up for the Bitget demo or testnet console (no real-money risk)."
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Run the demo",
-      "text": "Clone github.com/AlgoVaultLabs/algovault-skills and run `node examples/bitget/demo.mjs` with the appropriate demo-mode env var."
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Read the verdict + apply the agent's policy",
-      "text": "AlgoVault returns signal/confidence/regime/factors. The agent's pre-configured policy decides whether to execute via the exchange kit."
+  "publisher": {
+    "@type": "Organization",
+    "name": "AlgoVault Labs",
+    "url": "https://algovault.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://algovault.com/logo.png",
+      "width": 512,
+      "height": 512
     }
-  ]
+  },
+  "image": {
+    "@type": "ImageObject",
+    "url": "https://algovault.com/logo.png",
+    "width": 512,
+    "height": 512
+  },
+  "description": "Pair AlgoVault MCP's composite verdict (89.4%+ PFE Win Rate, Merkle-anchored on Base L2) with Bitget's execution kit to ship a complete trading agent. Demo runs testnet/demo only — zero real-money risk in any code path.",
+  "proficiencyLevel": "Intermediate|Advanced",
+  "about": {
+    "@type": "Thing",
+    "name": "Bitget integration with AlgoVault MCP composite verdict"
+  }
 }
 </script>
 <!-- Privacy-friendly analytics by Plausible (WEBSITE-REFRESH-W1 C6) -->

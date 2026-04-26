@@ -67,23 +67,25 @@ const SNAPSHOT_PFE_WR = '89.4%';
 const SNAPSHOT_SIGNAL_COUNT = '56,375';
 const SNAPSHOT_BATCH_COUNT = '16';
 
-function howToSchema(exchange, display) {
+function techArticleSchema(exchange, display) {
+  // WEBSITE-REFRESH-W1 follow-up: replaced HowTo (deprecated by Google for
+  // SERP rich results in Aug 2023) with TechArticle, which IS rich-result
+  // eligible. The HowTo was valid markup but produced "No items detected"
+  // in Google's Rich Results Test — TechArticle resolves that.
   const canonical = `https://algovault.com/docs/integrations/${exchange}`;
   return {
     "@context": "https://schema.org",
-    "@type": "HowTo",
-    "name": `Build a Verifiable AI Trading Agent — AlgoVault MCP × ${display}`,
-    "description": `Pair AlgoVault MCP's composite verdict (${SNAPSHOT_PFE_WR}+ PFE Win Rate, Merkle-anchored) with ${display}'s execution kit to ship a complete trading agent. Demo runs testnet/demo only.`,
+    "@type": "TechArticle",
+    "headline": `AlgoVault × ${display} - Build Verifiable AI Trading Agents`,
     "url": canonical,
-    "datePublished": "2026-04-25",
-    "dateModified": SNAPSHOT_DATE,
+    "datePublished": "2026-04-25T00:00:00+00:00",
+    "dateModified": `${SNAPSHOT_DATE}T15:00:00+00:00`,
     "author": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com" },
-    "step": [
-      { "@type": "HowToStep", "name": "Install the AlgoVault skills plugin", "text": "Run `claude plugin install AlgoVaultLabs/algovault-skills` in Claude Code." },
-      { "@type": "HowToStep", "name": `Create a ${display} demo/testnet account`, "text": `Sign up for the ${display} demo or testnet console (no real-money risk).` },
-      { "@type": "HowToStep", "name": "Run the demo", "text": `Clone github.com/AlgoVaultLabs/algovault-skills and run \`node examples/${exchange}/demo.mjs\` with the appropriate demo-mode env var.` },
-      { "@type": "HowToStep", "name": "Read the verdict + apply the agent's policy", "text": "AlgoVault returns signal/confidence/regime/factors. The agent's pre-configured policy decides whether to execute via the exchange kit." }
-    ]
+    "publisher": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com", "logo": { "@type": "ImageObject", "url": "https://algovault.com/logo.png", "width": 512, "height": 512 } },
+    "image": { "@type": "ImageObject", "url": "https://algovault.com/logo.png", "width": 512, "height": 512 },
+    "description": `Pair AlgoVault MCP's composite verdict (${SNAPSHOT_PFE_WR}+ PFE Win Rate, Merkle-anchored on Base L2) with ${display}'s execution kit to ship a complete trading agent. Demo runs testnet/demo only — zero real-money risk in any code path.`,
+    "proficiencyLevel": "Intermediate|Advanced",
+    "about": { "@type": "Thing", "name": `${display} integration with AlgoVault MCP composite verdict` }
   };
 }
 
@@ -92,7 +94,7 @@ function htmlShell(exchange, bodyHtml) {
   const display = DISPLAY_NAMES[exchange] ?? (exchange.charAt(0).toUpperCase() + exchange.slice(1));
   const description = `Pair AlgoVault MCP's composite verdict with ${display}'s agent execution kit. Free testnet demo · ${SNAPSHOT_PFE_WR} PFE Win Rate · ${SNAPSHOT_SIGNAL_COUNT}+ calls · ${SNAPSHOT_BATCH_COUNT}+ Merkle-verified on-chain batches.`;
   const canonical = `https://algovault.com/docs/integrations/${exchange}`;
-  const howTo = JSON.stringify(howToSchema(exchange, display), null, 2);
+  const techArticle = JSON.stringify(techArticleSchema(exchange, display), null, 2);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,9 +112,11 @@ function htmlShell(exchange, bodyHtml) {
 <meta name="last-updated" content="${SNAPSHOT_DATE}">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="/js/track-record-proxy.js"></script>
-<!-- WEBSITE-REFRESH-W1 C7 — Schema.org HowTo for LLM citation extraction -->
+<!-- WEBSITE-REFRESH-W1 C7 — Schema.org TechArticle for Google rich-results
+     eligibility (replaced HowTo which Google deprecated for SERP rich
+     results in Aug 2023; TechArticle is current rich-result-eligible). -->
 <script type="application/ld+json">
-${howTo}
+${techArticle}
 </script>
 <!-- Privacy-friendly analytics by Plausible (WEBSITE-REFRESH-W1 C6) -->
 <script async src="https://plausible.io/js/pa-RwGaS0xWrfzs4vNSkMOAX.js"></script>
