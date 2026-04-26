@@ -33,8 +33,13 @@ jobs:
             git reset --hard origin/main
             git clean -fd
 
-            # Sync static landing pages to Caddy serve path
+            # Sync static landing pages + assets to Caddy serve path.
+            # WEBSITE-REFRESH-W1 C1 added landing/js/ for the live track-record
+            # proxy; the mkdir + cp -r line ensures any future landing/<subdir>/
+            # ships without another deploy.yml edit.
             cp landing/*.html /var/www/algovault/ 2>/dev/null && echo "Landing pages synced" || echo "No landing pages to sync"
+            mkdir -p /var/www/algovault/js
+            cp -r landing/js/* /var/www/algovault/js/ 2>/dev/null && echo "Landing js/ synced" || echo "No landing js/ to sync"
 
             docker compose up -d --build
             docker compose ps
