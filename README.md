@@ -106,6 +106,33 @@ Uses a multi-dimensional classification approach combining directional strength 
 
 ---
 
+## Integrations
+
+End-to-end tutorials pairing AlgoVault with each major exchange's Agent Trade Kit. AlgoVault returns the analytics; the agent's risk policy decides what to execute. **All demos run testnet/demo only — zero real-money risk.**
+
+| # | Exchange | Tutorial | Demo | Mirror |
+|---|---|---|---|---|
+| 01 | Binance | [`docs/integrations/binance.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/binance.md) | [`examples/binance/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/binance/demo.mjs) | [algovault.com/docs/integrations/binance](https://algovault.com/docs/integrations/binance) |
+| 02 | OKX | [`docs/integrations/okx.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/okx.md) | [`examples/okx/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/okx/demo.mjs) | [algovault.com/docs/integrations/okx](https://algovault.com/docs/integrations/okx) |
+| 03 | Bybit | [`docs/integrations/bybit.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bybit.md) | [`examples/bybit/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bybit/demo.mjs) | [algovault.com/docs/integrations/bybit](https://algovault.com/docs/integrations/bybit) |
+| 04 | Bitget | [`docs/integrations/bitget.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bitget.md) | [`examples/bitget/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bitget/demo.mjs) | [algovault.com/docs/integrations/bitget](https://algovault.com/docs/integrations/bitget) |
+
+Distribution surface tracker: [`algovault-skills/docs/INTEGRATIONS_DISTRIBUTION.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/INTEGRATIONS_DISTRIBUTION.md).
+
+---
+
+## Skills
+
+20 ready-to-use Anthropic Agent Skills wrapping the AlgoVault MCP server. Each Skill is a single-prompt wrapper over 1–3 tool calls — composite verdicts, regime gating, multi-timeframe consensus, funding-arb monitoring, and more.
+
+```bash
+claude plugin install AlgoVaultLabs/algovault-skills
+```
+
+Browse the full catalog at <https://algovault.com/skills> or <https://github.com/AlgoVaultLabs/algovault-skills>.
+
+---
+
 ## Performance Tracking
 
 Every call is tracked from emission to outcome. No exceptions.

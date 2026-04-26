@@ -89,6 +89,12 @@ function htmlShell(exchange, bodyHtml) {
 <meta name="last-updated" content="${SNAPSHOT_DATE}">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="/js/track-record-proxy.js"></script>
+<!-- Privacy-friendly analytics by Plausible (WEBSITE-REFRESH-W1 C6) -->
+<script async src="https://plausible.io/js/pa-RwGaS0xWrfzs4vNSkMOAX.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
 <script>
 tailwind.config = {
   theme: {
@@ -132,9 +138,12 @@ tailwind.config = {
       <img src="/logo.png" alt="AlgoVault" class="h-8 w-8" />
       <span>AlgoVault</span>
     </a>
-    <nav class="text-sm text-steel-400 flex gap-6">
+    <nav class="text-sm text-steel-400 flex gap-4 flex-wrap">
+      <a href="/#use-cases" class="hover:text-gold-400">Use Cases</a>
       <a href="/track-record?utm_source=tutorial&utm_medium=web&utm_campaign=integration-${exchange}" class="hover:text-gold-400">Track Record</a>
+      <a href="/docs/integrations/binance" class="hover:text-gold-400">Integrations</a>
       <a href="/docs.html" class="hover:text-gold-400">Docs</a>
+      <a href="/skills" class="hover:text-gold-400">Skills</a>
       <a href="https://github.com/AlgoVaultLabs/algovault-skills" class="hover:text-gold-400">GitHub</a>
     </nav>
   </div>
