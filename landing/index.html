@@ -60,6 +60,7 @@ tailwind.config = {
   "url": "https://algovault.com",
   "offers": [
     { "@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free", "description": "BTC + ETH, 15m and 1h timeframes, 100 calls/month" },
+    { "@type": "Offer", "price": "9.99", "priceCurrency": "USD", "name": "Starter", "description": "All crypto + TradFi assets, all 11 timeframes, 3,000 calls/month", "url": "https://api.algovault.com/signup?plan=starter" },
     { "@type": "Offer", "price": "49", "priceCurrency": "USD", "name": "Pro", "description": "All crypto and TradFi assets, all 11 timeframes, 15K calls/month", "url": "https://api.algovault.com/signup?plan=pro" },
     { "@type": "Offer", "price": "299", "priceCurrency": "USD", "name": "Enterprise", "description": "Unlimited calls, SLA, priority support", "url": "https://api.algovault.com/signup?plan=enterprise" }
   ],
@@ -428,6 +429,17 @@ tailwind.config = {
     <div class="text-center mb-12">
       <h2 class="text-2xl sm:text-3xl font-bold text-white">Simple Pricing</h2>
       <p class="text-gray-500 text-sm mt-2">Start free. Pay when you need more.</p>
+
+      <!-- WEBSITE-REFRESH-W1 C5: M3 hero badge — "we only fire when we mean it" -->
+      <div class="text-center mt-8 mb-2">
+        <div class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full">
+          <span class="text-emerald-400 text-sm font-semibold">93% HOLD rate &mdash; we only fire when we mean it.</span>
+        </div>
+        <p class="text-gray-400 text-sm mt-3 max-w-2xl mx-auto">
+          Most signal tools always emit a verdict. We reject 93% of scans as HOLD &mdash; and HOLDs are <span class="text-white font-semibold">always free</span>.
+          That selectivity is why the 7% that pass have <span data-tr-field="pfe_wr" class="text-gold-400">89.4%</span>+ Merkle-verified accuracy on <span data-tr-field="signal_count" class="text-gold-400">56,375</span>+ signals.
+        </p>
+      </div>
     </div>
 
     <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-5">
