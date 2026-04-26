@@ -95,37 +95,43 @@ Sign up at https://api.algovault.com/signup?plan={starter|pro|enterprise}.
 
 ## Integrations (4 official Brain + Execution pairings)
 
+<!-- BUILD:LLMS_FULL_INTEGRATIONS -->
 ### Binance × AlgoVault
 
 - **Tutorial:** https://algovault.com/docs/integrations/binance
-- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/binance/demo.mjs
-- **Pairs with:** Binance Skills Hub (`github.com/binance/binance-skills-hub`, OFFICIAL Binance-org repo, marketplace pattern: `npx skills add <repo-url>`)
-- **Demo execution:** Binance Spot Testnet (`testnet.binance.vision/api`); guards: `BINANCE_TESTNET=true` env var, `MAINNET_BLOCKED=true` const, 0.001 ETH order cap.
-- **Recipes:** Regime-gated DCA on BTC / Confidence-filtered swing entry on ETH / Funding-arb opportunity awareness.
+- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/binance
+- **Pairs with:** binance/binance-skills-hub (verified-2026-04-25)
+- **Demo execution:** BINANCE_TESTNET=true
+- **Recipes:** regime gated dca btc / confidence filtered eth swing / funding arb cash and carry.
+- **Status:** LIVE · **Launched:** 2026-03-03
 
 ### OKX × AlgoVault
 
 - **Tutorial:** https://algovault.com/docs/integrations/okx
-- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/okx/demo.mjs
-- **Pairs with:** OKX Agent Trade Kit (`@okx_ai/okx-trade-mcp@1.3.1` on npm; `github.com/okx/agent-trade-kit`)
-- **Demo execution:** OKX simulated trading via `--demo` CLI flag (REST equivalent: `x-simulated-trading: 1` header).
-- **Recipes:** Multi-asset regime scan + grid-bot trigger / Funding-arb pair on options / Risk-gated entry with confidence floor.
+- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/okx
+- **Pairs with:** @okx_ai/okx-trade-mcp (1.3.1)
+- **Demo execution:** OKX_DEMO=true (or --demo CLI flag)
+- **Recipes:** multi asset regime grid bot / funding arb options pair / risk gated confidence floor.
+- **Status:** LIVE · **Launched:** 2026-03-15
 
 ### Bybit × AlgoVault
 
 - **Tutorial:** https://algovault.com/docs/integrations/bybit
-- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bybit/demo.mjs
-- **Pairs with:** Bybit Official Trading MCP (`bybit-official-trading-server@2.0.9` on npm; `github.com/bybit-exchange/trading-mcp`; launched 2026-04-22)
-- **Demo execution:** Bybit Linear Perpetual testnet (`api-testnet.bybit.com/v5/*`); env var `BYBIT_TESTNET=true`.
-- **Recipes:** Multi-timeframe consensus → perp entry / Volatility breakout watch with conditional orders / Hedge-aware DCA on existing position.
+- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bybit
+- **Pairs with:** bybit-official-trading-server (2.0.9)
+- **Demo execution:** BYBIT_TESTNET=true
+- **Recipes:** multi tf consensus perp entry / volatility breakout conditional / hedge aware dca.
+- **Status:** LIVE · **Launched:** 2026-04-22
 
 ### Bitget × AlgoVault
 
 - **Tutorial:** https://algovault.com/docs/integrations/bitget
-- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bitget/demo.mjs
-- **Pairs with:** Bitget Agent Hub (`bitget-mcp-server@1.1.0` on npm; `github.com/BitgetLimited/agent_hub`) + GetClaw agent-native dedicated AI account.
-- **Demo execution:** Bitget GetClaw demo account (separate from mainnet); wrapper enforces `BITGET_DEMO=true` + `MAINNET_BLOCKED=true` + 0.0001 BTC cap.
-- **Recipes:** Natural-language verdict + GetClaw execution / 5 Bitget AI Skills + AlgoVault complement / Agent-native portfolio rebalance via GetClaw.
+- **Demo:** https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bitget
+- **Pairs with:** bitget-mcp-server (1.1.0)
+- **Demo execution:** BITGET_DEMO=true (wrapper-enforced; MCP server has no built-in demo flag)
+- **Recipes:** nlp verdict getclaw / five bitget skills complement / agent native rebalance.
+- **Status:** LIVE · **Launched:** 2026-02-13
+<!-- /BUILD:LLMS_FULL_INTEGRATIONS -->
 
 ---
 
@@ -133,26 +139,28 @@ Sign up at https://api.algovault.com/signup?plan={starter|pro|enterprise}.
 
 Each Skill is a single-prompt wrapper over 1–3 AlgoVault MCP tool calls. Difficulty: Beginner (1) → Intermediate (3) → Advanced (14) → Research (1) → Expert (1).
 
+<!-- BUILD:LLMS_FULL_SKILLS -->
 01. **Quick BTC Check** (Beginner): The simplest possible call. Ask your agent for a single trade call.
-02. **Portfolio Scanner** (Intermediate): Loop top 10 assets, filter by confidence > 70%.
-03. **Regime-Aware Trading** (Intermediate): Conditional chaining — check regime first, only request trade calls when regime is favourable.
-04. **Funding Arb Monitor** (Intermediate): Threshold-based alerting on cross-venue funding spread > N bps.
-05. **Full 3-Tool Pipeline** (Advanced): Regime → trade call → arb check for the same asset.
-06. **Multi-Timeframe Confirmation** (Advanced): Same asset on multiple timeframes; only act when all agree.
-07. **TradFi Rotation** (Advanced): Compare regime + direction across TradFi perps; rotate to strongest trend.
-08. **Risk-Gated Entry** (Advanced): Dual filter — confidence + regime alignment must both pass.
-09. **Funding Sentiment Dashboard** (Advanced): Macro sentiment from cross-venue funding aggregation.
-10. **Contrarian Meme Scanner** (Advanced): High-confidence SELL during uptrend = crowded longs about to unwind.
-11. **Divergence Detector** (Advanced): Trade call vs market regime disagreement → high-risk flag.
-12. **Hourly Digest Bot** (Advanced): Periodic scan of tier-1/2 assets, notification-ready summary.
-13. **Hedging Advisor** (Advanced): Defensive hedging via cheaper-venue funding arb when bearish signals align.
-14. **Volatility Breakout Watch** (Advanced): Regime as screener; VOLATILE + high confidence = breakout candidate.
-15. **Cross-Asset Correlation** (Advanced): BTC/ETH/SOL all SELL = macro risk-off, not isolated.
-16. **Funding Cash-and-Carry** (Advanced): Arb spread + trade-call agreement = double conviction.
-17. **Weekend vs Weekday Patterns** (Research): Schedule trade calls every 4h; compare weekend/weekday regimes for exploitable edges.
-18. **Agent Portfolio Rebalance** (Advanced): Daily regime check; shift allocation to TRENDING, reduce VOLATILE/RANGING exposure.
-19. **Smart DCA Bot** (Advanced): DCA enhanced by skipping high-confidence SELL days.
-20. **Multi-Agent War Room** (Expert): Three specialised agents (regime / trade call / arb) + coordinator.
+02. **Portfolio Scanner** (Intermediate): Loop through the top 10 assets, get trade calls for each, and filter by high confidence.
+03. **Regime-Aware Trading** (Intermediate): Check the market regime first. Only request trade calls when the regime is favorable for directional trading.
+04. **Funding Arb Monitor** (Intermediate): Scan for cross-venue funding rate arbitrage opportunities. Alert when the annualized spread exceeds your threshold.
+05. **Full 3-Tool Pipeline** (Advanced): The complete AlgoVault workflow: regime detection, trade call, then arb check for the same asset. Maximum context for one decision.
+06. **Multi-Timeframe Confirmation** (Advanced): Get trade calls on multiple timeframes for the same asset. Only act when all timeframes agree on direction.
+07. **TradFi Rotation** (Advanced): Compare regime and direction across TradFi perpetuals. Rotate into the asset with the strongest trend.
+08. **Risk-Gated Entry** (Advanced): Only enter trades when both confidence and regime alignment pass your risk filters. Skip everything else.
+09. **Funding Sentiment Dashboard** (Advanced): Get market regime for major assets and use the cross-venue funding sentiment to gauge overall market bias.
+10. **Contrarian Meme Scanner** (Advanced): Scan lower-tier assets for contrarian setups: high-confidence SELL calls during an uptrend may signal crowded longs about to unwind.
+11. **Divergence Detector** (Advanced): Compare trade call direction vs market regime. When they disagree, flag it as a high-risk divergence.
+12. **Hourly Digest Bot** (Advanced): Build an automated digest: scan all tier-1 and tier-2 assets every hour, summarize trade calls and market regime into a brief report.
+13. **Hedging Advisor** (Advanced): You hold a long ETH position. Check regime and trade call — if both turn bearish, look for a funding arb to hedge via the cheaper venue.
+14. **Volatility Breakout Watch** (Advanced): Use regime detection as a screener: find assets in VOLATILE regime with high confidence — these are breakout candidates. Then get trade call for direction.
+15. **Cross-Asset Correlation** (Advanced): Get trade calls for BTC, ETH, SOL simultaneously. If all say SELL, it's a macro risk-off signal, not just one asset.
+16. **Funding Cash-and-Carry** (Advanced): Find a funding arb spread, then get a trade call on the long side. If the trade call agrees with the long direction, you have double conviction.
+17. **Weekend vs Weekday Patterns** (Research): Schedule trade calls every 4 hours, log results over time. Compare weekend vs weekday regime patterns to find exploitable edges.
+18. **Agent Portfolio Rebalance** (Advanced): Daily regime check for each asset in your portfolio. Shift allocation toward TRENDING assets, reduce exposure to VOLATILE/RANGING positions.
+19. **Smart DCA Bot** (Advanced): Dollar-cost averaging, enhanced: skip buys when the trade call says SELL with high confidence. Only DCA when direction is neutral or favorable.
+20. **Multi-Agent War Room** (Expert): Three specialized agents, one coordinator. Agent A: regime, Agent B: trade calls, Agent C: funding arbs. Coordinator synthesizes all three.
+<!-- /BUILD:LLMS_FULL_SKILLS -->
 
 Install all 20 with one command:
 

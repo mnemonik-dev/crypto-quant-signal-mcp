@@ -1,0 +1,57 @@
+name: Regenerate Landing from Manifests
+
+# WEBSITE-REFRESH-W1 C8 — receives `repository_dispatch` from algovault-skills
+# (or manual workflow_dispatch). Checks out both repos as siblings, runs the
+# manifest-driven build script, commits regenerated surfaces if changed, and
+# pushes — which triggers the standard deploy.yml on the same branch.
+#
+# Total round-trip from manifest edit to live algovault.com update: ~2 min.
+
+on:
+  repository_dispatch:
+    types: [manifest-changed]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      # Self-trigger on direct edits of manifests if cross-repo sync is bypassed.
+      # NOTE: this path won't typically fire because manifests live in the sibling
+      # repo, but listed for safety in case someone vendors the manifests here.
+      - 'skills/manifest.json'
+      - 'integrations/manifest.json'
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout crypto-quant-signal-mcp
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout algovault-skills (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: AlgoVaultLabs/algovault-skills
+          path: ../algovault-skills
+          fetch-depth: 1
+
+      - name: Run build script
+        run: |
+          node ../algovault-skills/scripts/build_landing.mjs --target .
+
+      - name: Commit regenerated surfaces (if any)
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.email "ci@algovault.com"
+            git config user.name "AlgoVault CI"
+            # Stage explicitly-named landing/ + README.md targets (no -A to avoid
+            # accidental commit of build-output artifacts).
+            git add landing/skills.html landing/index.html landing/llms.txt landing/llms-full.txt README.md
+            git commit -m "build(landing): regenerate from manifests [skip ci]
+
+Triggered by repository_dispatch from ${{ github.event.client_payload.source_repo || 'self' }} (sha ${{ github.event.client_payload.source_sha || 'n/a' }}, actor ${{ github.event.client_payload.source_actor || 'n/a' }})."
+            git push
+          else
+            echo "No surface changes; skipping commit."
+          fi

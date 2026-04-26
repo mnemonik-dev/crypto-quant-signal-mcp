@@ -27,18 +27,22 @@ Live source of truth: https://algovault.com/api/performance-public
 
 ## Integrations (Brain + Execution pairings)
 
-- [Binance × AlgoVault](https://algovault.com/docs/integrations/binance): AlgoVault verdict + Binance Skills Hub for Spot Testnet execution.
-- [OKX × AlgoVault](https://algovault.com/docs/integrations/okx): AlgoVault verdict + OKX Agent Trade Kit (`@okx_ai/okx-trade-mcp@1.3.1`).
-- [Bybit × AlgoVault](https://algovault.com/docs/integrations/bybit): AlgoVault verdict + Bybit Official Trading MCP (`bybit-official-trading-server@2.0.9`).
-- [Bitget × AlgoVault](https://algovault.com/docs/integrations/bitget): AlgoVault verdict + Bitget Agent Hub + GetClaw demo account.
+<!-- BUILD:LLMS_INTEGRATIONS_LIST -->
+- [Binance × AlgoVault](https://algovault.com/docs/integrations/binance): Composite verdict + official Binance Skills Hub for Spot Testnet execution.
+- [OKX × AlgoVault](https://algovault.com/docs/integrations/okx): Composite verdict + 83 OKX execution tools across spot, swap, futures, options, grid bots.
+- [Bybit × AlgoVault](https://algovault.com/docs/integrations/bybit): Composite verdict + Bybit's official MCP for Linear Perpetual + conditional orders.
+- [Bitget × AlgoVault](https://algovault.com/docs/integrations/bitget): Composite verdict + GetClaw agent-native execution inside a dedicated AI account.
+<!-- /BUILD:LLMS_INTEGRATIONS_LIST -->
 
 ## Key Skills (catalog of 20 at /skills)
 
+<!-- BUILD:LLMS_SKILLS_LIST -->
 - [`quick-btc-check`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/quick-btc-check) — Beginner. The simplest possible call.
-- [`portfolio-scanner`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/portfolio-scanner) — Intermediate. Loop top 10 assets, filter by confidence.
-- [`regime-aware-trading`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/regime-aware-trading) — Intermediate. Conditional chaining: regime first, then trade call.
-- [`full-3-tool-pipeline`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/full-3-tool-pipeline) — Advanced. Complete AlgoVault workflow.
-- [`multi-agent-war-room`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/multi-agent-war-room) — Expert. Three specialised agents + coordinator.
+- [`portfolio-scanner`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/portfolio-scanner) — Intermediate. Loop through the top 10 assets, get trade calls for each, and filter by high confidence.
+- [`regime-aware-trading`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/regime-aware-trading) — Intermediate. Check the market regime first.
+- [`full-3-tool-pipeline`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/full-3-tool-pipeline) — Advanced. The complete AlgoVault workflow: regime detection, trade call, then arb check for the same asset.
+- [`multi-agent-war-room`](https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/multi-agent-war-room) — Expert. Three specialized agents, one coordinator.
+<!-- /BUILD:LLMS_SKILLS_LIST -->
 
 ## How to use
 
