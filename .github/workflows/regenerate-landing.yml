@@ -29,16 +29,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout algovault-skills (sibling)
+      - name: Checkout algovault-skills (in-workspace subdir)
         uses: actions/checkout@v4
         with:
           repository: AlgoVaultLabs/algovault-skills
-          path: ../algovault-skills
+          # actions/checkout confines paths to the workspace dir, so a sibling
+          # `../algovault-skills` is rejected. Check into ./algovault-skills/
+          # instead; the build script's __dirname-relative path resolution
+          # (../scripts → ../) works identically inside the in-workspace subdir.
+          path: algovault-skills
           fetch-depth: 1
 
       - name: Run build script
         run: |
-          node ../algovault-skills/scripts/build_landing.mjs --target .
+          node algovault-skills/scripts/build_landing.mjs --target .
+
+      - name: Clean up sibling-checkout (so it doesn't get committed in next step)
+        run: rm -rf algovault-skills
 
       - name: Commit regenerated surfaces (if any)
         env:
