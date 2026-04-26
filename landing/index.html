@@ -302,6 +302,7 @@ tailwind.config = {
     <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
 <!-- BUILD:USE_CASES_CARDS -->
       <a href="/docs/integrations/binance?utm_source=index&utm_medium=use-cases-card&utm_campaign=integration-binance"
+         onclick="if(window.plausible)plausible('Integration View',{props:{exchange:'binance',source:'use-cases-card'}})"
          class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-gold-500/40 transition block">
         <div class="text-3xl mb-3" aria-hidden="true">🏆</div>
         <h3 class="text-white font-semibold text-base mb-1">Binance &times; AlgoVault</h3>
@@ -310,6 +311,7 @@ tailwind.config = {
         <span class="text-gold-400 text-xs">View tutorial &rarr;</span>
       </a>
       <a href="/docs/integrations/okx?utm_source=index&utm_medium=use-cases-card&utm_campaign=integration-okx"
+         onclick="if(window.plausible)plausible('Integration View',{props:{exchange:'okx',source:'use-cases-card'}})"
          class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-gold-500/40 transition block">
         <div class="text-3xl mb-3" aria-hidden="true">🎯</div>
         <h3 class="text-white font-semibold text-base mb-1">OKX &times; AlgoVault</h3>
@@ -318,6 +320,7 @@ tailwind.config = {
         <span class="text-gold-400 text-xs">View tutorial &rarr;</span>
       </a>
       <a href="/docs/integrations/bybit?utm_source=index&utm_medium=use-cases-card&utm_campaign=integration-bybit"
+         onclick="if(window.plausible)plausible('Integration View',{props:{exchange:'bybit',source:'use-cases-card'}})"
          class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-gold-500/40 transition block">
         <div class="text-3xl mb-3" aria-hidden="true">⚡</div>
         <h3 class="text-white font-semibold text-base mb-1">Bybit &times; AlgoVault</h3>
@@ -326,6 +329,7 @@ tailwind.config = {
         <span class="text-gold-400 text-xs">View tutorial &rarr;</span>
       </a>
       <a href="/docs/integrations/bitget?utm_source=index&utm_medium=use-cases-card&utm_campaign=integration-bitget"
+         onclick="if(window.plausible)plausible('Integration View',{props:{exchange:'bitget',source:'use-cases-card'}})"
          class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-gold-500/40 transition block">
         <div class="text-3xl mb-3" aria-hidden="true">🤖</div>
         <h3 class="text-white font-semibold text-base mb-1">Bitget &times; AlgoVault</h3>
@@ -487,7 +491,7 @@ tailwind.config = {
           <li class="flex items-start gap-2"><span class="text-emerald-400 mt-0.5">&#10003;</span> $0.015/call overage</li>
           <li class="flex items-start gap-2"><span class="text-emerald-400 mt-0.5">&#10003;</span> HOLD calls always free</li>
         </ul>
-        <a href="https://api.algovault.com/signup?plan=starter" class="block w-full text-center px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-navy-900 font-semibold text-sm rounded-lg transition">
+        <a href="https://api.algovault.com/signup?plan=starter" onclick="if(window.plausible){plausible('Signup Click',{props:{plan:'starter',source:'pricing-section'}});plausible('Plan Selection',{props:{plan:'starter'}})}" class="block w-full text-center px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-navy-900 font-semibold text-sm rounded-lg transition">
           Subscribe to Starter
         </a>
       </div>
@@ -507,7 +511,7 @@ tailwind.config = {
           <li class="flex items-start gap-2"><span class="text-gold-400 mt-0.5">&#10003;</span> $0.01/call overage</li>
           <li class="flex items-start gap-2"><span class="text-gold-400 mt-0.5">&#10003;</span> HOLD calls always free</li>
         </ul>
-        <a href="https://api.algovault.com/signup?plan=pro" class="block w-full text-center px-4 py-2 bg-gold-500 hover:bg-gold-400 text-navy-900 font-semibold text-sm rounded-lg transition">
+        <a href="https://api.algovault.com/signup?plan=pro" onclick="if(window.plausible){plausible('Signup Click',{props:{plan:'pro',source:'pricing-section'}});plausible('Plan Selection',{props:{plan:'pro'}})}" class="block w-full text-center px-4 py-2 bg-gold-500 hover:bg-gold-400 text-navy-900 font-semibold text-sm rounded-lg transition">
           Subscribe to Pro
         </a>
       </div>
@@ -526,7 +530,7 @@ tailwind.config = {
           <li class="flex items-start gap-2"><span class="text-purple-400 mt-0.5">&#10003;</span> Unlimited funding arbs</li>
           <li class="flex items-start gap-2"><span class="text-purple-400 mt-0.5">&#10003;</span> HOLD calls always free</li>
         </ul>
-        <a href="https://api.algovault.com/signup?plan=enterprise" class="block w-full text-center px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white font-semibold text-sm rounded-lg transition">
+        <a href="https://api.algovault.com/signup?plan=enterprise" onclick="if(window.plausible){plausible('Signup Click',{props:{plan:'enterprise',source:'pricing-section'}});plausible('Plan Selection',{props:{plan:'enterprise'}})}" class="block w-full text-center px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white font-semibold text-sm rounded-lg transition">
           Subscribe to Enterprise
         </a>
       </div>

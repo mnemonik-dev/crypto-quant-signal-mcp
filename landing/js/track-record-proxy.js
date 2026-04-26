@@ -109,9 +109,74 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', refresh);
-  } else {
+  // ── Plausible custom-event detectors (WEBSITE-REFRESH-W1 follow-up) ──
+  // Fires plausible() events on page load when the visitor is arriving from
+  // an AI tool, OR a UTM-tagged AI campaign, OR landing directly on a
+  // /docs/integrations/* mirror. The corresponding Plausible Goal config
+  // (Settings → Goals, Custom event type) consumes these event names:
+  //   - "AI Referrer"      (props: source = referrer hostname)
+  //   - "AI Campaign"      (props: source = utm_source value)
+  //   - "Integration View" (props: exchange = slug, source = "direct")
+  //
+  // Plausible script loads async; we poll briefly for window.plausible
+  // before firing so events on the very first pageview aren't dropped.
+
+  var AI_REFERRER_HOSTS = [
+    'chatgpt.com', 'chat.openai.com', 'claude.ai', 'perplexity.ai',
+    'gemini.google.com', 'copilot.microsoft.com', 'you.com',
+    'duckduckgo.com', 'kagi.com'
+  ];
+  var AI_CAMPAIGN_SOURCES = [
+    'chatgpt', 'claude', 'perplexity', 'gemini', 'copilot', 'ai-overview'
+  ];
+
+  function firePlausible(name, props, retries) {
+    if (typeof window.plausible === 'function') {
+      try { window.plausible(name, { props: props }); } catch (_) { /* swallow */ }
+      return;
+    }
+    if (retries > 0) {
+      setTimeout(function () { firePlausible(name, props, retries - 1); }, 200);
+    }
+  }
+
+  function detectAIReferrer() {
+    var ref = document.referrer || '';
+    if (!ref) return;
+    for (var i = 0; i < AI_REFERRER_HOSTS.length; i++) {
+      if (ref.indexOf(AI_REFERRER_HOSTS[i]) !== -1) {
+        firePlausible('AI Referrer', { source: AI_REFERRER_HOSTS[i] }, 10);
+        return;
+      }
+    }
+  }
+
+  function detectAICampaign() {
+    if (typeof URLSearchParams !== 'function') return;
+    var params = new URLSearchParams(location.search || '');
+    var src = (params.get('utm_source') || '').toLowerCase();
+    if (src && AI_CAMPAIGN_SOURCES.indexOf(src) !== -1) {
+      firePlausible('AI Campaign', { source: src }, 10);
+    }
+  }
+
+  function detectIntegrationView() {
+    var m = (location.pathname || '').match(/^\/docs\/integrations\/([a-z0-9-]+)/);
+    if (m) {
+      firePlausible('Integration View', { exchange: m[1], source: 'direct' }, 10);
+    }
+  }
+
+  function wireOnLoad() {
     refresh();
+    detectAIReferrer();
+    detectAICampaign();
+    detectIntegrationView();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireOnLoad);
+  } else {
+    wireOnLoad();
   }
 })();
