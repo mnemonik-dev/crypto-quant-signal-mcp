@@ -20,6 +20,15 @@ on:
       - 'skills/manifest.json'
       - 'integrations/manifest.json'
 
+permissions:
+  # Default GITHUB_TOKEN is read-only on contents (per GitHub 2023+ org defaults).
+  # The "Commit regenerated surfaces" step needs write access to push back to main.
+  # The push triggers deploy.yml on the same branch (with [skip ci] tag in the
+  # commit message to prevent the regenerate job from re-running on its own
+  # commit — though deploy.yml fires regardless because that workflow doesn't
+  # respect skip-ci tags; deploy is exactly what we want as the side effect).
+  contents: write
+
 jobs:
   regenerate:
     runs-on: ubuntu-latest
