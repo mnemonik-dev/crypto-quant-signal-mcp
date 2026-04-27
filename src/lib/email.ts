@@ -1,0 +1,180 @@
+/**
+ * Resend transactional email integration.
+ *
+ * Two outbound emails:
+ *   - sendWelcomeEmail({to, apiKey, tier}) — fired from customer.subscription.created webhook
+ *   - sendKeyRecoveryEmail({to, apiKey, tier}) — fired from /account/recover-key
+ *
+ * Graceful degradation: if RESEND_API_KEY is unset, getResendClient() returns null
+ * and sends become no-ops with a console.warn (dev/staging without the key won't crash).
+ */
+import { Resend } from 'resend';
+
+const FROM_DEFAULT = 'noreply@algovault.com';
+
+let resend: Resend | null = null;
+let initWarned = false;
+
+export function getResendClient(): Resend | null {
+  if (resend) return resend;
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    if (!initWarned) {
+      console.warn('Resend: RESEND_API_KEY not set — email sends will be no-ops');
+      initWarned = true;
+    }
+    return null;
+  }
+  resend = new Resend(key);
+  return resend;
+}
+
+function getFromAddress(): string {
+  return process.env.RESEND_FROM_EMAIL || FROM_DEFAULT;
+}
+
+export function maskEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at <= 0) return '***';
+  return `${email[0]}***${email.slice(at)}`;
+}
+
+interface EmailArgs {
+  to: string;
+  apiKey: string;
+  tier: string;
+}
+
+export async function sendWelcomeEmail({ to, apiKey, tier }: EmailArgs): Promise<void> {
+  const client = getResendClient();
+  if (!client) return;
+
+  const tierTitle = tier.charAt(0).toUpperCase() + tier.slice(1);
+  const subject = `Your AlgoVault ${tierTitle} API key`;
+  const html = renderEmailHtml({
+    heading: `Welcome to AlgoVault ${tierTitle}`,
+    intro: `Your subscription is active. Below is your API key — save it somewhere safe.`,
+    apiKey,
+    tier: tierTitle,
+  });
+  const text = renderEmailText({
+    heading: `Welcome to AlgoVault ${tierTitle}`,
+    intro: `Your subscription is active. Below is your API key — save it somewhere safe.`,
+    apiKey,
+    tier: tierTitle,
+  });
+
+  await client.emails.send({
+    from: getFromAddress(),
+    to,
+    replyTo: 'support@algovault.com',
+    subject,
+    html,
+    text,
+  });
+}
+
+export async function sendKeyRecoveryEmail({ to, apiKey, tier }: EmailArgs): Promise<void> {
+  const client = getResendClient();
+  if (!client) return;
+
+  const tierTitle = tier.charAt(0).toUpperCase() + tier.slice(1);
+  const subject = `AlgoVault — your API key`;
+  const html = renderEmailHtml({
+    heading: `Your AlgoVault API key`,
+    intro: `You requested key recovery for your ${tierTitle} subscription. Below is your active API key.`,
+    apiKey,
+    tier: tierTitle,
+  });
+  const text = renderEmailText({
+    heading: `Your AlgoVault API key`,
+    intro: `You requested key recovery for your ${tierTitle} subscription. Below is your active API key.`,
+    apiKey,
+    tier: tierTitle,
+  });
+
+  await client.emails.send({
+    from: getFromAddress(),
+    to,
+    replyTo: 'support@algovault.com',
+    subject,
+    html,
+    text,
+  });
+}
+
+interface RenderArgs {
+  heading: string;
+  intro: string;
+  apiKey: string;
+  tier: string;
+}
+
+function renderEmailHtml({ heading, intro, apiKey, tier }: RenderArgs): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${heading}</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f8fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1f2328">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f8fa;padding:32px 16px">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #d0d7de;border-radius:12px;overflow:hidden">
+      <tr><td style="padding:24px 28px;border-bottom:1px solid #d0d7de">
+        <div style="font-size:18px;font-weight:700;color:#1f2328">AlgoVault Labs</div>
+        <div style="font-size:12px;color:#656d76;margin-top:2px">${tier} plan</div>
+      </td></tr>
+      <tr><td style="padding:28px">
+        <h1 style="font-size:22px;font-weight:700;margin:0 0 12px;color:#1f2328">${heading}</h1>
+        <p style="font-size:14px;line-height:1.5;color:#1f2328;margin:0 0 20px">${intro}</p>
+        <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:8px;padding:16px;margin:0 0 24px">
+          <div style="font-size:11px;color:#656d76;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Your API Key</div>
+          <div style="font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace;font-size:14px;color:#0969da;word-break:break-all">${apiKey}</div>
+        </div>
+        <h2 style="font-size:14px;font-weight:600;margin:0 0 8px;color:#1f2328;text-transform:uppercase;letter-spacing:0.5px">Quick start</h2>
+        <pre style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:8px;padding:14px;font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace;font-size:12px;color:#1f2328;overflow-x:auto;margin:0 0 20px">curl -X POST https://api.algovault.com/mcp \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","method":"tools/call",
+       "params":{"name":"get_trade_signal",
+                 "arguments":{"coin":"SOL","timeframe":"5m","exchange":"BINANCE"}},
+       "id":1}'</pre>
+        <p style="font-size:13px;line-height:1.5;color:#1f2328;margin:0 0 12px">Need to find your key later, switch plans, update your card, or cancel? Visit <a href="https://api.algovault.com/account" style="color:#0969da;text-decoration:none">api.algovault.com/account</a>.</p>
+        <p style="font-size:13px;line-height:1.5;color:#656d76;margin:0">Questions? Reply to this email or write to <a href="mailto:support@algovault.com" style="color:#0969da;text-decoration:none">support@algovault.com</a>.</p>
+      </td></tr>
+      <tr><td style="padding:18px 28px;background:#f6f8fa;border-top:1px solid #d0d7de;font-size:11px;color:#656d76">
+        AlgoVault Labs — composable signal interpretation tools for AI agents.
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function renderEmailText({ heading, intro, apiKey, tier }: RenderArgs): string {
+  return `${heading}
+${'='.repeat(heading.length)}
+
+${intro}
+
+Plan: ${tier}
+
+Your API Key:
+${apiKey}
+
+Quick start:
+curl -X POST https://api.algovault.com/mcp \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_trade_signal","arguments":{"coin":"SOL","timeframe":"5m","exchange":"BINANCE"}},"id":1}'
+
+Need to find your key later, switch plans, update your card, or cancel?
+Visit https://api.algovault.com/account
+
+Questions? Reply to this email or write to support@algovault.com
+
+— AlgoVault Labs
+`;
+}

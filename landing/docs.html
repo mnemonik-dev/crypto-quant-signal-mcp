@@ -757,6 +757,30 @@ tailwind.config = {
         <p class="text-gray-500 text-xs mt-3">This aligns incentives: you only pay when we see a tradeable opportunity. Current HOLD rate is ~84%, meaning the engine rejects most scans.</p>
       </div>
 
+      <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">What happens after you subscribe</h3>
+      <!-- BUILD:signup-flow:start -->
+      <div class="bg-navy-700 border border-white/5 rounded-xl p-5 mb-8">
+        <ol class="list-decimal pl-5 space-y-2.5">
+        <li class="text-gray-300 text-sm leading-relaxed">
+          <span class="font-semibold text-white">Click "Subscribe to [Plan]"</span>
+          <span class="text-gray-400"> — on /signup. We redirect you to Stripe Checkout (we never see your card).</span>
+        </li>
+        <li class="text-gray-300 text-sm leading-relaxed">
+          <span class="font-semibold text-white">Pay on Stripe</span>
+          <span class="text-gray-400"> — Stripe sends you a receipt email. Behind the scenes, our webhook generates a unique API key for your subscription tier.</span>
+        </li>
+        <li class="text-gray-300 text-sm leading-relaxed">
+          <span class="font-semibold text-white">Land on the Welcome page</span>
+          <span class="text-gray-400"> — Your API key is shown in green — copy it. We also email it to your billing address (check spam, sender: <code class="text-xs bg-navy-700/60 border border-white/5 rounded px-1.5 py-0.5 text-emerald-400">noreply@algovault.com</code>).</span>
+        </li>
+        <li class="text-gray-300 text-sm leading-relaxed">
+          <span class="font-semibold text-white">Make your first call</span>
+          <span class="text-gray-400"> — <code class="text-xs bg-navy-700/60 border border-white/5 rounded px-1.5 py-0.5 text-emerald-400">curl -H "Authorization: Bearer av_live_…" https://api.algovault.com/mcp …</code> or paste the key into your Claude Desktop / Cursor / Claude Code MCP config. Need to find your key later? Visit <code class="text-xs bg-navy-700/60 border border-white/5 rounded px-1.5 py-0.5 text-emerald-400">/account</code>.</span>
+        </li>
+        </ol>
+      </div>
+      <!-- BUILD:signup-flow:end -->
+
       <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">x402 Pay-Per-Call (USDC on Base)</h3>
       <p class="text-gray-500 text-sm mb-4">No signup. No API key. Your agent pays per call with USDC on Base. Works with any x402-compatible wallet.</p>
       <table class="w-full bg-navy-700 border border-white/5 rounded-xl overflow-hidden">

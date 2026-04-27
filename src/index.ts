@@ -35,6 +35,12 @@ import {
   createCheckoutSession,
   getCustomerApiKey,
 } from './lib/stripe.js';
+import { renderSignupFlowDark } from './lib/signup-flow.js';
+import {
+  accountPageHandler,
+  accountPortalHandler,
+  accountRecoverKeyHandler,
+} from './lib/account-handlers.js';
 import { getTopAssetsByOI } from './lib/oi-ranking.js';
 
 /** Timing-safe string comparison to prevent side-channel attacks on admin key. */
@@ -464,6 +470,22 @@ async function startHttp() {
       res.status(500).send('Failed to retrieve your API key. Please contact support@algovault.com');
     }
   });
+
+  // ── /account self-service portal ──
+  // Per-IP rate-limit for the email-recovery path (5 req/IP/hr) — prevents
+  // abuse / scraping. /account/portal needs a valid API key to do anything,
+  // so it doesn't need a separate IP limit beyond the existing trust-proxy.
+  const recoverKeyLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many recovery requests. Try again in an hour.',
+  });
+
+  app.get('/account', accountPageHandler);
+  app.post('/account/portal', express.urlencoded({ extended: false }), accountPortalHandler);
+  app.post('/account/recover-key', recoverKeyLimiter, express.urlencoded({ extended: false }), accountRecoverKeyHandler);
 
   // Admin analytics (only if ADMIN_API_KEY is set)
   let adminCleanupInterval: ReturnType<typeof setInterval> | undefined;
@@ -1603,6 +1625,7 @@ function getSignupPageHtml(): string {
     <span style="color:#6e7681">&middot;</span>
     <span style="color:#00C8BC;font-size:12px;font-weight:600">Bitget</span>
   </div>
+  ${renderSignupFlowDark()}
   <div class="plans">
     <div class="plan">
       <h2>Starter</h2>

@@ -9,6 +9,8 @@
  */
 import crypto from 'node:crypto';
 import DefaultStripe from 'stripe';
+import { sendWelcomeEmail, maskEmail } from './email.js';
+import { sendAlert } from './telegram.js';
 
 // Stripe v22 exports the class as both named and default.
 // Node16 moduleResolution resolves the default export reliably.
@@ -203,13 +205,128 @@ export async function handleSubscriptionCreated(event: any): Promise<void> {
     if (item.price.id === PRO_PRICE_ID) { tier = 'pro'; }
   }
 
-  // Generate API key and store on customer metadata
+  // Generate API key and store on customer metadata.
+  // customer.update returns the full updated Customer including email — capture it
+  // for the welcome email send below (no extra retrieve round-trip).
   const apiKey = generateApiKey();
-  await stripe.customers.update(customerId, {
+  const updatedCustomer = await stripe.customers.update(customerId, {
     metadata: { api_key: apiKey, tier },
   });
 
   console.log(`Stripe: New ${tier} subscriber ${customerId} — API key provisioned`);
+
+  // Fire welcome email. Try/catch so a Resend outage never 500s the webhook.
+  // Per CLAUDE.md, every load-bearing side-effect inside try/except needs a
+  // companion success-path log so silent success vs silent-catch are distinguishable.
+  const email = updatedCustomer.email;
+  if (email) {
+    try {
+      await sendWelcomeEmail({ to: email, apiKey, tier });
+      console.log(`Stripe: welcome email sent to ${maskEmail(email)} for ${tier}`);
+    } catch (err) {
+      console.error('Stripe: welcome email send failed:', err instanceof Error ? err.message : err);
+      // Don't rethrow — webhook returns 200 to Stripe regardless.
+    }
+  } else {
+    console.warn(`Stripe: customer ${customerId} has no email — welcome email skipped`);
+  }
+}
+
+// ── Account Portal Helpers ──
+
+/**
+ * Look up an active-subscription Stripe customer by api_key metadata.
+ * Returns null if Stripe is not configured, key fails format check,
+ * key isn't found, or the customer has no active subscription.
+ */
+export async function getCustomerByApiKey(apiKey: string): Promise<{ customerId: string; tier: string } | null> {
+  if (!stripe) return null;
+  if (!/^[a-zA-Z0-9_]+$/.test(apiKey)) return null;
+
+  try {
+    const customers = await stripe.customers.search({
+      query: `metadata['api_key']:'${apiKey}'`,
+      limit: 1,
+    });
+    if (customers.data.length === 0) return null;
+    const customer = customers.data[0];
+
+    const subs = await stripe.subscriptions.list({
+      customer: customer.id,
+      status: 'active',
+      limit: 10,
+    });
+    if (subs.data.length === 0) return null;
+
+    const tier = (customer.metadata?.tier as string) || 'starter';
+    return { customerId: customer.id, tier };
+  } catch (err) {
+    console.error('Stripe getCustomerByApiKey error:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+const EMAIL_RE = /^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/;
+
+/**
+ * Look up an active-subscription customer by billing email.
+ * Returns the apiKey + tier so the recovery handler can fire the email.
+ * Returns null on no-match, no-active-sub, missing-api-key-metadata, or invalid email format.
+ */
+export async function getCustomerByEmail(email: string): Promise<{ apiKey: string; tier: string } | null> {
+  if (!stripe) return null;
+  if (!EMAIL_RE.test(email)) return null;
+
+  try {
+    // Stripe's search query uses single quotes around the value — already format-validated above.
+    const customers = await stripe.customers.search({
+      query: `email:'${email}'`,
+      limit: 1,
+    });
+    if (customers.data.length === 0) return null;
+    const customer = customers.data[0];
+    const apiKey = customer.metadata?.api_key;
+    if (!apiKey) return null;
+
+    const subs = await stripe.subscriptions.list({
+      customer: customer.id,
+      status: 'active',
+      limit: 10,
+    });
+    if (subs.data.length === 0) return null;
+
+    const tier = (customer.metadata?.tier as string) || 'starter';
+    return { apiKey, tier };
+  } catch (err) {
+    console.error('Stripe getCustomerByEmail error:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
+ * Create a Stripe Billing Portal session and return the URL.
+ * Trust+Sentinel: if Stripe ever returns "No configuration provided" (operator
+ * deleted the portal config), fire a CRITICAL Telegram alert and return null
+ * so the route can surface a 503 to the user.
+ */
+export async function createBillingPortalSession(args: { customerId: string; returnUrl: string }): Promise<string | null> {
+  if (!stripe) return null;
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: args.customerId,
+      return_url: args.returnUrl,
+    });
+    return session.url;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Stripe createBillingPortalSession error:', msg);
+    if (/no configuration provided/i.test(msg) || /no.+default.+configuration/i.test(msg)) {
+      // Sentinel: operator dropped the portal config. Page on-call.
+      sendAlert(`🚨 Stripe Billing Portal config missing — /account/portal returning 503. Restore config at dashboard.stripe.com/settings/billing/portal`, 'critical')
+        .catch(() => {});
+    }
+    return null;
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
