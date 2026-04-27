@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-04-27T10:13:56.875Z",
+  "window": {
+    "from": "2026-04-13T10:13:56.760Z",
+    "to": "2026-04-27T10:13:56.760Z"
+  },
+  "sessions": {
+    "total": 38,
+    "unique_ips": 17,
+    "new_in_window": 38
+  },
+  "funnel": {
+    "install": null,
+    "first_call": 38,
+    "second_call": 20,
+    "fifth_plus_call": 10,
+    "paid_upgrade": 0
+  },
+  "conversion": {
+    "install_to_first_call": null,
+    "first_to_second": 0.5263157894736842,
+    "second_to_fifth": 0.5,
+    "fifth_to_paid": 0
+  },
+  "stick_rate": 0.5263157894736842,
+  "time_to_first_call_ms": {
+    "p50": 41616.5,
+    "p90": 84774.1
+  },
+  "tool_call_distribution": {
+    "get_trade_signal": 65,
+    "get_market_regime": 41,
+    "scan_funding_arb": 64,
+    "other": 0
+  },
+  "hold_rate_get_trade_signal": 0.9846153846153847,
+  "tier_cohort_sizes": {
+    "free": 40,
+    "starter": 0,
+    "pro": 0,
+    "enterprise": 0,
+    "x402": 0
+  },
+  "warnings": []
+}
