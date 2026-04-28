@@ -11,7 +11,21 @@ The call intelligence layer for AI trading agents — composite quant calls acro
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![On-Chain Verified](https://img.shields.io/badge/Track_Record-On--Chain_Verified-blue?logo=ethereum)](https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81)
 
-**[Live Track Record](https://algovault.com/track-record)** — 91%+ directional accuracy across 19,000+ trade calls on 5 exchanges. Public, no login required.
+**[Live Track Record](https://algovault.com/track-record)** — 89.4%+ PFE Win Rate across 60,000+ trade calls on 5 exchanges. Public, no login required.
+
+<!-- snapshot: 2026-04-28 — live source of truth: https://algovault.com/api/performance-public — refetch before citing exact numbers -->
+
+---
+
+## What's new in v1.10.0
+
+Five deliverables from the OUTPUT-SANITIZE-W1 wave, all live since 2026-04-28:
+
+- **`signal` → `call`** rename across the response shape, the tool name (`get_trade_call`), and the public dashboard. `get_trade_signal` is registered as an alias and continues to work for existing agents — no migration needed.
+- **Sanitized `reasoning` prose**: bucket-name + direction language only — no thresholds, no point-values, no raw indicator echoes.
+- **`also_see` cross-asset leads** replace `try_next` with cells trimmed to `{coin, timeframe, confidence}`. Direction requires another call.
+- **Bucketed indicators**: `trend_persistence: LOW/MEDIUM/HIGH`, `funding_state: NORMAL/ELEVATED/EXTREME`, `breakout_pending: INACTIVE/IMMINENT`. Replaces seven raw fields (`rsi`/`ema_*`/`hurst`/`funding_z_score`/`squeeze_active`).
+- **5-exchange + 20-skill catalog refresh** below.
 
 ---
 
@@ -49,9 +63,9 @@ No code. No API key. No install.
 
 **Step 3.** Ask Claude anything:
 
-> "Get me a trade signal for ETH on the 4h timeframe"
+> "Get me a trade call for ETH on the 4h timeframe"
 
-> "Get me a trade signal for BTC on Binance, 1h timeframe"
+> "Get me a trade call for BTC on Binance, 1h timeframe"
 
 ![BTC Signal Result](https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/docs/screenshots/BTC-signal.png)
 
@@ -61,13 +75,13 @@ That's it. Your Claude now has a quant analyst built in.
 
 ## Tools
 
-### `get_trade_signal`
+### `get_trade_call` <sub>(alias: `get_trade_signal`)</sub>
 
 Returns a composite **BUY / SELL / HOLD** verdict with confidence score for any supported asset on any of 5 supported exchanges — crypto perps, TradFi perpetuals (stocks, indices, commodities, FX), and liquidity-filtered meme coins on Hyperliquid.
 
-Under the hood: a multi-factor scoring engine evaluates momentum, trend structure, derivatives sentiment, open interest dynamics, and volume conviction. Scores pass through regime-aware filters and adaptive post-processing gates — including funding flow analysis, volatility regime detection, and trend persistence decay — before a final verdict is emitted.
+Under the hood: a multi-factor scoring engine evaluates momentum, trend structure, derivatives sentiment, open interest dynamics, and volume conviction. Scores pass through regime-aware filters and adaptive post-processing gates before a final verdict is emitted. Only high-conviction calls are generated; the engine stays silent when the edge is unclear.
 
-Only high-conviction calls are generated. The engine is designed to stay silent when the edge is unclear.
+> Tool name `get_trade_signal` remains registered as an alias for backward compatibility — agents using the old name continue to work without changes. New integrations should call `get_trade_call`.
 
 **Parameters:**
 - `coin` (string, required): Asset symbol — e.g. `"ETH"`, `"BTC"`, `"SOL"`, `"GOLD"`, `"TSLA"`, or any of 290+ supported assets
@@ -75,9 +89,42 @@ Only high-conviction calls are generated. The engine is designed to stay silent 
 - `exchange` (string, default `"HL"`): `"HL"` (Hyperliquid), `"BINANCE"`, `"BYBIT"`, `"OKX"`, `"BITGET"`. TradFi assets (GOLD, TSLA, etc.) are HL-only.
 - `includeReasoning` (boolean, default `true`): Human-readable explanation of the call logic
 
-**Output includes:** call direction, confidence score (0–100), all computed indicator values, detected market regime, reasoning narrative, and `_algovault` metadata for downstream tool composability.
+**Output:** v1.10.0 sanitized shape — `call` direction, `confidence` (0–100), bucketed `indicators` (`funding_rate` / `funding_24h_avg` / `funding_state` / `oi_change_pct` / `volume_24h` / `trend_persistence` / `breakout_pending`), detected `regime`, sanitized `reasoning` prose, and `_algovault` metadata for downstream tool composability. The seven raw indicator fields (`rsi`, `ema_*`, `hurst`, `funding_z_score`, `squeeze_active`) were stripped in v1.10.0 to close composite-verdict reverse-engineering.
 
-Responses also include optional `closest_tradeable` (on HOLD verdicts) and `try_next` (always, when the cross-asset grid has non-HOLD cells) as signal-surface expansion fields — exploration hints across the BTC/ETH/SOL/BNB/XRP/DOGE × 5m/15m/1h/4h grid, not trade recommendations.
+Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also_see` (top-3 cross-asset leads when the grid has non-HOLD cells), both trimmed to `{coin, timeframe, confidence}` only — direction requires another `get_trade_call` invocation.
+
+**Example response (v1.10.0):**
+
+```json
+{
+  "call": "BUY",
+  "confidence": 78,
+  "price": 84250.50,
+  "indicators": {
+    "funding_rate": 0.0001,
+    "funding_24h_avg": 0.00008,
+    "funding_state": "NORMAL",
+    "oi_change_pct": 2.4,
+    "volume_24h": 2381602633,
+    "trend_persistence": "HIGH",
+    "breakout_pending": "INACTIVE"
+  },
+  "regime": "TRENDING_UP",
+  "reasoning": "Trending regime, upward bias. Funding pressure mild. Volatility neither expanding nor compressed. Trend persistence elevated; momentum structure. Strong conviction from aligned signals.",
+  "timestamp": 1712764800,
+  "coin": "BTC",
+  "timeframe": "1h",
+  "also_see": [
+    { "coin": "ETH", "timeframe": "1h", "confidence": 82 },
+    { "coin": "SOL", "timeframe": "15m", "confidence": 73 }
+  ],
+  "_algovault": {
+    "version": "1.10.0",
+    "tool": "get_trade_call",
+    "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
+  }
+}
+```
 
 ### `scan_funding_arb`
 
@@ -95,12 +142,12 @@ This is the only MCP server that provides cross-venue funding arbitrage intellig
 
 Classifies the current market environment into one of four regimes: **TRENDING_UP**, **TRENDING_DOWN**, **RANGING**, or **VOLATILE**.
 
-Uses a multi-dimensional classification approach combining directional strength measurement with ADX slope analysis (detecting trend strengthening vs exhaustion), volume-weighted pivot detection, ATR-adaptive funding thresholds, and cross-venue funding sentiment divergence. The regime classification directly informs how `get_trade_signal` filters its output — agents can also use it independently for strategy selection and position sizing.
+Uses a multi-dimensional classification approach combining directional strength measurement with ADX slope analysis (detecting trend strengthening vs exhaustion), volume-weighted pivot detection, ATR-adaptive funding thresholds, and cross-venue funding sentiment divergence. The regime classification directly informs how `get_trade_call` filters its output — agents can also use it independently for strategy selection and position sizing.
 
 **Parameters:**
 - `coin` (string, required): Asset symbol
 - `timeframe` (string, default `"4h"`): Candle timeframe for analysis
-- `exchange` (string, default `"HL"`): Exchange to analyze — same options as get_trade_signal
+- `exchange` (string, default `"HL"`): Exchange to analyze — same options as get_trade_call
 
 **Output includes:** regime label, confidence score, underlying metrics (trend strength, volatility interpretation, price structure), cross-venue funding sentiment, and a plain-English strategy suggestion.
 
@@ -136,26 +183,26 @@ Browse the full catalog at <https://algovault.com/skills> or <https://github.com
 <!-- BUILD:README_SKILLS_TABLE -->
 | # | Slug | Name | Difficulty | Tools |
 |---|---|---|---|---|
-| 01 | [`quick-btc-check`](skills/quick-btc-check/SKILL.md) | Quick BTC Check | Beginner | `get_trade_signal` |
-| 02 | [`portfolio-scanner`](skills/portfolio-scanner/SKILL.md) | Portfolio Scanner | Intermediate | `get_trade_signal` |
-| 03 | [`regime-aware-trading`](skills/regime-aware-trading/SKILL.md) | Regime-Aware Trading | Intermediate | `get_market_regime`, `get_trade_signal` |
+| 01 | [`quick-btc-check`](skills/quick-btc-check/SKILL.md) | Quick BTC Check | Beginner | `get_trade_call` |
+| 02 | [`portfolio-scanner`](skills/portfolio-scanner/SKILL.md) | Portfolio Scanner | Intermediate | `get_trade_call` |
+| 03 | [`regime-aware-trading`](skills/regime-aware-trading/SKILL.md) | Regime-Aware Trading | Intermediate | `get_market_regime`, `get_trade_call` |
 | 04 | [`funding-arb-monitor`](skills/funding-arb-monitor/SKILL.md) | Funding Arb Monitor | Intermediate | `scan_funding_arb` |
-| 05 | [`full-3-tool-pipeline`](skills/full-3-tool-pipeline/SKILL.md) | Full 3-Tool Pipeline | Advanced | `get_market_regime`, `get_trade_signal`, `scan_funding_arb` |
-| 06 | [`multi-timeframe-confirmation`](skills/multi-timeframe-confirmation/SKILL.md) | Multi-Timeframe Confirmation | Advanced | `get_trade_signal` |
-| 07 | [`tradfi-rotation`](skills/tradfi-rotation/SKILL.md) | TradFi Rotation | Advanced | `get_market_regime`, `get_trade_signal` |
-| 08 | [`risk-gated-entry`](skills/risk-gated-entry/SKILL.md) | Risk-Gated Entry | Advanced | `get_market_regime`, `get_trade_signal` |
+| 05 | [`full-3-tool-pipeline`](skills/full-3-tool-pipeline/SKILL.md) | Full 3-Tool Pipeline | Advanced | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
+| 06 | [`multi-timeframe-confirmation`](skills/multi-timeframe-confirmation/SKILL.md) | Multi-Timeframe Confirmation | Advanced | `get_trade_call` |
+| 07 | [`tradfi-rotation`](skills/tradfi-rotation/SKILL.md) | TradFi Rotation | Advanced | `get_market_regime`, `get_trade_call` |
+| 08 | [`risk-gated-entry`](skills/risk-gated-entry/SKILL.md) | Risk-Gated Entry | Advanced | `get_market_regime`, `get_trade_call` |
 | 09 | [`funding-sentiment-dashboard`](skills/funding-sentiment-dashboard/SKILL.md) | Funding Sentiment Dashboard | Advanced | `get_market_regime` |
-| 10 | [`contrarian-meme-scanner`](skills/contrarian-meme-scanner/SKILL.md) | Contrarian Meme Scanner | Advanced | `get_market_regime`, `get_trade_signal` |
-| 11 | [`divergence-detector`](skills/divergence-detector/SKILL.md) | Divergence Detector | Advanced | `get_market_regime`, `get_trade_signal` |
-| 12 | [`hourly-digest-bot`](skills/hourly-digest-bot/SKILL.md) | Hourly Digest Bot | Advanced | `get_trade_signal`, `get_market_regime` |
-| 13 | [`hedging-advisor`](skills/hedging-advisor/SKILL.md) | Hedging Advisor | Advanced | `get_market_regime`, `get_trade_signal`, `scan_funding_arb` |
-| 14 | [`volatility-breakout-watch`](skills/volatility-breakout-watch/SKILL.md) | Volatility Breakout Watch | Advanced | `get_market_regime`, `get_trade_signal` |
-| 15 | [`cross-asset-correlation`](skills/cross-asset-correlation/SKILL.md) | Cross-Asset Correlation | Advanced | `get_trade_signal` |
-| 16 | [`funding-cash-and-carry`](skills/funding-cash-and-carry/SKILL.md) | Funding Cash-and-Carry | Advanced | `scan_funding_arb`, `get_trade_signal` |
-| 17 | [`weekend-vs-weekday-patterns`](skills/weekend-vs-weekday-patterns/SKILL.md) | Weekend vs Weekday Patterns | Research | `get_trade_signal`, `get_market_regime` |
+| 10 | [`contrarian-meme-scanner`](skills/contrarian-meme-scanner/SKILL.md) | Contrarian Meme Scanner | Advanced | `get_market_regime`, `get_trade_call` |
+| 11 | [`divergence-detector`](skills/divergence-detector/SKILL.md) | Divergence Detector | Advanced | `get_market_regime`, `get_trade_call` |
+| 12 | [`hourly-digest-bot`](skills/hourly-digest-bot/SKILL.md) | Hourly Digest Bot | Advanced | `get_trade_call`, `get_market_regime` |
+| 13 | [`hedging-advisor`](skills/hedging-advisor/SKILL.md) | Hedging Advisor | Advanced | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
+| 14 | [`volatility-breakout-watch`](skills/volatility-breakout-watch/SKILL.md) | Volatility Breakout Watch | Advanced | `get_market_regime`, `get_trade_call` |
+| 15 | [`cross-asset-correlation`](skills/cross-asset-correlation/SKILL.md) | Cross-Asset Correlation | Advanced | `get_trade_call` |
+| 16 | [`funding-cash-and-carry`](skills/funding-cash-and-carry/SKILL.md) | Funding Cash-and-Carry | Advanced | `scan_funding_arb`, `get_trade_call` |
+| 17 | [`weekend-vs-weekday-patterns`](skills/weekend-vs-weekday-patterns/SKILL.md) | Weekend vs Weekday Patterns | Research | `get_trade_call`, `get_market_regime` |
 | 18 | [`agent-portfolio-rebalance`](skills/agent-portfolio-rebalance/SKILL.md) | Agent Portfolio Rebalance | Advanced | `get_market_regime` |
-| 19 | [`smart-dca-bot`](skills/smart-dca-bot/SKILL.md) | Smart DCA Bot | Advanced | `get_trade_signal` |
-| 20 | [`multi-agent-war-room`](skills/multi-agent-war-room/SKILL.md) | Multi-Agent War Room | Expert | `get_market_regime`, `get_trade_signal`, `scan_funding_arb` |
+| 19 | [`smart-dca-bot`](skills/smart-dca-bot/SKILL.md) | Smart DCA Bot | Advanced | `get_trade_call` |
+| 20 | [`multi-agent-war-room`](skills/multi-agent-war-room/SKILL.md) | Multi-Agent War Room | Expert | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
 <!-- /BUILD:README_SKILLS_TABLE -->
 
 ---
@@ -311,7 +358,7 @@ Every tool output includes an `_algovault` metadata block declaring version and 
 
 | This tool | Feeds into (Phase 2+) |
 |-----------|----------------------|
-| `get_trade_signal` | `crypto-quant-risk-mcp` (position sizing) · `crypto-quant-backtest-mcp` (validation) |
+| `get_trade_call` | `crypto-quant-risk-mcp` (position sizing) · `crypto-quant-backtest-mcp` (validation) |
 | `scan_funding_arb` | `crypto-quant-execution-mcp` (optimal entry/exit) · `crypto-quant-risk-mcp` (exposure) |
 | `get_market_regime` | `crypto-quant-risk-mcp` (regime-aware sizing) · `crypto-quant-backtest-mcp` (filtered backtests) |
 
