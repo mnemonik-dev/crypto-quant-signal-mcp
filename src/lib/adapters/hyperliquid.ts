@@ -13,6 +13,7 @@ import type {
   HLPredictedFunding,
   DexType,
 } from '../../types.js';
+import { UpstreamRateLimitError } from '../errors.js';
 
 const BASE_URL = 'https://api.hyperliquid.xyz/info';
 const TIMEOUT_MS = 3000;
@@ -30,12 +31,26 @@ async function hlPost<T>(body: Record<string, unknown>, retries = MAX_RETRIES): 
         signal: controller.signal,
       });
       clearTimeout(timer);
+      // v1.10.2: throw a typed UpstreamRateLimitError on 429 so the MCP tool
+      // handler can emit a structured response with exchange + retry_after.
+      // Other non-2xx still throw a generic Error (no client-side fallback
+      // suggestion is meaningful for those).
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After');
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
+        throw new UpstreamRateLimitError('Hyperliquid', Number.isFinite(seconds) ? seconds : null);
+      }
       if (!res.ok) {
         throw new Error(`HL API ${res.status}: ${res.statusText}`);
       }
       return (await res.json()) as T;
     } catch (err) {
       clearTimeout(timer);
+      // Don't retry rate-limit errors at the adapter layer — let the MCP
+      // handler surface them immediately so the agent can fall back to
+      // another exchange instead of waiting through MAX_RETRIES × 500ms
+      // of guaranteed-to-fail retries.
+      if (err instanceof UpstreamRateLimitError) throw err;
       if (attempt === retries) throw err;
       await new Promise(r => setTimeout(r, 500));
     }

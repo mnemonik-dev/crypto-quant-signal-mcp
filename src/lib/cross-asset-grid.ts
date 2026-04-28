@@ -18,6 +18,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import pLimit from 'p-limit';
 import type { GridCell } from '../types.js';
 import { getTradeSignal } from '../tools/get-trade-call.js';
+import { UpstreamRateLimitError } from './errors.js';
 
 export const GRID_ASSETS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE'] as const;
 export const GRID_TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
@@ -35,6 +36,36 @@ const GRID_CONCURRENCY = 6;
 let cachedSnapshot: GridCell[] | null = null;
 let cachedAt: number = 0;
 let inflight: Promise<void> | null = null;
+
+// v1.10.2: HL-429 self-DoS guard.
+// Every grid cell scores via HL (`exchange: 'HL'` is hardcoded at line ~95).
+// When HL upstream rate-limits us, the warmer's 50s tick keeps hammering 24
+// cells per cycle, prolonging the rate-limit window. Backoff: when ≥50% of a
+// refresh cycle's cells fail with UpstreamRateLimitError, pause the warmer
+// for an exponentially-growing window (5min → 10 → 20 → 40 → cap 60min).
+// First successful refresh resets the backoff counter to 0.
+const RATE_LIMIT_BACKOFF_BASE_MS = 5 * 60 * 1000;   // 5 min
+const RATE_LIMIT_BACKOFF_MAX_MS  = 60 * 60 * 1000;  // 60 min cap
+const RATE_LIMIT_FAILURE_THRESHOLD = 0.5;           // ≥50% of cells 429-ing → trip
+let rateLimitPausedUntil: number = 0;
+let rateLimitConsecutiveTrips: number = 0;
+
+/** Test seam — reset the backoff state. Used by unit tests + scheduled-task warmups. */
+export function _resetRateLimitBackoff(): void {
+  rateLimitPausedUntil = 0;
+  rateLimitConsecutiveTrips = 0;
+}
+
+/** Read-only inspector for the module-level cache + backoff state — used by tests + diagnostics. */
+export function _getCacheSnapshotMeta(): { hasSnapshot: boolean; cellCount: number; cachedAt: number; rateLimitPausedUntil: number; rateLimitConsecutiveTrips: number } {
+  return {
+    hasSnapshot: cachedSnapshot !== null,
+    cellCount: cachedSnapshot?.length ?? 0,
+    cachedAt,
+    rateLimitPausedUntil,
+    rateLimitConsecutiveTrips,
+  };
+}
 
 /**
  * Re-entry guard tied to the async causal chain via `AsyncLocalStorage`.
@@ -69,6 +100,7 @@ async function refreshGrid(): Promise<void> {
     // see refreshContext.getStore() === true and return cached snapshot
     // (possibly empty) instead of recursing into refreshGrid.
     const limit = pLimit(GRID_CONCURRENCY);
+    let rateLimitFailures = 0;  // v1.10.2: per-refresh 429 tally
     const tasks = GRID_ASSETS.flatMap((coin) =>
       GRID_TIMEFRAMES.map((timeframe) =>
         limit(async (): Promise<GridCell | null> => {
@@ -98,6 +130,11 @@ async function refreshGrid(): Promise<void> {
           } catch (err) {
             // Cell failure isolation — log at debug level, skip the cell, do NOT
             // propagate so one scorer throw can't crash the entire grid.
+            // v1.10.2: count 429s separately so we can trip the warmer's
+            // exponential backoff and stop self-DoS-ing the upstream API.
+            if (err instanceof UpstreamRateLimitError) {
+              rateLimitFailures++;
+            }
             console.debug(
               `[cross-asset-grid] cell skipped: ${coin}/${timeframe}:`,
               err instanceof Error ? err.message : err
@@ -110,6 +147,29 @@ async function refreshGrid(): Promise<void> {
     const results = await Promise.all(tasks);
     cachedSnapshot = results.filter((c): c is GridCell => c !== null);
     cachedAt = Date.now();
+
+    // v1.10.2: trip / reset the warmer-pause backoff based on this cycle's
+    // 429 ratio. Runs AFTER cell results land so a partial grid is still
+    // usable for the rest of the deprecation window even when we trip.
+    const totalCells = GRID_ASSETS.length * GRID_TIMEFRAMES.length;
+    const failureRatio = rateLimitFailures / totalCells;
+    if (failureRatio >= RATE_LIMIT_FAILURE_THRESHOLD) {
+      rateLimitConsecutiveTrips++;
+      // Exponential: 5 → 10 → 20 → 40 → 60 (capped). 2^(n-1) × base.
+      const exp = Math.min(rateLimitConsecutiveTrips - 1, 5);
+      const backoffMs = Math.min(RATE_LIMIT_BACKOFF_BASE_MS * (1 << exp), RATE_LIMIT_BACKOFF_MAX_MS);
+      rateLimitPausedUntil = Date.now() + backoffMs;
+      console.warn(
+        `[cross-asset-grid] HL upstream rate-limited (${rateLimitFailures}/${totalCells} cells 429). ` +
+        `Pausing warmer for ${Math.round(backoffMs / 60_000)}min ` +
+        `(consecutive-trip #${rateLimitConsecutiveTrips}). Use a different exchange via direct calls in the meantime.`
+      );
+    } else if (rateLimitFailures === 0 && rateLimitConsecutiveTrips > 0) {
+      // Clean refresh after a backoff — reset.
+      console.log(`[cross-asset-grid] HL rate-limit cleared after ${rateLimitConsecutiveTrips} trip(s); warmer resumes normal cadence.`);
+      rateLimitConsecutiveTrips = 0;
+      rateLimitPausedUntil = 0;
+    }
   });
 }
 
@@ -122,6 +182,10 @@ async function refreshGrid(): Promise<void> {
 export async function refreshGridIfStale(): Promise<void> {
   const now = Date.now();
   if (cachedSnapshot !== null && now - cachedAt <= GRID_TTL_MS) return;
+  // v1.10.2: respect the rate-limit-backoff pause. If we're inside the
+  // backoff window, return immediately (existing stale snapshot stays
+  // visible to consumers; better than running 24 cells we KNOW will 429).
+  if (rateLimitPausedUntil > now) return;
   if (inflight === null) {
     inflight = refreshGrid().finally(() => {
       inflight = null;

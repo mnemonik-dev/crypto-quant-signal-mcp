@@ -11,6 +11,7 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
+import { UpstreamRateLimitError } from '../errors.js';
 
 const BASE_URL = 'https://www.okx.com';
 const TIMEOUT_MS = 3000;
@@ -72,11 +73,14 @@ async function okxGet<T>(path: string, params?: Record<string, string | number>,
       clearTimeout(timer);
 
       if (res.status === 429) {
+        // v1.10.2: typed error so MCP handler can surface exchange + retry_after.
+        const retryAfter = res.headers.get('Retry-After');
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
         if (attempt < retries) {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, seconds ? seconds * 1000 : 1000));
           continue;
         }
-        throw new Error('OKX API rate limited (429)');
+        throw new UpstreamRateLimitError('OKX', Number.isFinite(seconds) ? seconds : null);
       }
 
       if (!res.ok) {

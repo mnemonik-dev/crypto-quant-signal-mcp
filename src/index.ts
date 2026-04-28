@@ -35,6 +35,34 @@ import {
   createCheckoutSession,
   getCustomerApiKey,
 } from './lib/stripe.js';
+import { UpstreamRateLimitError, EXCHANGE_FALLBACKS } from './lib/errors.js';
+
+/**
+ * Format a thrown error into the MCP tool-content payload. v1.10.2: when the
+ * cause is `UpstreamRateLimitError`, emit a structured `{error_code, exchange,
+ * retry_after_seconds, suggestion}` shape instead of a flat `{error: <string>}`
+ * so MCP clients can pattern-match on `error_code === "UPSTREAM_RATE_LIMIT"`
+ * and auto-fallback to a different exchange.
+ */
+function toolErrorContent(err: unknown): { content: { type: 'text'; text: string }[]; isError: true } {
+  if (err instanceof UpstreamRateLimitError) {
+    const fallbacks = EXCHANGE_FALLBACKS[err.exchange] ?? [];
+    const fallbackList = fallbacks.length > 0 ? fallbacks.join(', ') : 'a different exchange';
+    const retryHint = err.retryAfterSeconds !== null
+      ? ` (or wait ${err.retryAfterSeconds}s and retry)`
+      : ' (or retry in a few minutes)';
+    const payload = {
+      error: err.message,
+      error_code: err.code,
+      exchange: err.exchange,
+      retry_after_seconds: err.retryAfterSeconds,
+      suggestion: `Try ${fallbackList} instead${retryHint}.`,
+    };
+    return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true };
+}
 import { renderSignupFlowDark } from './lib/signup-flow.js';
 import {
   accountPageHandler,
@@ -101,8 +129,7 @@ function createServer(): McpServer {
         }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true };
+        return toolErrorContent(err);
       }
     };
   }
@@ -158,8 +185,7 @@ function createServer(): McpServer {
         }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true };
+        return toolErrorContent(err);
       }
     }
   );
@@ -200,8 +226,7 @@ function createServer(): McpServer {
         }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true };
+        return toolErrorContent(err);
       }
     }
   );

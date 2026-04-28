@@ -11,6 +11,7 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
+import { UpstreamRateLimitError } from '../errors.js';
 
 const BASE_URL = 'https://fapi.binance.com';
 const TIMEOUT_MS = 3000;
@@ -77,15 +78,17 @@ async function binGet<T>(path: string, params?: Record<string, string | number>,
         console.warn(`[Binance] Rate limit warning: ${usedWeight}/2400 weight used`);
       }
 
-      // Handle rate limiting
+      // Handle rate limiting (v1.10.2: typed error so MCP handler can surface
+      // exchange + retry_after structured response)
       if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After');
-        const waitMs = retryAfter ? parseInt(retryAfter) * 1000 : 1000;
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
+        const waitMs = seconds ? seconds * 1000 : 1000;
         if (attempt < retries) {
           await new Promise(r => setTimeout(r, waitMs));
           continue;
         }
-        throw new Error('Binance API rate limited (429)');
+        throw new UpstreamRateLimitError('Binance', Number.isFinite(seconds) ? seconds : null);
       }
 
       if (!res.ok) {

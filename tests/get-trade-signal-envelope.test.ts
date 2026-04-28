@@ -219,12 +219,17 @@ describe('get_trade_signal response envelope (v1.9.0)', () => {
     expect(result._algovault.session_id).toBe('test-session-abc123');
   });
 
-  it('_algovault.version equals PKG_VERSION (1.10.0)', async () => {
+  it('_algovault.version equals PKG_VERSION', async () => {
     vi.mocked(getAdapter).mockReturnValue(makeAdapter());
 
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
 
     expect(result._algovault.version).toBe(PKG_VERSION);
-    expect(PKG_VERSION).toBe('1.10.0');
+    // Don't hardcode the version literal — PKG_VERSION is loaded from
+    // package.json at module-load (per src/lib/pkg-version.ts), so a literal
+    // assertion here breaks every patch bump. Sanity-check the major.minor
+    // band instead so a regression to "0.0.0" or schema-change to non-semver
+    // would still trip.
+    expect(PKG_VERSION).toMatch(/^1\.\d+\.\d+$/);
   });
 });
