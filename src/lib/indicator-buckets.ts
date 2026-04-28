@@ -76,3 +76,72 @@ export function bucketFundingState(z: number | null): FundingState {
 export function bucketBreakoutPending(squeezeActive: boolean): BreakoutPending {
   return squeezeActive ? 'IMMINENT' : 'INACTIVE';
 }
+
+// ── v1.10.0 sanitized-reasoning prose helpers ──
+// Pure string-mapping functions: 2–4 branches each, deterministic given inputs,
+// no numbers/thresholds/point-values/raw-indicator-echoes. Each helper returns
+// a sentence ending in a period, intended to compose via space-join.
+//
+// Allowed prose patterns: bucket-name reference, direction/conviction language.
+// FORBIDDEN: any decimal number, "boosted N pts", "RSI at <num>", "Hurst <num>",
+// "Funding Z-Score", "Confidence: <num>", "Regime: TRENDING/RANGING/VOLATILE"
+// (redundant restatement of regime field that's already in the JSON).
+import type { RegimeType } from '../types.js';
+
+export function regimeProse(regime: RegimeType): string {
+  switch (regime) {
+    case 'TRENDING_UP':   return 'Trending regime, upward bias.';
+    case 'TRENDING_DOWN': return 'Trending regime, downward bias.';
+    case 'RANGING':       return 'Ranging regime, no clear direction.';
+    case 'VOLATILE':      return 'Volatile regime, directional uncertainty.';
+  }
+}
+
+export function fundingProse(state: FundingState): string {
+  switch (state) {
+    case 'NORMAL':   return 'Funding pressure mild.';
+    case 'ELEVATED': return 'Funding pressure elevated; one-sided crowd forming.';
+    case 'EXTREME':  return 'Funding pressure extreme; heavy one-sided crowd.';
+  }
+}
+
+export function breakoutProse(state: BreakoutPending): string {
+  switch (state) {
+    case 'INACTIVE': return 'Volatility neither expanding nor compressed.';
+    case 'IMMINENT': return 'Compression building, breakout setup pending.';
+  }
+}
+
+export function trendProse(state: TrendPersistence): string {
+  switch (state) {
+    case 'LOW':    return 'Trend persistence low; mean-reverting structure.';
+    case 'MEDIUM': return 'Trend persistence balanced.';
+    case 'HIGH':   return 'Trend persistence elevated; momentum structure.';
+  }
+}
+
+import type { SignalVerdict } from '../types.js';
+
+/**
+ * Conviction prose derived from verdict + confidence bucket. Confidence is
+ * bucketed into LOW/MEDIUM/HIGH internally to avoid leaking the literal numeric
+ * value (CIs read the integer from the `confidence` field of the JSON; the
+ * prose describes conviction qualitatively).
+ *
+ * Buckets:
+ *   - LOW    : confidence < 40
+ *   - MEDIUM : 40 ≤ confidence ≤ 65
+ *   - HIGH   : confidence > 65
+ */
+export function convictionProse(verdict: SignalVerdict, confidence: number): string {
+  const bucket: 'LOW' | 'MEDIUM' | 'HIGH' = confidence < 40 ? 'LOW' : confidence > 65 ? 'HIGH' : 'MEDIUM';
+  if (verdict === 'HOLD') {
+    if (bucket === 'LOW')    return 'No actionable setup at this snapshot.';
+    if (bucket === 'MEDIUM') return 'Conditions mixed; better setups likely available elsewhere.';
+    return 'Conditions clearly inactive on this pair.';
+  }
+  // BUY / SELL
+  if (bucket === 'LOW')    return 'Low conviction; directional cue but mixed supporting signals.';
+  if (bucket === 'MEDIUM') return 'Moderate conviction from blended signals.';
+  return 'Strong conviction from aligned signals.';
+}

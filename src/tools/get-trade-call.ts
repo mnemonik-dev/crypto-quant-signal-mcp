@@ -7,7 +7,10 @@ import { getDexForCoin, classifyAsset, isMemeCoinLiquid } from '../lib/asset-tie
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import { getClosestTradeable, getTryNext } from '../lib/cross-asset-grid.js';
 import type { TradeCallResult, SignalVerdict, EmaCrossDirection, RegimeType, LicenseInfo, ExchangeId } from '../types.js';
-import { bucketTrendPersistence, bucketFundingState, bucketBreakoutPending } from '../lib/indicator-buckets.js';
+import {
+  bucketTrendPersistence, bucketFundingState, bucketBreakoutPending,
+  regimeProse, fundingProse, breakoutProse, trendProse, convictionProse,
+} from '../lib/indicator-buckets.js';
 
 interface TradeSignalInput {
   coin: string;
@@ -318,42 +321,26 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   // ── Confidence: scale rawScore to 0-100 range properly ──
   const confidence = Math.min(Math.round((absScore / MAX_RAW_SCORE) * 100), 100);
 
-  // ── Reasoning ──
+  // ── v1.10.0 Sanitized Reasoning ──
+  // Closes moat-1 (composite-verdict quant-weighting) leakage. The previous
+  // builder echoed raw indicators ("RSI at 34.7", "Hurst 0.612 (>0.55)",
+  // "Funding Z-Score: -1.82", "Confidence: 73%", "Regime: TRENDING_UP",
+  // "boosted 10 pts") — every one of those is now blocklisted by the C3
+  // forbidden-regex test and would let an attacker reverse-engineer the
+  // weighting function. New template: bucket-name + direction prose only.
+  // Pure deterministic given inputs; no LLM, no randomness.
   let reasoning = '';
   if (includeReasoning) {
-    const parts: string[] = [];
-    if (rsiVal !== null) {
-      if (rsiVal < 30) parts.push(`RSI at ${rsiVal.toFixed(1)} suggests oversold conditions.`);
-      else if (rsiVal > 70) parts.push(`RSI at ${rsiVal.toFixed(1)} suggests overbought conditions.`);
-      else parts.push(`RSI at ${rsiVal.toFixed(1)} is neutral.`);
-    }
-    if (emaCross === 'BULLISH') parts.push('EMA 9/21 bullish crossover.');
-    else if (emaCross === 'BEARISH') parts.push('EMA 9/21 bearish crossover.');
-    if (fundingRateAnnualized < -4.38) parts.push('Strong negative funding — shorts paying longs (contrarian bullish).');
-    else if (fundingRateAnnualized < 0) parts.push('Negative funding — shorts paying longs.');
-    else if (fundingRateAnnualized > 8.76) parts.push('High positive funding — crowded longs (contrarian bearish).');
-    else if (fundingRateAnnualized > 4.38) parts.push('Positive funding — longs paying shorts.');
-    // v1.4 scoring adjustments (Z-Score gate, Hurst filter, squeeze)
-    parts.push(...scoreAdjustments);
-    if (hurstVal !== null) {
-      parts.push(`Hurst exponent: ${hurstVal.toFixed(3)} (${hurstVal > 0.55 ? 'trending' : hurstVal < 0.45 ? 'mean-reverting' : 'random walk'}).`);
-    }
-    if (squeezeActive) {
-      parts.push('Bollinger/Keltner squeeze active — volatility compressed, breakout imminent.');
-    }
-    if (fundingZScore !== null) {
-      parts.push(`Funding Z-Score: ${fundingZScore.toFixed(2)} (${Math.abs(fundingZScore) > 2 ? 'extreme' : Math.abs(fundingZScore) > 1 ? 'elevated' : 'normal'}).`);
-    }
-    // R4: SELL always gated, so a sub-gate SELL is suppressed in any regime
-    if (signal === 'HOLD' && rawScore < -BUY_BASE_THRESHOLD && rawScore > -SELL_THRESHOLD_GATED) {
-      parts.push(`Direction gate: potential SELL suppressed — SELL requires ${SELL_THRESHOLD_GATED}+ score (got ${absScore.toFixed(0)}). BUY edge asymmetry (R4).`);
-    }
-    // v1.3: noise warning for ultra-low timeframes
-    if (['1m', '3m'].includes(timeframe)) {
-      parts.push(`Ultra-low timeframe warning: RSI/EMA indicators have minimal lookback on ${timeframe} candles. Signals may be noisier than longer timeframes. Consider 5m+ for higher reliability.`);
-    }
-    parts.push(`Confidence: ${confidence}%. Regime: ${regime}.`);
-    reasoning = parts.join(' ');
+    const tp = bucketTrendPersistence(hurstVal);
+    const fs = bucketFundingState(fundingZScore);
+    const bp = bucketBreakoutPending(squeezeActive);
+    reasoning = [
+      regimeProse(regime),
+      fundingProse(fs),
+      breakoutProse(bp),
+      trendProse(tp),
+      convictionProse(signal, confidence),
+    ].join(' ').replace(/\s+/g, ' ').trim();
   }
 
   // Increment quota counter only for non-HOLD (HOLDs are free).
@@ -381,27 +368,36 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   // to emit alongside it during the v1.10.0 → v1.11.0 deprecation window so
   // every consumer (inline dashboard, agent-forum-post, integration tests)
   // keeps working without coordinated client changes.
+  //
+  // Indicators key-order in the emitted JSON (TS preserves declaration order
+  // in object literals at target ES2022 / module Node16):
+  //   funding_rate, funding_24h_avg, funding_state, oi_change_pct, volume_24h,
+  //   trend_persistence, breakout_pending, [legacy raw fields …].
+  // Funding-related fields adjacent for human scannability.
   const result: TradeCallResult = {
     call: signal,
     signal,
     confidence,
     price: currentPrice,
     indicators: {
+      // Funding cluster (adjacent for scannability):
+      funding_rate: fundingRate,
+      funding_24h_avg: funding24hAvg,
+      funding_state: bucketFundingState(fundingZScore),
+      // Other public exchange data:
+      oi_change_pct: parseFloat((priceChange * 100).toFixed(1)),
+      volume_24h: volume24h,
+      // v1.10.0 sanitized public-facing buckets:
+      trend_persistence: bucketTrendPersistence(hurstVal),
+      breakout_pending: bucketBreakoutPending(squeezeActive),
+      // ── legacy raw fields (dual-emit; stripped in C5 / removed in v1.11.0) ──
       rsi: rsiVal !== null ? parseFloat(rsiVal.toFixed(1)) : null,
       ema_cross: emaCross,
       ema_9: ema9Val ?? 0,
       ema_21: ema21Val ?? 0,
-      funding_rate: fundingRate,
-      funding_24h_avg: funding24hAvg,
-      oi_change_pct: parseFloat((priceChange * 100).toFixed(1)),
-      volume_24h: volume24h,
       hurst: hurstVal !== null ? parseFloat(hurstVal.toFixed(4)) : null,
       funding_z_score: fundingZScore !== null ? parseFloat(fundingZScore.toFixed(2)) : null,
       squeeze_active: squeezeActive,
-      // v1.10.0 bucket fields (dual-emit alongside legacy raw fields):
-      trend_persistence: bucketTrendPersistence(hurstVal),
-      funding_state: bucketFundingState(fundingZScore),
-      breakout_pending: bucketBreakoutPending(squeezeActive),
     },
     regime,
     reasoning,
