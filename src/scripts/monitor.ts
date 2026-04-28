@@ -332,7 +332,7 @@ async function runDigest(): Promise<void> {
 
   // Signal Performance
   if (perfStats) {
-    const total = perfStats.overall.totalSignals;
+    const total = perfStats.overall.totalCalls;
     const evaluated = perfStats.overall.totalEvaluated;
     const evalPct = total > 0 ? ((evaluated / total) * 100).toFixed(1) : '0';
     const pfe = perfStats.overall.pfeWinRate !== null

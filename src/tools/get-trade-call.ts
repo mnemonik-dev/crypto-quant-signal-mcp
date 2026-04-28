@@ -365,40 +365,24 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   };
   if (upgradeHint) meta.upgrade_hint = upgradeHint;
 
-  // v1.10.0 dual-emit: `call` is the new canonical field; `signal` continues
-  // to emit alongside it during the v1.10.0 → v1.11.0 deprecation window so
-  // every consumer (inline dashboard, agent-forum-post, integration tests)
-  // keeps working without coordinated client changes.
-  //
-  // Indicators key-order in the emitted JSON (TS preserves declaration order
-  // in object literals at target ES2022 / module Node16):
-  //   funding_rate, funding_24h_avg, funding_state, oi_change_pct, volume_24h,
-  //   trend_persistence, breakout_pending, [legacy raw fields …].
-  // Funding-related fields adjacent for human scannability.
+  // v1.10.0: `call` is the canonical verdict field. The legacy `signal` field
+  // and all 7 raw indicators (rsi/ema_cross/ema_9/ema_21/hurst/funding_z_score/
+  // squeeze_active) are stripped in this chapter — agents reading the response
+  // see only the bucketed surface (closes moat-1 quant-weighting leakage).
+  // Indicators key-order: funding_rate, funding_24h_avg, funding_state,
+  // oi_change_pct, volume_24h, trend_persistence, breakout_pending.
   const result: TradeCallResult = {
     call: signal,
-    signal,
     confidence,
     price: currentPrice,
     indicators: {
-      // Funding cluster (adjacent for scannability):
       funding_rate: fundingRate,
       funding_24h_avg: funding24hAvg,
       funding_state: bucketFundingState(fundingZScore),
-      // Other public exchange data:
       oi_change_pct: parseFloat((priceChange * 100).toFixed(1)),
       volume_24h: volume24h,
-      // v1.10.0 sanitized public-facing buckets:
       trend_persistence: bucketTrendPersistence(hurstVal),
       breakout_pending: bucketBreakoutPending(squeezeActive),
-      // ── legacy raw fields (dual-emit; stripped in C5 / removed in v1.11.0) ──
-      rsi: rsiVal !== null ? parseFloat(rsiVal.toFixed(1)) : null,
-      ema_cross: emaCross,
-      ema_9: ema9Val ?? 0,
-      ema_21: ema21Val ?? 0,
-      hurst: hurstVal !== null ? parseFloat(hurstVal.toFixed(4)) : null,
-      funding_z_score: fundingZScore !== null ? parseFloat(fundingZScore.toFixed(2)) : null,
-      squeeze_active: squeezeActive,
     },
     regime,
     reasoning,
@@ -423,17 +407,13 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   if (!input.internal) {
     try {
       const tryNext = await getTryNext({ coin, timeframe }, 3);
+      // v1.10.0: `also_see` is the only cross-asset-leaderboard surface;
+      // legacy `try_next` field stripped per spec OUTPUT-SANITIZE-W1 C5.
       if (tryNext.length > 0) {
-        // Dual-emit (C4): legacy `try_next` keeps full GridCell shape for the
-        // deprecation window (consumers like agent-forum-post still read
-        // `tn.signal`); new `also_see` is the trimmed v1.10.0 surface.
-        result.try_next = tryNext;
         result.also_see = tryNext.map(trimToLeaderboardCell);
       }
-
       if (signal === 'HOLD') {
         const closest = await getClosestTradeable({ coin, timeframe });
-        // Shape change (v1.10.0): closest_tradeable is now LeaderboardCell.
         if (closest) result.closest_tradeable = trimToLeaderboardCell(closest);
       }
     } catch (e) {

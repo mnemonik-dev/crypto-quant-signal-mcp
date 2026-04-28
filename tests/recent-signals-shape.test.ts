@@ -65,11 +65,12 @@ describe('recentSignals shape', () => {
     }
   });
 
-  it('includes expected public fields (coin, signal, confidence, timeframe, tier, exchange, created_at)', async () => {
+  it('includes expected public fields (coin, call, confidence, timeframe, tier, exchange, created_at)', async () => {
     const stats = await perfDb.getPerformanceStatsAsync();
     for (const s of stats.recentSignals) {
       expect(typeof s.coin).toBe('string');
-      expect(typeof s.signal).toBe('string');
+      // v1.10.0 (OUTPUT-SANITIZE-W1 C5): emitted field is `call` (was `signal` pre-1.10).
+      expect(typeof s.call).toBe('string');
       expect(typeof s.confidence).toBe('number');
       expect(typeof s.timeframe).toBe('string');
       expect(typeof s.tier).toBe('number');

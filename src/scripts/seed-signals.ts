@@ -291,7 +291,7 @@ async function seedExchange(
       });
 
       console.log(
-        `[${ts()}] [${exchangeId}] ${coin} -> ${result.signal} (${result.confidence}%) @ $${result.price.toLocaleString()} recorded`
+        `[${ts()}] [${exchangeId}] ${coin} -> ${result.call} (${result.confidence}%) @ $${result.price.toLocaleString()} recorded`
       );
       seeded++;
     } catch (err: unknown) {

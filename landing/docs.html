@@ -54,7 +54,7 @@ tailwind.config = {
   "author": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com" },
   "publisher": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com", "logo": { "@type": "ImageObject", "url": "https://algovault.com/logo.png", "width": 512, "height": 512 } },
   "image": { "@type": "ImageObject", "url": "https://algovault.com/logo.png", "width": 512, "height": 512 },
-  "description": "Complete API reference for the 3 AlgoVault MCP tools (get_trade_signal, scan_funding_arb, get_market_regime), 20 usage examples, on-chain verification guide, pricing tiers, and FAQ.",
+  "description": "Complete API reference for the 3 AlgoVault MCP tools (get_trade_call, scan_funding_arb, get_market_regime), 20 usage examples, on-chain verification guide, pricing tiers, and FAQ.",
   "proficiencyLevel": "Beginner|Intermediate|Advanced",
   "about": { "@type": "Thing", "name": "Composite trading verdicts via Model Context Protocol" }
 }
@@ -92,7 +92,7 @@ tailwind.config = {
     <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 px-3">On this page</div>
     <a href="#quick-start" class="sidebar-link">Quick Start</a>
     <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-5 mb-2 px-3">API Reference</div>
-    <a href="#get-trade-signal" class="sidebar-link">get_trade_signal</a>
+    <a href="#get-trade-signal" class="sidebar-link">get_trade_call</a>
     <a href="#scan-funding-arb" class="sidebar-link">scan_funding_arb</a>
     <a href="#get-market-regime" class="sidebar-link">get_market_regime</a>
     <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-5 mb-2 px-3">Verification</div>
@@ -163,7 +163,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
   -H "Authorization: Bearer $AV_KEY" \
   -H "Accept: application/json, text/event-stream" \
   -H "mcp-session-id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_trade_signal","arguments":{"coin":"SOL","timeframe":"5m","exchange":"BINANCE"}},"id":2}'</code></pre>
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_trade_call","arguments":{"coin":"SOL","timeframe":"5m","exchange":"BINANCE"}},"id":2}'</code></pre>
       </div>
       <p class="text-gray-500 text-xs">Most users won't need this — Claude Desktop / Cursor / Claude Code MCP clients handle the handshake automatically. Use this only for direct integration into a non-MCP system or for debugging.</p>
     </section>
@@ -171,10 +171,11 @@ curl -sS -X POST https://api.algovault.com/mcp \
     <!-- ============ API REFERENCE ============ -->
     <div class="border-t border-white/5 mb-16"></div>
 
-    <!-- get_trade_signal -->
-    <section id="get-trade-signal" class="mb-16">
+    <!-- get_trade_call (canonical, v1.10.0); alias get_trade_call kept for back-compat -->
+    <a id="get-trade-signal" aria-hidden="true"></a>
+    <section id="get-trade-call" class="mb-16">
       <h2 class="text-xl font-bold text-white mb-1 flex items-center gap-2">
-        <span class="text-gold-400">&#9670;</span> get_trade_signal
+        <span class="text-gold-400">&#9670;</span> get_trade_call <span class="text-gray-500 text-xs">(alias: get_trade_signal)</span>
       </h2>
       <p class="text-gray-400 text-sm mb-5">Returns a composite BUY/SELL/HOLD trade call with confidence percentage, regime context, and reasoning across 5 exchanges.</p>
 
@@ -197,17 +198,26 @@ curl -sS -X POST https://api.algovault.com/mcp \
       <div class="code-block bg-navy-700 border border-white/5 rounded-xl p-5">
         <button class="copy-btn" onclick="navigator.clipboard.writeText(this.parentElement.querySelector('code').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
         <pre><code class="text-sm text-gray-300">{
-  "signal": "BUY",
+  "call": "BUY",
   "confidence": 78,
   "price": 84250.50,
+  "indicators": {
+    "funding_rate": 0.0001,
+    "funding_24h_avg": 0.00008,
+    "funding_state": "NORMAL",
+    "oi_change_pct": 2.4,
+    "volume_24h": 2381602633,
+    "trend_persistence": "HIGH",
+    "breakout_pending": "INACTIVE"
+  },
   "regime": "TRENDING_UP",
-  "reasoning": "Strong bullish momentum with trend confirmation...",
+  "reasoning": "Trending regime, upward bias. Funding pressure mild. Volatility neither expanding nor compressed. Trend persistence elevated; momentum structure. Strong conviction from aligned signals.",
   "timestamp": 1712764800,
   "coin": "BTC",
   "timeframe": "1h",
   "_algovault": {
-    "version": "1.6.0",
-    "tool": "get_trade_signal",
+    "version": "1.10.0",
+    "tool": "get_trade_call",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }
 }</code></pre>
@@ -258,7 +268,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
   "scannedPairs": 245,
   "timestamp": 1712764800,
   "_algovault": {
-    "version": "1.6.0",
+    "version": "1.10.0",
     "tool": "scan_funding_arb",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-execution-mcp"]
   }
@@ -306,7 +316,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
   "coin": "BTC",
   "timeframe": "4h",
   "_algovault": {
-    "version": "1.6.0",
+    "version": "1.10.0",
     "tool": "get_market_regime",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }
@@ -399,7 +409,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">The simplest possible call. Ask your agent for a single trade call.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Get me a trade call for BTC on the 1h timeframe"</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code></div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code></div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/quick-btc-check?utm_source=docs&utm_medium=card&utm_campaign=skill-install-quick-btc-check"
@@ -417,7 +427,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Loop through the top 10 assets, get trade calls for each, and filter by high confidence.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Get trade calls for BTC, ETH, SOL, DOGE, XRP, ADA, AVAX, LINK, DOT, and MATIC on the 15m timeframe. Only show me the ones with confidence above 70%."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code> &times; 10 &nbsp;|&nbsp; Pattern: batch calling, confidence filtering</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code> &times; 10 &nbsp;|&nbsp; Pattern: batch calling, confidence filtering</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/portfolio-scanner?utm_source=docs&utm_medium=card&utm_campaign=skill-install-portfolio-scanner"
@@ -435,7 +445,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Check the market regime first. Only request trade calls when the regime is favorable for directional trading.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"First check the market regime for ETH on the 4h timeframe. If it's TRENDING_UP or TRENDING_DOWN, get me a trade call on the 15m timeframe. If it's RANGING or VOLATILE, skip it."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_signal</code> &nbsp;|&nbsp; Pattern: conditional chaining</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_call</code> &nbsp;|&nbsp; Pattern: conditional chaining</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/regime-aware-trading?utm_source=docs&utm_medium=card&utm_campaign=skill-install-regime-aware-trading"
@@ -471,7 +481,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">The complete AlgoVault workflow: regime detection, trade call, then arb check for the same asset. Maximum context for one decision.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"For SOL: first get the market regime on 4h, then get a trade call on 15m, then check if there are any funding arb opportunities. Give me a combined recommendation based on all three."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_signal</code> &rarr; <code class="text-xs">scan_funding_arb</code> &nbsp;|&nbsp; Pattern: full pipeline composition</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_call</code> &rarr; <code class="text-xs">scan_funding_arb</code> &nbsp;|&nbsp; Pattern: full pipeline composition</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/full-3-tool-pipeline?utm_source=docs&utm_medium=card&utm_campaign=skill-install-full-3-tool-pipeline"
@@ -489,7 +499,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Get trade calls on multiple timeframes for the same asset. Only act when all timeframes agree on direction.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Get trade calls for ETH on the 5m, 15m, and 1h timeframes. Only tell me to trade if all three agree on the same direction (all BUY or all SELL)."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code> &times; 3 &nbsp;|&nbsp; Pattern: multi-timeframe consensus</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code> &times; 3 &nbsp;|&nbsp; Pattern: multi-timeframe consensus</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/multi-timeframe-confirmation?utm_source=docs&utm_medium=card&utm_campaign=skill-install-multi-timeframe-confirmation"
@@ -507,7 +517,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Compare regime and direction across TradFi perpetuals. Rotate into the asset with the strongest trend.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Get the market regime and trade call for TSLA, GOLD, and SP500 on the 4h timeframe. Which one has the strongest trend with the highest confidence trade call? Recommend the best one to trade."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &times; 3 + <code class="text-xs">get_trade_signal</code> &times; 3 &nbsp;|&nbsp; Pattern: cross-asset comparison</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &times; 3 + <code class="text-xs">get_trade_call</code> &times; 3 &nbsp;|&nbsp; Pattern: cross-asset comparison</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/tradfi-rotation?utm_source=docs&utm_medium=card&utm_campaign=skill-install-tradfi-rotation"
@@ -525,7 +535,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Only enter trades when both confidence and regime alignment pass your risk filters. Skip everything else.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Check BTC regime on 4h, then get a trade call on 15m. Only recommend entry if confidence is 75% or higher AND the regime is TRENDING (not VOLATILE or RANGING). Otherwise say 'no trade'."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_signal</code> &nbsp;|&nbsp; Pattern: dual risk filter</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_call</code> &nbsp;|&nbsp; Pattern: dual risk filter</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/risk-gated-entry?utm_source=docs&utm_medium=card&utm_campaign=skill-install-risk-gated-entry"
@@ -561,7 +571,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Scan lower-tier assets for contrarian setups: high-confidence SELL calls during an uptrend may signal crowded longs about to unwind.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Get the market regime for DOGE, SHIB, PEPE, WIF, and BONK on 4h. For any that are TRENDING_UP, get a trade call on 15m. Flag any that return SELL with confidence above 70% &mdash; those might be crowded longs ready to unwind."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &times; 5 + <code class="text-xs">get_trade_signal</code> (conditional) &nbsp;|&nbsp; Pattern: contrarian divergence detection</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &times; 5 + <code class="text-xs">get_trade_call</code> (conditional) &nbsp;|&nbsp; Pattern: contrarian divergence detection</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/contrarian-meme-scanner?utm_source=docs&utm_medium=card&utm_campaign=skill-install-contrarian-meme-scanner"
@@ -579,7 +589,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Compare trade call direction vs market regime. When they disagree, flag it as a high-risk divergence.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"For BTC and ETH: get the market regime on 4h and a trade call on 15m. If the trade call says BUY but the regime is TRENDING_DOWN (or vice versa), flag it as a divergence with a risk warning."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> + <code class="text-xs">get_trade_signal</code> per asset &nbsp;|&nbsp; Pattern: signal-regime divergence</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> + <code class="text-xs">get_trade_call</code> per asset &nbsp;|&nbsp; Pattern: signal-regime divergence</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/divergence-detector?utm_source=docs&utm_medium=card&utm_campaign=skill-install-divergence-detector"
@@ -597,7 +607,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Build an automated digest: scan all tier-1 and tier-2 assets every hour, summarize trade calls and market regime into a brief report.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Scan BTC, ETH, SOL, AVAX, LINK, DOGE, XRP, ADA for trade calls on 1h. Also get the market regime for BTC and ETH on 4h. Summarize as a brief market digest: how many BUYs vs SELLs, overall regime, and top 3 highest-confidence calls."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code> &times; 8 + <code class="text-xs">get_market_regime</code> &times; 2 &nbsp;|&nbsp; Pattern: periodic digest, notification-ready</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code> &times; 8 + <code class="text-xs">get_market_regime</code> &times; 2 &nbsp;|&nbsp; Pattern: periodic digest, notification-ready</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/hourly-digest-bot?utm_source=docs&utm_medium=card&utm_campaign=skill-install-hourly-digest-bot"
@@ -615,7 +625,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">You hold a long ETH position. Check regime and trade call — if both turn bearish, look for a funding arb to hedge via the cheaper venue.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"I'm currently long ETH. Get the market regime on 4h and a trade call on 1h. If both are bearish, scan funding arb for ETH and tell me which venue has the cheapest short to hedge my position."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_signal</code> &rarr; <code class="text-xs">scan_funding_arb</code> &nbsp;|&nbsp; Pattern: defensive hedging</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &rarr; <code class="text-xs">get_trade_call</code> &rarr; <code class="text-xs">scan_funding_arb</code> &nbsp;|&nbsp; Pattern: defensive hedging</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/hedging-advisor?utm_source=docs&utm_medium=card&utm_campaign=skill-install-hedging-advisor"
@@ -633,7 +643,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Use regime detection as a screener: find assets in VOLATILE regime with high confidence — these are breakout candidates. Then get trade call for direction.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Check the market regime for BTC, ETH, SOL, AVAX, LINK, and DOGE on 4h. For any in VOLATILE regime with confidence above 70%, get a trade call on 5m. Those are potential breakout trades."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &times; 6 + <code class="text-xs">get_trade_signal</code> (conditional) &nbsp;|&nbsp; Pattern: regime as screener</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_market_regime</code> &times; 6 + <code class="text-xs">get_trade_call</code> (conditional) &nbsp;|&nbsp; Pattern: regime as screener</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/volatility-breakout-watch?utm_source=docs&utm_medium=card&utm_campaign=skill-install-volatility-breakout-watch"
@@ -651,7 +661,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Get trade calls for BTC, ETH, SOL simultaneously. If all say SELL, it's a macro risk-off signal, not just one asset.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Get trade calls for BTC, ETH, and SOL on the 1h timeframe. If all three say the same direction, flag it as a market-wide move. If they disagree, note which ones are diverging."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code> &times; 3 &nbsp;|&nbsp; Pattern: correlation / macro signal</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code> &times; 3 &nbsp;|&nbsp; Pattern: correlation / macro signal</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/cross-asset-correlation?utm_source=docs&utm_medium=card&utm_campaign=skill-install-cross-asset-correlation"
@@ -669,7 +679,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Find a funding arb spread, then get a trade call on the long side. If the trade call agrees with the long direction, you have double conviction.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Scan funding arb with minimum 10 bps spread. For the top opportunity, get a trade call for the asset on 15m. If the trade call agrees with the long side of the arb, flag it as a high-conviction cash-and-carry setup."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">scan_funding_arb</code> &rarr; <code class="text-xs">get_trade_signal</code> &nbsp;|&nbsp; Pattern: arb + directional alignment</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">scan_funding_arb</code> &rarr; <code class="text-xs">get_trade_call</code> &nbsp;|&nbsp; Pattern: arb + directional alignment</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/funding-cash-and-carry?utm_source=docs&utm_medium=card&utm_campaign=skill-install-funding-cash-and-carry"
@@ -687,7 +697,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Schedule trade calls every 4 hours, log results over time. Compare weekend vs weekday regime patterns to find exploitable edges.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"Every 4 hours, get a trade call for BTC on 4h and log the regime, direction, and confidence. After a week, compare weekend vs weekday patterns. Are weekends more RANGING? Do SELL calls cluster on Sundays?"</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code> + <code class="text-xs">get_market_regime</code> (scheduled) &nbsp;|&nbsp; Pattern: data collection, research</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code> + <code class="text-xs">get_market_regime</code> (scheduled) &nbsp;|&nbsp; Pattern: data collection, research</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/weekend-vs-weekday-patterns?utm_source=docs&utm_medium=card&utm_campaign=skill-install-weekend-vs-weekday-patterns"
@@ -723,7 +733,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           </div>
           <p class="text-gray-400 text-sm mb-3">Dollar-cost averaging, enhanced: skip buys when the trade call says SELL with high confidence. Only DCA when direction is neutral or favorable.</p>
           <div class="bg-navy-800 rounded-lg px-4 py-2.5 text-sm text-gray-300 italic">"I DCA into BTC every day. Before today's buy, get a trade call on the 4h timeframe. If it says SELL with confidence above 70%, skip today's buy and wait. Otherwise proceed normally."</div>
-          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_signal</code> &nbsp;|&nbsp; Pattern: strategy enhancement, DCA optimization</div>
+          <div class="text-gray-600 text-xs mt-2">Tools: <code class="text-xs">get_trade_call</code> &nbsp;|&nbsp; Pattern: strategy enhancement, DCA optimization</div>
           <div class="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
             <code class="text-xs text-gold-400 bg-gold-500/10 px-2 py-1 rounded">claude plugin install AlgoVaultLabs/algovault-skills</code>
             <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/skills/smart-dca-bot?utm_source=docs&utm_medium=card&utm_campaign=skill-install-smart-dca-bot"
@@ -824,7 +834,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
           <th class="text-right text-xs text-gray-500 uppercase tracking-wider px-4 py-3">Price</th>
         </tr></thead>
         <tbody>
-          <tr class="border-b border-white/10"><td class="text-gray-300 text-sm px-4 py-2.5"><code class="text-xs">get_trade_signal</code></td><td class="text-right text-white text-sm px-4 py-2.5">$0.02 <span class="text-gray-500 text-xs">(HFT timeframes: up to $0.05)</span></td></tr>
+          <tr class="border-b border-white/10"><td class="text-gray-300 text-sm px-4 py-2.5"><code class="text-xs">get_trade_call</code></td><td class="text-right text-white text-sm px-4 py-2.5">$0.02 <span class="text-gray-500 text-xs">(HFT timeframes: up to $0.05)</span></td></tr>
           <tr class="border-b border-white/10"><td class="text-gray-300 text-sm px-4 py-2.5"><code class="text-xs">scan_funding_arb</code></td><td class="text-right text-white text-sm px-4 py-2.5">$0.01</td></tr>
           <tr><td class="text-gray-300 text-sm px-4 py-2.5"><code class="text-xs">get_market_regime</code></td><td class="text-right text-white text-sm px-4 py-2.5">$0.02</td></tr>
         </tbody>
@@ -842,7 +852,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
       <div class="space-y-3">
         <details class="bg-navy-700 border border-white/5 rounded-xl group">
           <summary class="px-5 py-3.5 text-white text-sm font-medium cursor-pointer list-none flex items-center justify-between">
-            How often should I call get_trade_signal?
+            How often should I call get_trade_call?
             <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
           </summary>
           <div class="px-5 pb-4 text-sm text-gray-400 leading-relaxed">
@@ -866,7 +876,7 @@ curl -sS -X POST https://api.algovault.com/mcp \
             <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
           </summary>
           <div class="px-5 pb-4 text-sm text-gray-400 leading-relaxed">
-            Typically 1&ndash;3 seconds. Each call fetches live data from the chosen exchange &mdash; Hyperliquid (default), Binance, Bybit, OKX, or Bitget for <code class="text-xs bg-navy-800 px-1 rounded">get_trade_signal</code> and <code class="text-xs bg-navy-800 px-1 rounded">get_market_regime</code>. Funding arb scans Hyperliquid, Binance, and Bybit. Response time depends on the exchange's API latency and the number of assets scanned.
+            Typically 1&ndash;3 seconds. Each call fetches live data from the chosen exchange &mdash; Hyperliquid (default), Binance, Bybit, OKX, or Bitget for <code class="text-xs bg-navy-800 px-1 rounded">get_trade_call</code> and <code class="text-xs bg-navy-800 px-1 rounded">get_market_regime</code>. Funding arb scans Hyperliquid, Binance, and Bybit. Response time depends on the exchange's API latency and the number of assets scanned.
           </div>
         </details>
 

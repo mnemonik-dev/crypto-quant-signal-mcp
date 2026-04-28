@@ -77,7 +77,7 @@ function createServer(): McpServer {
         const license = getRequestLicense();
         const result = await getTradeSignal({ coin, timeframe, includeReasoning, exchange, license });
         // Verdict stored for x402 settlement skip (HOLDs don't settle)
-        setRequestVerdict(result.signal);
+        setRequestVerdict(result.call);
         // Quota tracking is handled inside getTradeSignal (HOLDs are free)
         logRequest({
           sessionId: getRequestSessionId(),
@@ -86,7 +86,7 @@ function createServer(): McpServer {
           timeframe,
           licenseTier: license.tier,
           responseTimeMs: Date.now() - startMs,
-          verdict: result.signal,
+          verdict: result.call,
           confidence: result.confidence,
           ipHash: getRequestIpHash(),
         });
@@ -652,16 +652,16 @@ async function startHttp() {
 
   // ── Public track record (no auth) ──
   // WEBSITE-REFRESH-CLEANUP-W1 R2: also returns `hold_rate` (computed from
-  // existing totalHolds + totalSignals — additive only, no consumer breakage).
-  // hold_rate = totalHolds / (totalHolds + totalSignals) * 100, rounded to 1
+  // existing totalHolds + totalCalls — additive only, no consumer breakage).
+  // hold_rate = totalHolds / (totalHolds + totalCalls) * 100, rounded to 1
   // decimal place. Powers the live Pricing M3 badge ("XX.X% HOLD rate") via
-  // landing/js/track-record-proxy.js, replacing the prior hardcoded "93%".
+  // landing/js/track-record-proxy.js.
   app.get('/api/performance-public', async (_req, res) => {
     try {
       const [stats, holdStats] = await Promise.all([getSignalPerformance(), getHoldStats()]);
       const totalHolds = holdStats.totalHolds || 0;
-      const totalSignals = stats.totalSignals || 0;
-      const denom = totalHolds + totalSignals;
+      const totalCalls = stats.totalCalls || 0;
+      const denom = totalHolds + totalCalls;
       const hold_rate = denom > 0 ? Math.round((totalHolds / denom) * 1000) / 10 : 0;
       res.json({ ...stats, ...holdStats, hold_rate });
     } catch (err) {
@@ -1321,22 +1321,22 @@ function tierMatch(tier) {
 var HIDE_TFS = {'1d':1,'1D':1}; // Timeframes hidden from dashboard UI (data preserved in API)
 function src() {
   var d = cachedData; if (!d) return null;
-  var empty = { totalSignals: 0, totalEvaluated: 0, pfeWinRate: null };
+  var empty = { totalCalls: 0, totalEvaluated: 0, pfeWinRate: null };
 
   // Step 1: select exchange-level data
   var exAll, exByTF, exByType, exByAsset, exByTier;
   if (activeExchangeFilter === 'all') {
     exAll = d.overall;
     exByTF = d.byTimeframe || {};
-    exByType = d.bySignalType || {};
+    exByType = d.byCallType || {};
     exByAsset = d.byAsset || {};
     exByTier = d.byTier || {};
   } else {
     var ex = (d.byExchange || {})[activeExchangeFilter];
     if (!ex) return { overall: empty, byTF: {}, byType: {}, byAsset: {}, byTier: {} };
-    exAll = { totalSignals: ex.count, totalEvaluated: ex.evaluated, pfeWinRate: ex.pfeWinRate };
+    exAll = { totalCalls: ex.count, totalEvaluated: ex.evaluated, pfeWinRate: ex.pfeWinRate };
     exByTF = ex.byTimeframe || {};
-    exByType = ex.bySignalType || {};
+    exByType = ex.byCallType || {};
     exByAsset = ex.byAsset || {};
     exByTier = ex.byTier || {};
   }
@@ -1347,7 +1347,7 @@ function src() {
     var tk = 'tier' + activeTierFilter;
     var tier = exByTier[tk];
     if (tier) {
-      overall = { totalSignals: tier.count || 0, totalEvaluated: tier.evaluated || 0, pfeWinRate: tier.pfeWinRate };
+      overall = { totalCalls: tier.count || 0, totalEvaluated: tier.evaluated || 0, pfeWinRate: tier.pfeWinRate };
     } else {
       overall = empty;
     }
@@ -1406,7 +1406,7 @@ function renderAll() {
   if (activeTfFilter === 'all') {
     var pfeEl = document.getElementById('pfe-wr');
     pfeEl.textContent = pct(s.overall.pfeWinRate); pfeEl.className = 'value hero ' + pfeClass(s.overall.pfeWinRate);
-    document.getElementById('total').textContent = (s.overall.totalSignals || 0).toLocaleString();
+    document.getElementById('total').textContent = (s.overall.totalCalls || 0).toLocaleString();
     document.getElementById('period').textContent = d.period ? d.period.from + ' → ' + d.period.to : 'Tracked & Evaluated';
   } else {
     var tfv = (s.byTF || {})[activeTfFilter];
@@ -1422,9 +1422,9 @@ function renderAll() {
   var evalEl = document.getElementById('eval-indicator');
   if (evalEl) {
     var th = d.totalHolds || 0;
-    var totalGenerated = (s.overall.totalSignals||0) + th;
+    var totalGenerated = (s.overall.totalCalls||0) + th;
     var holdRate = totalGenerated > 0 ? ((th / totalGenerated) * 100).toFixed(0) + '%' : '—';
-    evalEl.textContent = 'Trade Calls: ' + (s.overall.totalSignals||0).toLocaleString() + ' · Evaluated: ' + (s.overall.totalEvaluated||0).toLocaleString() + ' · PFE Win Rate: ' + pct(s.overall.pfeWinRate) + ' · HOLD Rate: ' + holdRate;
+    evalEl.textContent = 'Trade Calls: ' + (s.overall.totalCalls||0).toLocaleString() + ' · Evaluated: ' + (s.overall.totalEvaluated||0).toLocaleString() + ' · PFE Win Rate: ' + pct(s.overall.pfeWinRate) + ' · HOLD Rate: ' + holdRate;
   }
 
   // Tier cards — from server-side byTier (or byExchange[ex].byTier)
@@ -1466,7 +1466,7 @@ function renderAll() {
     '</div>';
   }).join('');
 
-  // Signal types — from server-side bySignalType
+  // Trade call types — from server-side byCallType
   var typeEl = document.getElementById('by-type');
   var typeSrc = s.byType || {};
   var th2 = d.totalHolds || 0;
@@ -1503,7 +1503,7 @@ function renderAll() {
   var recentEl = document.getElementById('recent');
   var recent = getFilteredRecent().slice(0,20);
   if (recent.length) {
-    recentEl.innerHTML = recent.map(function(s){return '<tr><td><a href="/verify?signalId='+s.id+'" class="id-link">#'+s.id+'</a></td><td class="muted">'+timeAgo(s.created_at)+'</td><td>'+tierBadge(s.tier)+'</td><td><strong>'+s.coin+'</strong></td><td>'+badge(s.call ?? s.signal)+'</td><td class="num">'+s.confidence+'%</td><td class="num">'+s.timeframe+'</td><td class="muted">'+(s.exchange||'HL')+'</td></tr>';}).join('');
+    recentEl.innerHTML = recent.map(function(s){return '<tr><td><a href="/verify?signalId='+s.id+'" class="id-link">#'+s.id+'</a></td><td class="muted">'+timeAgo(s.created_at)+'</td><td>'+tierBadge(s.tier)+'</td><td><strong>'+s.coin+'</strong></td><td>'+badge(s.call)+'</td><td class="num">'+s.confidence+'%</td><td class="num">'+s.timeframe+'</td><td class="muted">'+(s.exchange||'HL')+'</td></tr>';}).join('');
   } else { recentEl.innerHTML='<tr><td colspan="8" class="empty">No trade calls'+(activeTfFilter!=='all'?' for '+activeTfFilter:'')+' yet.</td></tr>'; }
 }
 

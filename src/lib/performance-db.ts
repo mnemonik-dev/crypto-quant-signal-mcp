@@ -793,11 +793,9 @@ const METHODOLOGY: Record<string, unknown> = {
 function emptyStats(): PerformanceStats {
   return {
     totalCalls: 0,
-    totalSignals: 0,
     period: { from: '', to: '' },
-    overall: { totalCalls: 0, totalSignals: 0, totalEvaluated: 0, pfeWinRate: null },
+    overall: { totalCalls: 0, totalEvaluated: 0, pfeWinRate: null },
     byCallType: {},
-    bySignalType: {},
     byTimeframe: {},
     byAsset: {},
     byExchange: {},
@@ -824,7 +822,7 @@ function computeStats(all: SignalRecord[], top20ByOI: Set<string> | null = null)
   const pfeWinRate = evaluatedPFE.length > 0 ? pfeWins.length / evaluatedPFE.length : null;
 
   // By signal type
-  const bySignalType: PerformanceStats['bySignalType'] = {};
+  const bySignalType: PerformanceStats['byCallType'] = {};  // local var; emitted as byCallType
   for (const type of ['BUY', 'SELL', 'HOLD'] as const) {
     const group = all.filter(s => s.signal === type);
     const pfeGroup = group.filter(s => s.pfe_return_pct != null && type !== 'HOLD');
@@ -933,13 +931,13 @@ function computeStats(all: SignalRecord[], top20ByOI: Set<string> | null = null)
       exByTier[`tier${tierDef.tier}`] = { count: tg.length, evaluated: te.length, pfeWinRate: te.length > 0 ? tw.length / te.length : null };
     }
 
-    // Per-exchange bySignalType
-    const exBySignalType: PerformanceStats['byExchange'][string]['bySignalType'] = {};
+    // Per-exchange byCallType (was bySignalType pre-1.10)
+    const exByCallType: PerformanceStats['byExchange'][string]['byCallType'] = {};
     for (const type of ['BUY', 'SELL', 'HOLD'] as const) {
       const g = exAll.filter(s => s.signal === type);
       const e = g.filter(s => s.pfe_return_pct != null && type !== 'HOLD');
       const w = e.filter(s => { const p = s.pfe_return_pct ?? 0; return s.signal === 'BUY' ? p > 0 : p < 0; });
-      exBySignalType[type] = { count: type === 'HOLD' ? g.length : e.length, evaluated: e.length, pfeWinRate: type === 'HOLD' ? null : (e.length > 0 ? w.length / e.length : null) };
+      exByCallType[type] = { count: type === 'HOLD' ? g.length : e.length, evaluated: e.length, pfeWinRate: type === 'HOLD' ? null : (e.length > 0 ? w.length / e.length : null) };
     }
 
     // Per-exchange byAsset
@@ -959,37 +957,36 @@ function computeStats(all: SignalRecord[], top20ByOI: Set<string> | null = null)
       pfeWinRate: exEvalPFE.length > 0 ? exPfeWins.length / exEvalPFE.length : null,
       byTimeframe: exByTimeframe,
       byTier: exByTier,
-      bySignalType: exBySignalType,
+      byCallType: exByCallType,
       byAsset: exByAsset,
     };
   }
 
   return {
-    // v1.10.0 dual-emit: `totalCalls`/`byCallType` are the canonical keys;
-    // `totalSignals`/`bySignalType` continue to emit during the deprecation
-    // window so the live dashboard's track-record-proxy.js + agent consumers
-    // keep working without coordinated client changes. Same data, two keys.
+    // v1.10.0: `totalCalls`/`byCallType` are the canonical keys (was
+    // `totalSignals`/`bySignalType` pre-1.10). DB column literally named
+    // `signal` is unchanged — only the API output key is renamed (output-
+    // shaping layer, not DB schema; deferred future wave).
     totalCalls: all.length,
-    totalSignals: all.length,
     period: {
       from: new Date(oldest.created_at * 1000).toISOString().split('T')[0],
       to: new Date(newest.created_at * 1000).toISOString().split('T')[0],
     },
     overall: {
       totalCalls: nonHold.length,
-      totalSignals: nonHold.length,
       totalEvaluated: evaluatedPFE.length,
       pfeWinRate,
     },
     byCallType: bySignalType,
-    bySignalType,
     byTimeframe,
     byAsset,
     byExchange,
     byTier,
+    // v1.10.0: emit `call` (canonical) — DB column literally named `signal`
+    // is unchanged (deferred future wave). Output-shaping layer aliases.
     recentSignals: all.slice(0, 20).map(s => ({
       id: s.id!,
-      coin: s.coin, signal: s.signal, confidence: s.confidence,
+      coin: s.coin, call: s.signal, confidence: s.confidence,
       timeframe: s.timeframe, tier: classifyAsset(s.coin, top20ByOI),
       created_at: s.created_at,
       exchange: s.exchange || 'HL',

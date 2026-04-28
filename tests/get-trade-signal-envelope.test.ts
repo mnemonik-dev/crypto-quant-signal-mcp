@@ -114,21 +114,21 @@ describe('get_trade_signal response envelope (v1.9.0)', () => {
 
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
 
-    expect(result.try_next).toBeDefined();
-    expect(Array.isArray(result.try_next)).toBe(true);
-    expect(result.try_next!.length).toBeLessThanOrEqual(3);
-    expect(result.try_next!.length).toBeGreaterThan(0);
+    expect(result.also_see).toBeDefined();
+    expect(Array.isArray(result.also_see)).toBe(true);
+    expect(result.also_see!.length).toBeLessThanOrEqual(3);
+    expect(result.also_see!.length).toBeGreaterThan(0);
 
     // Top-3 non-HOLD in descending confidence per the synthetic snapshot:
     // ETH/1h/BUY/80, SOL/15m/SELL/75, DOGE/5m/BUY/65.
-    expect(result.try_next).toEqual([
-      expect.objectContaining({ coin: 'ETH', timeframe: '1h', signal: 'BUY', confidence: 80 }),
-      expect.objectContaining({ coin: 'SOL', timeframe: '15m', signal: 'SELL', confidence: 75 }),
-      expect.objectContaining({ coin: 'DOGE', timeframe: '5m', signal: 'BUY', confidence: 65 }),
+    expect(result.also_see).toEqual([
+      expect.objectContaining({ coin: 'ETH', timeframe: '1h', confidence: 80 }),
+      expect.objectContaining({ coin: 'SOL', timeframe: '15m', confidence: 75 }),
+      expect.objectContaining({ coin: 'DOGE', timeframe: '5m', confidence: 65 }),
     ]);
 
     // None of the returned cells matches the requested (coin, timeframe).
-    for (const cell of result.try_next!) {
+    for (const cell of result.also_see!) {
       const matchesRequested = cell.coin === 'BTC' && cell.timeframe === '1h';
       expect(matchesRequested).toBe(false);
     }
@@ -141,7 +141,7 @@ describe('get_trade_signal response envelope (v1.9.0)', () => {
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
 
     // Sanity: the scorer did produce HOLD (otherwise the test doesn't exercise the branch)
-    expect(result.signal).toBe('HOLD');
+    expect(result.call).toBe('HOLD');
     expect(result.closest_tradeable).toBeDefined();
     // v1.10.0 (C4): closest_tradeable is now LeaderboardCell-shaped — `signal`,
     // `exchange`, `regime` are stripped (leak-prevention). Direction requires
@@ -219,12 +219,12 @@ describe('get_trade_signal response envelope (v1.9.0)', () => {
     expect(result._algovault.session_id).toBe('test-session-abc123');
   });
 
-  it('_algovault.version equals PKG_VERSION (1.9.0)', async () => {
+  it('_algovault.version equals PKG_VERSION (1.10.0)', async () => {
     vi.mocked(getAdapter).mockReturnValue(makeAdapter());
 
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
 
     expect(result._algovault.version).toBe(PKG_VERSION);
-    expect(PKG_VERSION).toBe('1.9.0');
+    expect(PKG_VERSION).toBe('1.10.0');
   });
 });

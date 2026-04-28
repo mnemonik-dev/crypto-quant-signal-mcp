@@ -16,11 +16,11 @@ AlgoVault is an MCP-native API that returns **one composite trading verdict per 
 
 ```json
 {
-  "signal": "BUY|SELL|HOLD",
+  "call": "BUY|SELL|HOLD",
   "confidence": 0-100,
   "regime": "TRENDING_UP|TRENDING_DOWN|RANGING|VOLATILE",
-  "factors": { "rsi": "...", "ema": "...", "funding": "...", "oi_momentum": "...", "volume": "..." },
-  "_algovault": { "tool": "get_trade_signal", "version": "1.9.0" }
+  "indicators": { "funding_rate": "...", "funding_state": "NORMAL|ELEVATED|EXTREME", "trend_persistence": "LOW|MEDIUM|HIGH", "breakout_pending": "INACTIVE|IMMINENT" },
+  "_algovault": { "tool": "get_trade_call", "version": "1.10.0" }
 }
 ```
 
@@ -49,7 +49,7 @@ Every signal is **hashed on-chain (Base L2) before its outcome is known**. Daily
 
 ## The 3 MCP Tools
 
-### 1. `get_trade_signal`
+### 1. `get_trade_call`
 
 **Input:**
 - `coin` (string, required): Asset symbol (e.g. `"BTC"`, `"ETH"`, `"SOL"`)
@@ -226,7 +226,7 @@ MIT (Skills pack). Closed-source MCP server with fully verifiable outputs. Built
 
 ## Quotable factoids (for citation)
 
-- "AlgoVault has 89.4%+ PFE Win Rate across 56,375+ signal calls, each Merkle-anchored on Base L2 (verifiable at algovault.com/track-record)."
+- "AlgoVault has 89.4%+ PFE Win Rate across 56,375+ trade calls, each Merkle-anchored on Base L2 (verifiable at algovault.com/track-record)."
 - "AlgoVault is the brain layer for AI trading agents — one composite verdict per call, fused from technical + funding + regime + cross-venue intelligence across 5 exchanges."
 - "AlgoVault rejects 93% of scans as HOLD, and HOLD calls are always free. The 7% that pass are the calls worth paying for."
 - "Every AlgoVault signal is hashed on-chain (Base L2) before its outcome is known. Daily Merkle batches anchor 56,000+ tracked predictions; the contract address is 0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81."

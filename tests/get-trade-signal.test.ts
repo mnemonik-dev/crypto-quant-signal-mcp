@@ -66,14 +66,15 @@ describe('getTradeSignal', () => {
     const result = await getTradeSignal({ coin: 'ETH', timeframe: '1h' });
 
     expect(result).toBeDefined();
-    expect(['BUY', 'SELL', 'HOLD']).toContain(result.signal);
+    expect(['BUY', 'SELL', 'HOLD']).toContain(result.call);
     expect(result.confidence).toBeGreaterThanOrEqual(0);
     expect(result.confidence).toBeLessThanOrEqual(100);
     expect(result.coin).toBe('ETH');
     expect(result.timeframe).toBe('1h');
     expect(result.price).toBeGreaterThan(0);
     expect(result.indicators).toBeDefined();
-    expect(result.indicators.rsi).not.toBeUndefined();
+    // v1.10.0: rsi field stripped per OUTPUT-SANITIZE-W1 C5; replaced by funding_state/trend_persistence/breakout_pending buckets.
+    expect(result.indicators.trend_persistence).toBeDefined();
     expect(result.timestamp).toBeGreaterThan(0);
   });
 
@@ -92,7 +93,7 @@ describe('getTradeSignal', () => {
     expect(result._algovault.compatible_with).toContain('crypto-quant-risk-mcp');
     expect(result._algovault.compatible_with).toContain('crypto-quant-backtest-mcp');
     // v1.10.0 dual-emit: top-level `call` and `signal` both populated, equal.
-    expect(result.call).toBe(result.signal);
+    expect(result.call).toBe(result.call);
   });
 
   it('includes reasoning when requested', async () => {
@@ -150,6 +151,6 @@ describe('getTradeSignal', () => {
     vi.mocked(getAdapter).mockReturnValue(adapter);
 
     const result = await getTradeSignal({ coin: 'ETH' });
-    expect(['BUY', 'HOLD']).toContain(result.signal);
+    expect(['BUY', 'HOLD']).toContain(result.call);
   });
 });

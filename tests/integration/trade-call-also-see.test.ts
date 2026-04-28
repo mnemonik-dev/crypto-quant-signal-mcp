@@ -119,31 +119,15 @@ describe('also_see — trimmed cells + dual-emit invariant with try_next', () =>
     ]);
   });
 
-  it('try_next continues to carry FULL GridCell shape during dual-emit window', async () => {
-    const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
-    expect(result.try_next).toBeDefined();
-    expect(result.try_next!.length).toBeGreaterThan(0);
-    for (const cell of result.try_next!) {
-      // Full GridCell carries signal/exchange/regime
-      expect(cell.signal).toBeDefined();
-      expect(cell.exchange).toBeDefined();
-      expect(cell.regime).toBeDefined();
-      // Sanity: still has the trimmed-cell keys too
-      expect(cell.coin).toBeDefined();
-      expect(cell.timeframe).toBeDefined();
-      expect(cell.confidence).toBeDefined();
-    }
-  });
-
-  it('try_next.length === also_see.length (dual-emit from same source)', async () => {
-    const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
-    expect(result.try_next!.length).toBe(result.also_see!.length);
-  });
+  // v1.10.0 C5 NOTE: previously this file had two dual-emit-window tests
+  // asserting that `try_next` continued to carry the full GridCell shape
+  // alongside `also_see`. C5 stripped the legacy `try_next` field; both
+  // tests removed.
 
   it('closest_tradeable on HOLD verdict is trimmed to LeaderboardCell shape', async () => {
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
     // Flat-price candles drive HOLD verdict on BTC/1h
-    expect(result.signal).toBe('HOLD');
+    expect(result.call).toBe('HOLD');
     expect(result.closest_tradeable).toBeDefined();
     const keys = Object.keys(result.closest_tradeable!).sort();
     expect(keys).toEqual(['coin', 'confidence', 'timeframe']);

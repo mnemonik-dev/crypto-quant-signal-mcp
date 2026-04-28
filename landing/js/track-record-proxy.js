@@ -8,33 +8,34 @@
  * existing static value MUST carry an HTML comment `<!-- snapshot: YYYY-MM-DD
  * — live source of truth: /api/performance-public -->` next to it).
  *
- * Supported fields:
+ * Supported fields (v1.10.0 OUTPUT-SANITIZE-W1 C5 cutover — `signal_count`
+ * dropped; the canonical hook is `call_count`):
  *   - pfe_wr        → "89.4%" (rounded to 1 decimal, % suffix)
- *   - signal_count  → "56,375" (locale-formatted with thousands separators)
+ *   - call_count    → "60,853" (locale-formatted with thousands separators)
  *   - batch_count   → "16" (integer, no commas — small numbers)
  *   - last_updated  → "2026-04-26" (ISO date) or "26 Apr 2026" (localised)
  *   - hold_rate     → "98.2%" (rounded to 1 decimal, % suffix; computed
- *                     server-side as totalHolds / (totalHolds + totalSignals)
+ *                     server-side as totalHolds / (totalHolds + totalCalls)
  *                     × 100 — see src/index.ts:/api/performance-public for the
- *                     server-side formula. WEBSITE-REFRESH-CLEANUP-W1 R2.)
+ *                     server-side formula.)
  *
  * Live snapshot at deploy time (initial-render fallback if fetch fails BEFORE
  * any cache hit):
  *   - pfeWinRate: 0.8945  (89.4%)
- *   - totalSignals: 56,375
+ *   - totalCalls: 60,853 (v1.10.0; was totalSignals pre-1.10)
  *   - batches: 16 (latest batch_id; published 2026-04-26T00:05:04Z)
  *
- * Endpoint contract (verified 2026-04-26):
+ * Endpoint contract (v1.10.0):
  *   GET /api/performance-public →
  *   {
- *     "totalSignals": 56375,
- *     "period": { "from": "2026-04-10", "to": "2026-04-26" },
+ *     "totalCalls": 60853,
+ *     "period": { "from": "2026-04-10", "to": "2026-04-28" },
  *     "overall": {
- *       "totalSignals": 56375,
- *       "totalEvaluated": 55935,
- *       "pfeWinRate": 0.8944846697059087
+ *       "totalCalls": 60853,
+ *       "totalEvaluated": 60413,
+ *       "pfeWinRate": 0.8944
  *     },
- *     "bySignalType": { ... },
+ *     "byCallType": { ... },
  *     "byTimeframe": { ... },
  *     ...
  *   }
@@ -94,20 +95,19 @@
   function refresh() {
     fetchJson(PERF_URL).then(function (perf) {
       var rate = perf && perf.overall && perf.overall.pfeWinRate;
-      // v1.10.0 dual-read: prefer canonical `totalCalls`, fall back to legacy
-      // `totalSignals` while old API responses are still in flight (cache window).
-      var n = perf && (perf.totalCalls != null ? perf.totalCalls : perf.totalSignals);
+      // v1.10.0: read canonical `totalCalls` only. Legacy `totalSignals` was
+      // dropped from the API response in C5 — old static HTML/cached pages
+      // would render the snapshot fallback if they're somehow served against
+      // a pre-1.10 API, which is intended (graceful degradation).
+      var n = perf && perf.totalCalls;
       // /api/performance-public#period.to is the most recent date covered by
       // the rolling-window evaluation (effectively "live data refreshed up to
-      // YYYY-MM-DD"). Used by C7 GEO last_updated recency signal.
+      // YYYY-MM-DD"). Used by GEO last_updated recency signal.
       var to = perf && perf.period && perf.period.to;
       var holdRate = perf && perf.hold_rate;
       setField('pfe_wr', formatPfe(rate));
-      // v1.10.0 dual-write DOM hooks: emit BOTH `signal_count` (legacy) and
-      // `call_count` (canonical). Landing-HTML consumers can rebind to either
-      // hook; C5 will drop the legacy `signal_count` write after all HTML is
-      // updated to use `call_count`.
-      setField('signal_count', formatCount(n));
+      // v1.10.0 cutover: `call_count` is the only DOM-hook write; legacy
+      // `signal_count` write was dropped per spec OUTPUT-SANITIZE-W1 C5.
       setField('call_count', formatCount(n));
       setField('hold_rate', formatPercent(holdRate));
       if (to) setField('last_updated', formatDate(to));

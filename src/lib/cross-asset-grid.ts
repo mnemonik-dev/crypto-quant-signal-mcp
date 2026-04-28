@@ -87,7 +87,10 @@ async function refreshGrid(): Promise<void> {
             return {
               coin,
               timeframe,
-              signal: result.signal,
+              // GridCell carries `signal` (internal cross-asset score field, NOT the
+              // public-facing `call`); same value, kept for back-compat with the
+              // existing scoring/filtering helpers in this module.
+              signal: result.call,
               confidence: result.confidence,
               exchange: 'HL' as const,
               regime: result.regime,

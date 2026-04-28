@@ -157,50 +157,25 @@ export interface LeaderboardCell {
 }
 
 export interface TradeCallResult {
-  /**
-   * v1.10.0 trade-call verdict — same value as legacy `signal` field. Read this.
-   * (`signal` field below is dual-emitted during the v1.10.0 → v1.11.0 deprecation
-   * window for backward compat.)
-   */
+  /** v1.10.0 trade-call verdict (BUY/SELL/HOLD). Replaces legacy `signal` field. */
   call: SignalVerdict;
-  /** @deprecated since v1.10.0 — read `call` instead. Will be removed in v1.11.0. */
-  signal: SignalVerdict;
   confidence: number;
   price: number;
   indicators: {
-    /** @deprecated since v1.10.0 — superseded by trend_persistence/funding_state/breakout_pending. Will be removed in v1.11.0. */
-    rsi: number | null;
-    /** @deprecated since v1.10.0 — superseded by trend_persistence. Will be removed in v1.11.0. */
-    ema_cross: EmaCrossDirection;
-    /** @deprecated since v1.10.0. Will be removed in v1.11.0. */
-    ema_9: number;
-    /** @deprecated since v1.10.0. Will be removed in v1.11.0. */
-    ema_21: number;
+    /** Funding rate (per-period rate, not annualized). */
     funding_rate: number;
+    /** 24-hour rolling average funding rate. */
     funding_24h_avg: number;
+    /** v1.10.0 bucket: |funding-Z| → NORMAL / ELEVATED / EXTREME. */
+    funding_state: import('./lib/indicator-buckets.js').FundingState;
+    /** Day-over-day open-interest change percentage. */
     oi_change_pct: number;
+    /** 24-hour spot volume in quote currency. */
     volume_24h: number;
-    /** @deprecated since v1.10.0 — superseded by trend_persistence. Will be removed in v1.11.0. */
-    hurst: number | null;
-    /** @deprecated since v1.10.0 — superseded by funding_state. Will be removed in v1.11.0. */
-    funding_z_score: number | null;
-    /** @deprecated since v1.10.0 — superseded by breakout_pending. Will be removed in v1.11.0. */
-    squeeze_active: boolean;
-    /**
-     * v1.10.0 bucket field: trend persistence derived from Hurst exponent.
-     * Optional during the dual-emit window (v1.10.0); required from v1.11.0.
-     */
-    trend_persistence?: import('./lib/indicator-buckets.js').TrendPersistence;
-    /**
-     * v1.10.0 bucket field: funding-pressure state derived from |funding-Z|.
-     * Optional during the dual-emit window (v1.10.0); required from v1.11.0.
-     */
-    funding_state?: import('./lib/indicator-buckets.js').FundingState;
-    /**
-     * v1.10.0 bucket field: BB/Keltner squeeze enum (replaces boolean squeeze_active).
-     * Optional during the dual-emit window (v1.10.0); required from v1.11.0.
-     */
-    breakout_pending?: import('./lib/indicator-buckets.js').BreakoutPending;
+    /** v1.10.0 bucket: Hurst exponent → LOW / MEDIUM / HIGH. */
+    trend_persistence: import('./lib/indicator-buckets.js').TrendPersistence;
+    /** v1.10.0 bucket: BB/Keltner squeeze → INACTIVE / IMMINENT (replaces boolean squeeze_active). */
+    breakout_pending: import('./lib/indicator-buckets.js').BreakoutPending;
   };
   regime: RegimeType;
   reasoning: string;
@@ -216,15 +191,6 @@ export interface TradeCallResult {
    * when the grid has no non-HOLD cell or when the current verdict is BUY/SELL.
    */
   closest_tradeable?: LeaderboardCell;
-  /**
-   * @deprecated since v1.10.0 — read `also_see` instead. Will be removed in v1.11.0.
-   * Next-calls hints (v1.9.0 L4). Top-3 highest-confidence non-HOLD cells from
-   * the cross-asset grid, excluding the requested (coin, timeframe). Populated
-   * on every response (HOLD and non-HOLD) when the grid is non-empty. Carries
-   * the full `GridCell` shape (with `signal`/`exchange`/`regime`) for
-   * back-compat during the dual-emit window.
-   */
-  try_next?: GridCell[];
   /**
    * Cross-asset high-confidence leads (v1.10.0). Top-3 highest-confidence
    * non-HOLD cells from the cross-asset grid, trimmed to
@@ -344,23 +310,17 @@ export interface SignalRecord {
 }
 
 export interface PerformanceStats {
-  /** v1.10.0: canonical key. Same value as legacy `totalSignals`; both emitted during deprecation window. */
+  /** v1.10.0 canonical key. Was `totalSignals` pre-1.10. */
   totalCalls: number;
-  /** @deprecated since v1.10.0 — read `totalCalls` instead. Will be removed in v1.11.0. */
-  totalSignals: number;
   period: { from: string; to: string };
   overall: {
-    /** v1.10.0: canonical key. Same value as legacy `totalSignals`. */
+    /** v1.10.0 canonical key. Was `overall.totalSignals` pre-1.10. */
     totalCalls: number;
-    /** @deprecated since v1.10.0 — read `overall.totalCalls` instead. Will be removed in v1.11.0. */
-    totalSignals: number;
     totalEvaluated: number;
     pfeWinRate: number | null;
   };
-  /** v1.10.0: canonical breakdown by trade-call type (BUY/SELL/HOLD). Same data as `bySignalType`. */
+  /** v1.10.0 canonical breakdown by trade-call type (BUY/SELL/HOLD). Was `bySignalType` pre-1.10. */
   byCallType: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
-  /** @deprecated since v1.10.0 — read `byCallType` instead. Will be removed in v1.11.0. */
-  bySignalType: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
   byTimeframe: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
   byAsset: Record<string, {
     count: number;
@@ -375,7 +335,7 @@ export interface PerformanceStats {
     pfeWinRate: number | null;
     byTimeframe: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
     byTier: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
-    bySignalType: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
+    byCallType: Record<string, { count: number; evaluated: number; pfeWinRate: number | null }>;
     byAsset: Record<string, { count: number; tier: number; pfeWinRate: number | null }>;
   }>;
   byTier: Record<string, {
@@ -390,7 +350,10 @@ export interface PerformanceStats {
   }>;
   recentSignals: Array<{
     id: number;
-    coin: string; signal: string; confidence: number;
+    coin: string;
+    /** v1.10.0 canonical key (was `signal` pre-1.10). */
+    call: string;
+    confidence: number;
     timeframe: string; tier: number;
     created_at: number;
     exchange: string;
