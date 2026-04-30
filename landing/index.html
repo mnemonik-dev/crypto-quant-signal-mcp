@@ -4,18 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AlgoVault — The Brain Layer for AI Trading Agents</title>
-<meta name="description" content="Composite trade calls across 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget). Multi-factor scoring engine with regime-aware filtering. MCP-native.">
+<meta name="description" content="Composite trade calls across 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget). Multi-factor scoring engine with regime-aware filtering. MCP-native."> <!-- SNAPSHOT-LINE -->
 <meta name="keywords" content="crypto trade calls, MCP server, Hyperliquid perps, funding rate arbitrage, AI trading agent, market regime, x402, USDC payments, composite trade call, Model Context Protocol">
 <link rel="canonical" href="https://algovault.com">
 <meta property="og:title" content="AlgoVault — The Brain Layer for AI Trading Agents">
-<meta property="og:description" content="Composite quant trade calls across 5 exchanges — Hyperliquid, Binance, Bybit, OKX, Bitget. BUY/SELL/HOLD with confidence scores, funding arb scanning, market regime detection via MCP.">
+<meta property="og:description" content="Composite quant trade calls across 5 exchanges — Hyperliquid, Binance, Bybit, OKX, Bitget. BUY/SELL/HOLD with confidence scores, funding arb scanning, market regime detection via MCP."> <!-- SNAPSHOT-LINE -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://algovault.com">
 <meta property="og:image" content="https://algovault.com/logo.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:site" content="@AlgoVaultLabs">
 <meta name="twitter:title" content="AlgoVault — The Brain Layer for AI Trading Agents">
-<meta name="twitter:description" content="Composite trade calls, funding arb, and market regime detection across 5 exchanges via MCP.">
+<meta name="twitter:description" content="Composite trade calls, funding arb, and market regime detection across 5 exchanges via MCP."> <!-- SNAPSHOT-LINE -->
 <meta name="twitter:image" content="https://algovault.com/logo.png">
 <meta name="last-updated" content="2026-04-26">
 <link rel="icon" type="image/png" href="/logo.png">
@@ -656,7 +656,7 @@ tailwind.config = {
           <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
         </summary>
         <div class="px-6 pb-4 text-sm text-gray-400 leading-relaxed">
-          AlgoVault is an MCP server that provides AI trading agents with composite BUY/SELL/HOLD trade calls, cross-venue funding rate arbitrage scanning, and market regime detection across 5 exchanges &mdash; Hyperliquid, Binance, Bybit, OKX, and Bitget. It works with any MCP-compatible client including Claude, Cursor, and custom agents.
+          AlgoVault is an MCP server that provides AI trading agents with composite BUY/SELL/HOLD trade calls, cross-venue funding rate arbitrage scanning, and market regime detection across <span data-tr-field="exchange_count">5</span> exchanges &mdash; Hyperliquid, Binance, Bybit, OKX, and Bitget. It works with any MCP-compatible client including Claude, Cursor, and custom agents.
         </div>
       </details>
 
@@ -676,7 +676,7 @@ tailwind.config = {
           <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
         </summary>
         <div class="px-6 pb-4 text-sm text-gray-400 leading-relaxed">
-          AlgoVault generates full trade calls on 5 exchanges: Hyperliquid, Binance, Bybit, OKX, and Bitget. Each venue uses native candle, open interest, funding rate, and volume data. TradFi perpetuals (stocks, commodities, indices, FX) are available on Hyperliquid. Cross-venue funding arbitrage scanning covers HL, Binance, and Bybit. All data comes from public APIs &mdash; no exchange account or API keys required.
+          AlgoVault generates full trade calls on <span data-tr-field="exchange_count">5</span> exchanges: Hyperliquid, Binance, Bybit, OKX, and Bitget. Each venue uses native candle, open interest, funding rate, and volume data. TradFi perpetuals (stocks, commodities, indices, FX) are available on Hyperliquid. Cross-venue funding arbitrage scanning covers HL, Binance, and Bybit. All data comes from public APIs &mdash; no exchange account or API keys required.
         </div>
       </details>
 
@@ -686,7 +686,7 @@ tailwind.config = {
           <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
         </summary>
         <div class="px-6 pb-4 text-sm text-gray-400 leading-relaxed">
-          Yes. The free tier includes trade calls on all 716 assets across all 11 timeframes (1m&ndash;1d), top 5 funding arbitrage opportunities, and market regime detection — capped at 100 calls/month with no signup required. HOLD verdicts are always free. For higher monthly limits and unlimited funding-arb results, upgrade to Starter ($9.99/month, 3,000 calls) or Pro ($49/month, 15K calls), or pay per call via x402 micropayments (USDC on Base, starting at $0.01/call).
+          Yes. The free tier includes trade calls on all <span data-tr-field="asset_count">710</span>+ assets across all <span data-tr-field="timeframe_count">11</span> timeframes (1m&ndash;1d), top 5 funding arbitrage opportunities, and market regime detection — capped at 100 calls/month with no signup required. HOLD verdicts are always free. For higher monthly limits and unlimited funding-arb results, upgrade to Starter ($9.99/month, 3,000 calls) or Pro ($49/month, 15K calls), or pay per call via x402 micropayments (USDC on Base, starting at $0.01/call).
         </div>
       </details>
 
@@ -757,7 +757,7 @@ tailwind.config = {
       "name": "Is AlgoVault free to use?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. The free tier includes trade calls on all 716 assets across all 11 timeframes (1m–1d), top 5 funding arbs, market regime detection, and HOLD calls always free — capped at 100 calls/month with no signup. Starter is $9.99/mo for 3,000 calls; Pro is $49/mo for 15K calls; x402 pay-per-call starts at $0.01."
+        "text": "Yes. The free tier includes trade calls on all 710+ assets across all 11 timeframes (1m–1d), top 5 funding arbs, market regime detection, and HOLD calls always free — capped at 100 calls/month with no signup. Starter is $9.99/mo for 3,000 calls; Pro is $49/mo for 15K calls; x402 pay-per-call starts at $0.01."
       }
     },
     {

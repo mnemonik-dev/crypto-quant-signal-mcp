@@ -218,7 +218,19 @@ async function renderOne(exchange) {
     'utm_medium=web&utm_campaign=integration-'
   );
 
-  const bodyHtml = md.render(mdSource);
+  let bodyHtml = md.render(mdSource);
+  // AUTO-TRACE-W1 (2026-04-30): wrap the literal capability counter "5
+  // exchanges" with the live-proxy span so every re-render preserves the
+  // auto-update behavior. The upstream MD source is owned by the
+  // algovault-skills repo; doing the wrap here keeps the post-process
+  // localized and means the upstream MD doesn't have to know about the
+  // proxy contract. Idempotent: re-running on already-wrapped HTML is a
+  // no-op because the inner literal "5 exchanges" no longer matches the
+  // unwrapped pattern.
+  bodyHtml = bodyHtml.replace(
+    /(?<!data-tr-field="exchange_count">)\b5 exchanges\b/g,
+    '<span data-tr-field="exchange_count">5</span> exchanges',
+  );
   const html = htmlShell(exchange, bodyHtml);
   await writeFile(dstPath, html);
   console.log(`[render] ${exchange}.md -> landing/integrations/${exchange}.html (${html.length} bytes)`);

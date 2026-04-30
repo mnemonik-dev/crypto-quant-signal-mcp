@@ -10,14 +10,20 @@
  *
  * Supported fields (v1.10.0 OUTPUT-SANITIZE-W1 C5 cutover — `signal_count`
  * dropped; the canonical hook is `call_count`):
- *   - pfe_wr        → "89.4%" (rounded to 1 decimal, % suffix)
- *   - call_count    → "60,853" (locale-formatted with thousands separators)
- *   - batch_count   → "16" (integer, no commas — small numbers)
- *   - last_updated  → "2026-04-26" (ISO date) or "26 Apr 2026" (localised)
- *   - hold_rate     → "98.2%" (rounded to 1 decimal, % suffix; computed
- *                     server-side as totalHolds / (totalHolds + totalCalls)
- *                     × 100 — see src/index.ts:/api/performance-public for the
- *                     server-side formula.)
+ *   - pfe_wr          → "89.4%" (rounded to 1 decimal, % suffix)
+ *   - call_count      → "60,853" (locale-formatted with thousands separators)
+ *   - batch_count     → "16" (integer, no commas — small numbers)
+ *   - last_updated    → "2026-04-26" (ISO date) or "26 Apr 2026" (localised)
+ *   - hold_rate       → "98.2%" (rounded to 1 decimal, % suffix; computed
+ *                       server-side as totalHolds / (totalHolds + totalCalls)
+ *                       × 100 — see src/index.ts:/api/performance-public for
+ *                       the server-side formula.)
+ *   - asset_count     → "710" (round-floored to nearest 10; rendered as
+ *                       "<span>710</span>+ assets" so the literal "+" lives
+ *                       outside the span — AUTO-TRACE-W1)
+ *   - exchange_count  → "5" (raw integer; auto-updates when 6th adapter
+ *                       lands in src/lib/capabilities.ts EXCHANGES list)
+ *   - timeframe_count → "11" (raw integer; matches Zod enum length)
  *
  * Live snapshot at deploy time (initial-render fallback if fetch fails BEFORE
  * any cache hit):
@@ -68,6 +74,28 @@
     return n.toLocaleString('en-US');
   }
 
+  // AUTO-TRACE-W1: capability-counter formatters.
+  //
+  // formatAssetCount(718) → "710"  (rendered as "<span>710</span>+ assets" so
+  //                                 the literal "+" sits OUTSIDE the span,
+  //                                 letting the span hold a pure integer for
+  //                                 deterministic-formatting)
+  // formatExchangeCount(5) → "5"    (raw integer; exchange list is enumerable
+  //                                 so no plus suffix needed)
+  // formatTimeframeCount(11) → "11" (raw integer)
+  //
+  // Round-floor to nearest 10 for assets — never overstates the count if a
+  // coin gets delisted between fetch + render.
+  function formatAssetCount(n) {
+    if (typeof n !== 'number' || !isFinite(n) || n < 0) return null;
+    return String(Math.floor(n / 10) * 10);
+  }
+
+  function formatRawInt(n) {
+    if (typeof n !== 'number' || !isFinite(n) || n < 0) return null;
+    return String(Math.floor(n));
+  }
+
   function formatDate(iso) {
     if (typeof iso !== 'string') return null;
     var d = new Date(iso);
@@ -111,6 +139,12 @@
       setField('call_count', formatCount(n));
       setField('hold_rate', formatPercent(holdRate));
       if (to) setField('last_updated', formatDate(to));
+      // AUTO-TRACE-W1 capability counters (added 2026-04-30). Static fallback
+      // values inside each span stay visible if the fetch fails; on success
+      // the span text content is replaced so the live number wins.
+      setField('asset_count',     formatAssetCount(perf && perf.asset_count));
+      setField('exchange_count',  formatRawInt(perf && perf.exchange_count));
+      setField('timeframe_count', formatRawInt(perf && perf.timeframe_count));
     }).catch(function (err) {
       // Silent — fallback static text remains visible. Console.debug-only so
       // ad-blockers / network failures don't spam the user's console.

@@ -21,7 +21,10 @@
     "cron:prod": "node dist/scripts/seed-signals.js && node dist/scripts/backfill-outcomes.js",
     "backtest": "npx tsx scripts/backtest.ts",
     "build:landing": "tsc && node scripts/build_landing.mjs",
-    "prepublishOnly": "npm run build"
+    "snapshot:capabilities": "tsc && node scripts/snapshot_capabilities.mjs",
+    "snapshot:capabilities:live": "tsc && node scripts/snapshot_capabilities.mjs --live",
+    "snapshot:capabilities:check": "tsc && node scripts/snapshot_capabilities.mjs --check",
+    "prepublishOnly": "npm run build && node scripts/snapshot_capabilities.mjs --live"
   },
   "keywords": [
     "mcp",

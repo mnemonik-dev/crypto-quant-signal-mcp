@@ -4,14 +4,14 @@
 
 # crypto-quant-signal-mcp
 
-The Brain Layer for AI Trading Agents — composite quant calls across 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget), cross-venue arbitrage detection, and regime-aware market classification via MCP.
+The Brain Layer for AI Trading Agents — composite quant calls across 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget), cross-venue arbitrage detection, and regime-aware market classification via MCP. <!-- SNAPSHOT-LINE -->
 
 [![npm version](https://img.shields.io/npm/v/crypto-quant-signal-mcp)](https://www.npmjs.com/package/crypto-quant-signal-mcp)
 [![npm downloads](https://img.shields.io/npm/dw/crypto-quant-signal-mcp)](https://www.npmjs.com/package/crypto-quant-signal-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![On-Chain Verified](https://img.shields.io/badge/Track_Record-On--Chain_Verified-blue?logo=ethereum)](https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81)
 
-**[Live Track Record](https://algovault.com/track-record)** — 89.4%+ PFE Win Rate across 60,000+ trade calls on 5 exchanges. Public, no login required.
+**[Live Track Record](https://algovault.com/track-record)** — 89.4%+ PFE Win Rate across 60,000+ trade calls on 5 exchanges. Public, no login required. <!-- SNAPSHOT-LINE -->
 
 <!-- snapshot: 2026-04-28 — live source of truth: https://algovault.com/api/performance-public — refetch before citing exact numbers -->
 
@@ -53,10 +53,10 @@ AlgoVault is different. We give your agent **one answer**: a directional verdict
 
 - **Composite scoring, not single-indicator noise.** Multiple orthogonal signals — momentum oscillators, trend structure, derivatives positioning, volume dynamics, open interest flow — fused into a single weighted verdict. The weights are calibrated from live market outcome data, not textbook defaults.
 - **Regime-aware call generation.** Calls are filtered through a market regime classifier before emission. The engine knows when to issue calls and when to stay silent — a trend-following setup in a ranging market gets suppressed, not broadcast.
-- **Cross-venue intelligence.** Full signal generation on 5 exchanges — Hyperliquid, Binance, Bybit, OKX, and Bitget — with native candle, OI, funding, and volume data per venue. Cross-venue funding arbitrage scanning across all venues. Nobody else does multi-exchange derivatives analysis via MCP.
+- **Cross-venue intelligence.** Full signal generation on 5 exchanges — Hyperliquid, Binance, Bybit, OKX, and Bitget — with native candle, OI, funding, and volume data per venue. Cross-venue funding arbitrage scanning across all venues. Nobody else does multi-exchange derivatives analysis via MCP. <!-- SNAPSHOT-LINE -->
 - **Published track record with every release.** Every call is recorded with outcome prices at multiple horizons. Win rate, profit factor, and expected value are computed continuously. No cherry-picking, no survivorship bias.
 - **Adaptive scoring.** Indicator weights are retuned monthly from outcome data. The engine learns what works and adjusts — the call you get today is better than the one from last month.
-- **Crypto + TradFi coverage.** 290+ assets across 5 exchanges — standard crypto perps on all venues, TradFi perpetuals (stocks, indices, commodities, FX) on Hyperliquid, and liquidity-filtered meme coins. Assets are classified into quality tiers with per-exchange signal generation.
+- **Crypto + TradFi coverage.** 710+ assets across 5 exchanges — standard crypto perps on all venues, TradFi perpetuals (stocks, indices, commodities, FX) on Hyperliquid, and liquidity-filtered meme coins. Assets are classified into quality tiers with per-exchange signal generation. <!-- SNAPSHOT-LINE -->
 
 ---
 
@@ -98,7 +98,7 @@ Under the hood: a multi-factor scoring engine evaluates momentum, trend structur
 > Tool name `get_trade_signal` remains registered as an alias for backward compatibility — agents using the old name continue to work without changes. New integrations should call `get_trade_call`.
 
 **Parameters:**
-- `coin` (string, required): Asset symbol — e.g. `"ETH"`, `"BTC"`, `"SOL"`, `"GOLD"`, `"TSLA"`, or any of 290+ supported assets
+- `coin` (string, required): Asset symbol — e.g. `"ETH"`, `"BTC"`, `"SOL"`, `"GOLD"`, `"TSLA"`, or any of 290+ supported assets <!-- SNAPSHOT-LINE -->
 - `timeframe` (string, default `"15m"`): `"1m"`, `"3m"`, `"5m"`, `"15m"`, `"30m"`, `"1h"`, `"2h"`, `"4h"`, `"8h"`, `"12h"`, `"1d"`
 - `exchange` (string, default `"HL"`): `"HL"` (Hyperliquid), `"BINANCE"`, `"BYBIT"`, `"OKX"`, `"BITGET"`. TradFi assets (GOLD, TSLA, etc.) are HL-only.
 - `includeReasoning` (boolean, default `true`): Human-readable explanation of the call logic
@@ -258,10 +258,10 @@ Every call is hashed (keccak256) at creation time and anchored on Base L2 via da
 
 | Feature | Free | Starter ($9.99/mo) | Pro ($49/mo) | Enterprise ($299/mo) | x402 (per call) |
 |---------|------|-------------------|-------------|---------------------|-----------------|
-| Exchanges | All 5 | All 5 | All 5 | All 5 | All 5 |
-| Assets | All 716+ | All 716+ | All 716+ | All 716+ | All 716+ |
+| Exchanges | All 5 | All 5 | All 5 | All 5 | All 5 | <!-- SNAPSHOT-LINE-TABLE -->
+| Assets | All 710+ | All 710+ | All 710+ | All 710+ | All 710+ | <!-- SNAPSHOT-LINE-TABLE -->
 | Asset classes | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi |
-| Timeframes | All 11 | All 11 | All 11 | All 11 | All 11 |
+| Timeframes | All 11 | All 11 | All 11 | All 11 | All 11 | <!-- SNAPSHOT-LINE-TABLE -->
 | Funding arb results | Top 5 | Unlimited | Unlimited | Unlimited | Unlimited |
 | Track record | Full access | Full access | Full access | Full access | Full access |
 | Monthly calls | 100/mo | 3,000/mo | 15,000/mo | 100,000/mo | Unlimited |
@@ -362,7 +362,7 @@ MCP Server (Express + @modelcontextprotocol/sdk)
   └─ Exchange Public APIs (free, no auth — all 5 venues)
 ```
 
-**Exchange adapter pattern:** All exchange interactions go through the `ExchangeAdapter` interface — supporting full signal generation on all 5 exchanges. Each adapter implements candles, OI, funding rates, and current price via native exchange APIs. TradFi perps are Hyperliquid-exclusive.
+**Exchange adapter pattern:** All exchange interactions go through the `ExchangeAdapter` interface — supporting full signal generation on all 5 exchanges. Each adapter implements candles, OI, funding rates, and current price via native exchange APIs. TradFi perps are Hyperliquid-exclusive. <!-- SNAPSHOT-LINE -->
 
 ---
 

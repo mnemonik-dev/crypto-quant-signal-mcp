@@ -82,6 +82,135 @@ describe('Copy consistency — free-tier unlock + 11-timeframe canonical claim',
     }
   });
 
+  describe('AUTO-TRACE-W1 capability-counter canary (no hardcoded literals outside proxy/snapshot)', () => {
+    // After AUTO-TRACE-W1 every public-surface "5 exchanges" / "<N>+ assets" /
+    // "<N> timeframes" literal MUST be wrapped in either:
+    //   (a) a `data-tr-field="(exchange|asset|timeframe)_count"` span (Class A
+    //       — JS-renderable; live-proxied via /api/performance-public)
+    //   (b) a `<!-- SNAPSHOT-LINE -->` or `<!-- SNAPSHOT-LINE-TABLE -->` end-of-
+    //       line marker (Class B — refreshed by `npm run snapshot:capabilities`)
+    //   (c) a `# SNAPSHOT-LINE` plaintext-equivalent marker (.txt files)
+    //
+    // Any literal that survives outside both contexts is fresh drift —
+    // typically a copy-paste from the spec PR, or a regression from a
+    // future-wave commit that bypassed the snapshot pipeline.
+    //
+    // Excluded: `landing/integrations.html` autorun-line at 280
+    // ("a 5th/6th/Nth exchange") — that's not a capability counter, it's
+    // ordinal phrasing about a hypothetical onboarding event. Same for the
+    // "v1.10.0 - 5-exchange + 20-skill catalog refresh" historical changelog
+    // entry in README/CHANGELOG (changelog entries are immutable history).
+    const COUNTER_PATTERNS = [
+      { name: 'exchange_count', re: /\b\d+\s+exchanges?\b/g, fieldName: 'exchange_count' },
+      { name: 'asset_count',    re: /\b\d+\+\s+assets?\b/g,  fieldName: 'asset_count' },
+    ];
+
+    function isWrappedOnLine(line: string, fieldName: string): boolean {
+      // Same-line proxy span enclosing the digit?
+      const SPAN = new RegExp(`data-tr-field="${fieldName}"`);
+      if (SPAN.test(line)) return true;
+      // Same-line SNAPSHOT-LINE or SNAPSHOT-LINE-TABLE marker?
+      if (/<!--\s*SNAPSHOT-LINE(?:-TABLE)?\s*-->/.test(line)) return true;
+      // Plaintext-equivalent SNAPSHOT-LINE marker (.txt files)?
+      if (/(^|\s)#\s*SNAPSHOT-LINE\b/.test(line)) return true;
+      return false;
+    }
+
+    /**
+     * Track whether we're currently inside a `<script type="application/ld+json">`
+     * block. Counter literals on `description`/`text` keys inside such blocks
+     * are auto-managed by the snapshot script's Stage 2 JSON-LD rewrite (no
+     * marker needed because JSON has no comment syntax).
+     */
+    function withJsonLdContext(lines: string[]): boolean[] {
+      const inJsonLd = new Array(lines.length).fill(false);
+      let inside = false;
+      lines.forEach((line, i) => {
+        if (/<script\s+type=["']application\/ld\+json["']/.test(line)) inside = true;
+        inJsonLd[i] = inside;
+        if (inside && /<\/script>/.test(line)) inside = false;
+      });
+      return inJsonLd;
+    }
+
+    for (const f of LANDING_FILES) {
+      const txt = read(f);
+      if (txt === null) continue;
+      // CHANGELOG-style historical mentions are out-of-scope for the canary —
+      // those describe past states, not current capability claims.
+      const lines = txt.split('\n');
+      const inJsonLd = withJsonLdContext(lines);
+      for (const { re, fieldName } of COUNTER_PATTERNS) {
+        it(`${f}: every "${fieldName}" literal is inside a proxy span or SNAPSHOT marker`, () => {
+          const violations: { line: number; text: string }[] = [];
+          lines.forEach((line, i) => {
+            // Skip CHANGELOG/release-notes "v1.10.0 - 5-exchange" historical phrasing
+            if (/^##\s+\[?\s*\d+\.\d+\.\d+\b/.test(line)) return;
+            // Skip "ordinal" phrasing about hypothetical future onboarding
+            if (/\b\d+(?:st|nd|rd|th)\/\d+(?:st|nd|rd|th)\/Nth\s+exchange/.test(line)) return;
+            // Skip if the line is inside a JSON-LD `<script>` block AND the
+            // counter sits inside a `description` or `text` key value (snapshot
+            // script's Stage 2 auto-rewrite covers these).
+            if (inJsonLd[i] && /"(?:description|text)"\s*:/.test(line)) return;
+            // Skip lines that mention "5-exchange" hyphenated as adjective
+            // (style choice for headlines, not a counter claim).
+            const adjFormStripped = line.replace(/\b\d+-exchange(?:s)?\b/g, '');
+            const localRe = new RegExp(re.source, re.flags);
+            let m: RegExpExecArray | null;
+            while ((m = localRe.exec(adjFormStripped)) !== null) {
+              if (!isWrappedOnLine(line, fieldName)) {
+                violations.push({ line: i + 1, text: line.trim().slice(0, 200) });
+              }
+            }
+          });
+          expect(
+            violations,
+            violations.length > 0
+              ? `${f}: ${violations.length} unwrapped "${fieldName}" literal(s):\n` +
+                violations.map((v) => `  L${v.line}: ${v.text}`).join('\n')
+              : '',
+          ).toEqual([]);
+        });
+      }
+    }
+
+    // src/index.ts is server-rendered HTML; same canary applies. Excluded
+    // is internal-only narrative (line 389 INTEGRATION_EXCHANGES tuple)
+    // because it's TypeScript code, not output text.
+    it('src/index.ts: every "5 exchanges" / "290+ assets" inside HTML literals is inside a proxy span', () => {
+      const txt = read('src/index.ts');
+      expect(txt).not.toBeNull();
+      const lines = txt!.split('\n');
+      const violations: { line: number; text: string }[] = [];
+      lines.forEach((line, i) => {
+        // Skip TypeScript code lines (no HTML literals — heuristic: line
+        // contains `<` AND not `:`/`from`/`import`/`const`/`let` declarations).
+        if (/^\s*(import|export|const|let|var|function|class|interface|type)\s/.test(line)) return;
+        // Skip the INTEGRATION_EXCHANGES tuple definition explicitly.
+        if (/INTEGRATION_EXCHANGES\s*=\s*\[/.test(line)) return;
+        // Pattern restricted to HTML literal bodies (heuristic).
+        for (const { re, fieldName } of COUNTER_PATTERNS) {
+          const adjFormStripped = line.replace(/\b\d+-exchange(?:s)?\b/g, '');
+          const localRe = new RegExp(re.source, re.flags);
+          let m: RegExpExecArray | null;
+          while ((m = localRe.exec(adjFormStripped)) !== null) {
+            const SPAN = new RegExp(`data-tr-field="${fieldName}"`);
+            if (!SPAN.test(line)) {
+              violations.push({ line: i + 1, text: line.trim().slice(0, 200) });
+            }
+          }
+        }
+      });
+      expect(
+        violations,
+        violations.length > 0
+          ? `src/index.ts: ${violations.length} unwrapped capability-counter literal(s):\n` +
+            violations.map((v) => `  L${v.line}: ${v.text}`).join('\n')
+          : '',
+      ).toEqual([]);
+    });
+  });
+
   describe('"9 timeframes" only appears with track-record disambiguation context', () => {
     for (const f of LANDING_FILES) {
       const txt = read(f);

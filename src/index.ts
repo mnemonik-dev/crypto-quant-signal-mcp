@@ -22,6 +22,7 @@ import { closeDb, getConfidenceBands, getHoldStats, getMerkleBatches, getSignalW
 import { PKG_VERSION } from './lib/pkg-version.js';
 import { verifyProof } from './lib/merkle.js';
 import { warmTierCaches } from './lib/asset-tiers.js';
+import { EXCHANGES, EXCHANGE_COUNT, TIMEFRAME_COUNT, getAssetCount, floorRoundTo10 } from './lib/capabilities.js';
 import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, getRequestSessionId, getRequestIpHash, getRequestVerdict, setRequestVerdict, initQuotaDb } from './lib/license.js';
 import { initX402, settleX402Async } from './lib/x402.js';
 import { initAnalytics, logRequest, hashIp, getUsageStats, logSkillInvocation } from './lib/analytics.js';
@@ -683,12 +684,31 @@ async function startHttp() {
   // landing/js/track-record-proxy.js.
   app.get('/api/performance-public', async (_req, res) => {
     try {
-      const [stats, holdStats] = await Promise.all([getSignalPerformance(), getHoldStats()]);
+      // AUTO-TRACE-W1: capability counters added (asset_count, exchange_count,
+      // timeframe_count) — read by landing/js/track-record-proxy.js to populate
+      // every `data-tr-field="<name>"` span on track-record / signup / docs /
+      // landing pages, so onboarding the 6th exchange auto-updates public copy.
+      // exchange_count + timeframe_count come from the canonical SoT module
+      // src/lib/capabilities.ts (constant); asset_count is derived from the
+      // distinct-coin count in the existing byAsset aggregation (5-min cached
+      // inside getAssetCount() to match the rest of this endpoint's TTL).
+      const [stats, holdStats, asset_count] = await Promise.all([
+        getSignalPerformance(),
+        getHoldStats(),
+        getAssetCount(),
+      ]);
       const totalHolds = holdStats.totalHolds || 0;
       const totalCalls = stats.totalCalls || 0;
       const denom = totalHolds + totalCalls;
       const hold_rate = denom > 0 ? Math.round((totalHolds / denom) * 1000) / 10 : 0;
-      res.json({ ...stats, ...holdStats, hold_rate });
+      res.json({
+        ...stats,
+        ...holdStats,
+        hold_rate,
+        asset_count,
+        exchange_count: EXCHANGE_COUNT,
+        timeframe_count: TIMEFRAME_COUNT,
+      });
     } catch (err) {
       res.status(500).json({ error: 'Failed to fetch performance stats' });
     }
@@ -1190,7 +1210,7 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
 <body>
 <div class="logo">
   <a href="https://algovault.com" style="display:flex;align-items:center;text-decoration:none"><img src="/logo.png" width="36" height="36" style="border-radius:8px;cursor:pointer" onerror="this.style.display='none'"></a>
-  <div><h1>Live Track Record</h1><div class="subtitle">v${PKG_VERSION} &middot; 5 exchanges &middot; 290+ assets</div></div>
+  <div><h1>Live Track Record</h1><div class="subtitle">v${PKG_VERSION} &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges &middot; <span data-tr-field="asset_count">710</span>+ assets</div></div>
 </div>
 <div id="loading">Loading performance data...</div>
 <div id="content" style="display:none">
@@ -1304,7 +1324,7 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
       <p style="margin-top:16px"><strong>Asset Tiers</strong></p>
       <table><thead><tr><th>Tier</th><th>Name</th><th>Description</th></tr></thead><tbody>
         <tr><td style="color:#58a6ff">Tier 1</td><td>Blue Chip</td><td>BTC, ETH</td></tr>
-        <tr><td style="color:#3fb950">Tier 2</td><td>Major Alts</td><td>Top 20 by notional OI across 5 exchanges (dynamic, hourly)</td></tr>
+        <tr><td style="color:#3fb950">Tier 2</td><td>Major Alts</td><td>Top 20 by notional OI across <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (dynamic, hourly)</td></tr>
         <tr><td style="color:#bc8cff">Tier 3</td><td>TradFi</td><td>Stocks, indices, commodities, FX via HL xyz perps</td></tr>
         <tr><td style="color:#d29922">Tier 4</td><td>Meme &amp; Micro</td><td>Meme &amp; micro-caps (liquidity-filtered: top 50 OI or &gt;$10M vol)</td></tr>
       </tbody></table>
@@ -1674,7 +1694,7 @@ function getSignupPageHtml(): string {
       <div class="price">$9.99<span>/mo</span></div>
       <ul>
         <li>3,000 calls/month</li>
-        <li>5 exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
+        <li><span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
         <li>All assets (crypto + TradFi)</li>
         <li>All timeframes (1m to 1d)</li>
         <li>Email support</li>
@@ -1687,7 +1707,7 @@ function getSignupPageHtml(): string {
       <div class="price">$49<span>/mo</span></div>
       <ul>
         <li>15,000 calls/month</li>
-        <li>5 exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
+        <li><span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
         <li>All assets (crypto + TradFi)</li>
         <li>All timeframes (1m to 1d)</li>
         <li>Priority support</li>
@@ -1699,7 +1719,7 @@ function getSignupPageHtml(): string {
       <div class="price">$299<span>/mo</span></div>
       <ul>
         <li>100,000 calls/month</li>
-        <li>5 exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
+        <li><span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
         <li>All assets &amp; timeframes</li>
         <li>SLA guarantee</li>
         <li>Dedicated support</li>
