@@ -159,11 +159,28 @@ const SIGNAL_MIGRATIONS: MigrationDescriptor[] = [
   { table: 'signals', column: 'merkle_proof', type: 'JSONB' },
 ];
 
+/**
+ * OPS-HOUSEKEEPING-W1 Phase B (2026-05-01): symmetric migration-idempotency
+ * across both backends. SQLite path (introspect once via PRAGMA, skip
+ * already-present columns) was already in place; the Postgres path was
+ * running unconditional `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` per
+ * migration on every container start. POSTGRES-MAINT-W1's pg_stat_statements
+ * top-10 surfaced 13 ALTER TABLE migrations × 34 calls each = ~400 round-
+ * trips of postgres work that's no-op on existing schema. This version
+ * does the same `information_schema.columns` pre-check on Postgres that
+ * SQLite already does via `PRAGMA table_info()`.
+ *
+ * The Postgres path is fire-and-forget (matches the existing fire-and-forget
+ * `b.exec()` shape for PgBackend): runMigrations stays synchronous; the
+ * actual introspect-then-ALTER work runs in the background. First
+ * invocations of the migrated columns might race with the migrations on a
+ * fresh DB — but that's the existing behavior pre-W1, not new risk.
+ */
 function runMigrations(b: DbBackend, pg: boolean): void {
   if (pg) {
-    for (const m of SIGNAL_MIGRATIONS) {
-      b.exec(`ALTER TABLE ${m.table} ADD COLUMN IF NOT EXISTS ${m.column} ${m.type};`);
-    }
+    runPgMigrationsAsync(b as PgBackend).catch((err: unknown) =>
+      console.error('PG migration error:', err instanceof Error ? err.message : err)
+    );
     return;
   }
   // SQLite: introspect existing columns once per distinct table, then skip present ones.
@@ -178,6 +195,34 @@ function runMigrations(b: DbBackend, pg: boolean): void {
     if (present && present.has(m.column)) continue;
     b.exec(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type};`);
   }
+}
+
+/**
+ * Postgres-side migration runner with `information_schema.columns` pre-check.
+ * Skips columns that already exist; only fires ALTER for missing ones.
+ * Returns count of ALTERs actually executed (useful for tests + observability).
+ */
+export async function runPgMigrationsAsync(b: PgBackend): Promise<number> {
+  const tables = new Set(SIGNAL_MIGRATIONS.map(m => m.table));
+  const existingByTable = new Map<string, Set<string>>();
+  for (const t of tables) {
+    const rows = await b.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = $1`,
+      [t]
+    ) as unknown as { column_name: string }[];
+    existingByTable.set(t, new Set(rows.map(r => r.column_name)));
+  }
+  let alterCount = 0;
+  for (const m of SIGNAL_MIGRATIONS) {
+    const present = existingByTable.get(m.table);
+    if (present && present.has(m.column)) continue;
+    // Keep `IF NOT EXISTS` defense-in-depth against parallel-startup races;
+    // pre-check eliminates the ~200-300ms-per-call cost when no-op.
+    await b.execAsync(`ALTER TABLE ${m.table} ADD COLUMN IF NOT EXISTS ${m.column} ${m.type}`);
+    console.log(`[migration] PG added column ${m.table}.${m.column} ${m.type}`);
+    alterCount += 1;
+  }
+  return alterCount;
 }
 
 const CREATE_MERKLE_BATCHES_SQL = `
