@@ -173,10 +173,10 @@ End-to-end tutorials pairing AlgoVault with each major exchange's Agent Trade Ki
 <!-- BUILD:README_INTEGRATIONS_TABLE -->
 | # | Exchange | Tutorial | Demo | Mirror |
 |---|---|---|---|---|
-| 01 | Binance | [`docs/integrations/binance.md`](docs/integrations/binance.md) | [`examples/binance/demo.mjs`](examples/binance/demo.mjs) | [algovault.com/docs/integrations/binance](https://algovault.com/docs/integrations/binance) |
-| 02 | OKX | [`docs/integrations/okx.md`](docs/integrations/okx.md) | [`examples/okx/demo.mjs`](examples/okx/demo.mjs) | [algovault.com/docs/integrations/okx](https://algovault.com/docs/integrations/okx) |
-| 03 | Bybit | [`docs/integrations/bybit.md`](docs/integrations/bybit.md) | [`examples/bybit/demo.mjs`](examples/bybit/demo.mjs) | [algovault.com/docs/integrations/bybit](https://algovault.com/docs/integrations/bybit) |
-| 04 | Bitget | [`docs/integrations/bitget.md`](docs/integrations/bitget.md) | [`examples/bitget/demo.mjs`](examples/bitget/demo.mjs) | [algovault.com/docs/integrations/bitget](https://algovault.com/docs/integrations/bitget) |
+| 01 | Binance | [`docs/integrations/binance.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/binance.md) | [`examples/binance/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/binance/demo.mjs) | [algovault.com/docs/integrations/binance](https://algovault.com/docs/integrations/binance) |
+| 02 | OKX | [`docs/integrations/okx.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/okx.md) | [`examples/okx/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/okx/demo.mjs) | [algovault.com/docs/integrations/okx](https://algovault.com/docs/integrations/okx) |
+| 03 | Bybit | [`docs/integrations/bybit.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bybit.md) | [`examples/bybit/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bybit/demo.mjs) | [algovault.com/docs/integrations/bybit](https://algovault.com/docs/integrations/bybit) |
+| 04 | Bitget | [`docs/integrations/bitget.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bitget.md) | [`examples/bitget/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bitget/demo.mjs) | [algovault.com/docs/integrations/bitget](https://algovault.com/docs/integrations/bitget) |
 <!-- /BUILD:README_INTEGRATIONS_TABLE -->
 
 Distribution surface tracker: [`algovault-skills/docs/INTEGRATIONS_DISTRIBUTION.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/INTEGRATIONS_DISTRIBUTION.md).
@@ -196,26 +196,26 @@ Browse the full catalog at <https://algovault.com/skills> or <https://github.com
 <!-- BUILD:README_SKILLS_TABLE -->
 | # | Slug | Name | Difficulty | Tools |
 |---|---|---|---|---|
-| 01 | [`quick-btc-check`](skills/quick-btc-check/SKILL.md) | Quick BTC Check | Beginner | `get_trade_call` |
-| 02 | [`portfolio-scanner`](skills/portfolio-scanner/SKILL.md) | Portfolio Scanner | Intermediate | `get_trade_call` |
-| 03 | [`regime-aware-trading`](skills/regime-aware-trading/SKILL.md) | Regime-Aware Trading | Intermediate | `get_market_regime`, `get_trade_call` |
-| 04 | [`funding-arb-monitor`](skills/funding-arb-monitor/SKILL.md) | Funding Arb Monitor | Intermediate | `scan_funding_arb` |
-| 05 | [`full-3-tool-pipeline`](skills/full-3-tool-pipeline/SKILL.md) | Full 3-Tool Pipeline | Advanced | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
-| 06 | [`multi-timeframe-confirmation`](skills/multi-timeframe-confirmation/SKILL.md) | Multi-Timeframe Confirmation | Advanced | `get_trade_call` |
-| 07 | [`tradfi-rotation`](skills/tradfi-rotation/SKILL.md) | TradFi Rotation | Advanced | `get_market_regime`, `get_trade_call` |
-| 08 | [`risk-gated-entry`](skills/risk-gated-entry/SKILL.md) | Risk-Gated Entry | Advanced | `get_market_regime`, `get_trade_call` |
-| 09 | [`funding-sentiment-dashboard`](skills/funding-sentiment-dashboard/SKILL.md) | Funding Sentiment Dashboard | Advanced | `get_market_regime` |
-| 10 | [`contrarian-meme-scanner`](skills/contrarian-meme-scanner/SKILL.md) | Contrarian Meme Scanner | Advanced | `get_market_regime`, `get_trade_call` |
-| 11 | [`divergence-detector`](skills/divergence-detector/SKILL.md) | Divergence Detector | Advanced | `get_market_regime`, `get_trade_call` |
-| 12 | [`hourly-digest-bot`](skills/hourly-digest-bot/SKILL.md) | Hourly Digest Bot | Advanced | `get_trade_call`, `get_market_regime` |
-| 13 | [`hedging-advisor`](skills/hedging-advisor/SKILL.md) | Hedging Advisor | Advanced | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
-| 14 | [`volatility-breakout-watch`](skills/volatility-breakout-watch/SKILL.md) | Volatility Breakout Watch | Advanced | `get_market_regime`, `get_trade_call` |
-| 15 | [`cross-asset-correlation`](skills/cross-asset-correlation/SKILL.md) | Cross-Asset Correlation | Advanced | `get_trade_call` |
-| 16 | [`funding-cash-and-carry`](skills/funding-cash-and-carry/SKILL.md) | Funding Cash-and-Carry | Advanced | `scan_funding_arb`, `get_trade_call` |
-| 17 | [`weekend-vs-weekday-patterns`](skills/weekend-vs-weekday-patterns/SKILL.md) | Weekend vs Weekday Patterns | Research | `get_trade_call`, `get_market_regime` |
-| 18 | [`agent-portfolio-rebalance`](skills/agent-portfolio-rebalance/SKILL.md) | Agent Portfolio Rebalance | Advanced | `get_market_regime` |
-| 19 | [`smart-dca-bot`](skills/smart-dca-bot/SKILL.md) | Smart DCA Bot | Advanced | `get_trade_call` |
-| 20 | [`multi-agent-war-room`](skills/multi-agent-war-room/SKILL.md) | Multi-Agent War Room | Expert | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
+| 01 | [`quick-btc-check`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/quick-btc-check/SKILL.md) | Quick BTC Check | Beginner | `get_trade_call` |
+| 02 | [`portfolio-scanner`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/portfolio-scanner/SKILL.md) | Portfolio Scanner | Intermediate | `get_trade_call` |
+| 03 | [`regime-aware-trading`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/regime-aware-trading/SKILL.md) | Regime-Aware Trading | Intermediate | `get_market_regime`, `get_trade_call` |
+| 04 | [`funding-arb-monitor`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/funding-arb-monitor/SKILL.md) | Funding Arb Monitor | Intermediate | `scan_funding_arb` |
+| 05 | [`full-3-tool-pipeline`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/full-3-tool-pipeline/SKILL.md) | Full 3-Tool Pipeline | Advanced | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
+| 06 | [`multi-timeframe-confirmation`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/multi-timeframe-confirmation/SKILL.md) | Multi-Timeframe Confirmation | Advanced | `get_trade_call` |
+| 07 | [`tradfi-rotation`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/tradfi-rotation/SKILL.md) | TradFi Rotation | Advanced | `get_market_regime`, `get_trade_call` |
+| 08 | [`risk-gated-entry`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/risk-gated-entry/SKILL.md) | Risk-Gated Entry | Advanced | `get_market_regime`, `get_trade_call` |
+| 09 | [`funding-sentiment-dashboard`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/funding-sentiment-dashboard/SKILL.md) | Funding Sentiment Dashboard | Advanced | `get_market_regime` |
+| 10 | [`contrarian-meme-scanner`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/contrarian-meme-scanner/SKILL.md) | Contrarian Meme Scanner | Advanced | `get_market_regime`, `get_trade_call` |
+| 11 | [`divergence-detector`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/divergence-detector/SKILL.md) | Divergence Detector | Advanced | `get_market_regime`, `get_trade_call` |
+| 12 | [`hourly-digest-bot`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/hourly-digest-bot/SKILL.md) | Hourly Digest Bot | Advanced | `get_trade_call`, `get_market_regime` |
+| 13 | [`hedging-advisor`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/hedging-advisor/SKILL.md) | Hedging Advisor | Advanced | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
+| 14 | [`volatility-breakout-watch`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/volatility-breakout-watch/SKILL.md) | Volatility Breakout Watch | Advanced | `get_market_regime`, `get_trade_call` |
+| 15 | [`cross-asset-correlation`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/cross-asset-correlation/SKILL.md) | Cross-Asset Correlation | Advanced | `get_trade_call` |
+| 16 | [`funding-cash-and-carry`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/funding-cash-and-carry/SKILL.md) | Funding Cash-and-Carry | Advanced | `scan_funding_arb`, `get_trade_call` |
+| 17 | [`weekend-vs-weekday-patterns`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/weekend-vs-weekday-patterns/SKILL.md) | Weekend vs Weekday Patterns | Research | `get_trade_call`, `get_market_regime` |
+| 18 | [`agent-portfolio-rebalance`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/agent-portfolio-rebalance/SKILL.md) | Agent Portfolio Rebalance | Advanced | `get_market_regime` |
+| 19 | [`smart-dca-bot`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/smart-dca-bot/SKILL.md) | Smart DCA Bot | Advanced | `get_trade_call` |
+| 20 | [`multi-agent-war-room`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/multi-agent-war-room/SKILL.md) | Multi-Agent War Room | Expert | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
 <!-- /BUILD:README_SKILLS_TABLE -->
 
 ---
