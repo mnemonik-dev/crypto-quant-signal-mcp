@@ -1,44 +1,75 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/logo.png" alt="AlgoVault" width="120" />
+  <a href="https://algovault.com">
+    <img src="https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/logo.png" alt="AlgoVault" width="120" />
+  </a>
 </p>
 
-# crypto-quant-signal-mcp
+<h1 align="center">crypto-quant-signal-mcp</h1>
 
-The Brain Layer for AI Trading Agents — composite quant calls across 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget), cross-venue arbitrage detection, and regime-aware market classification via MCP. <!-- SNAPSHOT-LINE -->
+<p align="center">
+  <strong>The Brain Layer for AI Trading Agents</strong><br/>
+  Composite quant trade calls · cross-venue funding arbitrage · regime-aware market classification<br/>
+  Across 5 exchanges (Hyperliquid · Binance · Bybit · OKX · Bitget) via MCP. <!-- SNAPSHOT-LINE -->
+</p>
 
-[![npm version](https://img.shields.io/npm/v/crypto-quant-signal-mcp)](https://www.npmjs.com/package/crypto-quant-signal-mcp)
-[![npm downloads](https://img.shields.io/npm/dw/crypto-quant-signal-mcp)](https://www.npmjs.com/package/crypto-quant-signal-mcp)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![On-Chain Verified](https://img.shields.io/badge/Track_Record-On--Chain_Verified-blue?logo=ethereum)](https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81)
+<p align="center">
+  <a href="https://algovault.com"><strong>algovault.com</strong></a> ·
+  <a href="https://algovault.com/track-record"><strong>Live Track Record</strong></a> ·
+  <a href="https://api.algovault.com/signup"><strong>Sign Up</strong></a> ·
+  <a href="https://algovault.com/docs.html"><strong>Docs</strong></a>
+</p>
 
-**[Live Track Record](https://algovault.com/track-record)** — 89.4%+ PFE Win Rate across 60,000+ trade calls on 5 exchanges. Public, no login required. <!-- SNAPSHOT-LINE -->
-
-<!-- snapshot: 2026-04-28 — live source of truth: https://algovault.com/api/performance-public — refetch before citing exact numbers -->
+<p align="center">
+  <a href="https://www.npmjs.com/package/crypto-quant-signal-mcp"><img src="https://img.shields.io/npm/v/crypto-quant-signal-mcp" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/crypto-quant-signal-mcp"><img src="https://img.shields.io/npm/dw/crypto-quant-signal-mcp" alt="npm downloads" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT" /></a>
+  <a href="https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81"><img src="https://img.shields.io/badge/Track_Record-On--Chain_Verified-blue?logo=ethereum" alt="On-Chain Verified" /></a>
+</p>
 
 ---
 
-## What's new in v1.10.3
+## 📊 Live Track Record — Public, Verifiable, On-Chain
 
-Live since 2026-04-30:
+<p align="center">
+  <a href="https://algovault.com/track-record">
+    <img src="https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/docs/screenshots/track-record-2026-05-06.png" alt="AlgoVault Live Track Record — 90.0% PFE Win Rate across 74,733 trade calls, 26 Merkle batches anchored on Base L2" width="100%" />
+  </a>
+</p>
 
-- **Free tier unlocked** — every supported coin + every supported timeframe is now accessible at the free tier (was BTC/ETH only on 15m/1h). The 100-calls/month cap is the only ceiling. HOLD calls remain free at every tier. All 11 timeframes (`1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d`) are callable on demand — your first call for `SOL/4h` or `PEPE/15m` Just Works.
-- **`Connect Your MCP Client` docs section** — new walkthroughs for Claude Desktop, Cursor, Cline, Claude Code, Smithery, and plain HTTP/curl at [`algovault.com/docs.html#connect-mcp`](https://algovault.com/docs.html#connect-mcp). Every config snippet was web-verified against the upstream docs on 2026-04-30.
+<p align="center">
+  <strong><span data-tr-field="pfe_wr">90.0%</span> PFE Win Rate</strong> · <strong><span data-tr-field="total_calls">74,733</span> trade calls</strong> · <strong><span data-tr-field="merkle_batches">26</span> on-chain batches</strong> · <strong><span data-tr-field="hold_rate">99%</span> HOLD rate</strong> <!-- SNAPSHOT-LINE -->
+</p>
 
-> **Upgrading from v1.9.x or earlier?** MCP clients (Claude Desktop, Claude.ai custom connectors, Cursor, Cline) cache the tool list at session start. The free-tier behavior changed in v1.10.3 — even though no tool was renamed, **refresh your tool list** so the client picks up the new permissive responses:
-> - **Claude.ai / Claude Desktop**: Settings → Connectors → AlgoVault → toggle off + on (or click "Refresh tools")
+<p align="center">
+  Every call is hashed at emission, anchored on Base L2 daily, and re-evaluated against actual price action. We can't edit history. <em>Refetch live numbers any time at <a href="https://algovault.com/track-record">algovault.com/track-record</a> or <a href="https://api.algovault.com/api/performance-public">/api/performance-public</a>.</em>
+</p>
+
+<p align="center">
+  <a href="https://algovault.com/track-record"><strong>→ Open the live dashboard</strong></a>
+</p>
+
+---
+
+## What's new in v1.10.7
+
+Live since 2026-05-06:
+
+- **README hero refresh + track-record image embed.** No API, schema, or tool changes — public response shape and free-tier behavior unchanged from v1.10.6.
+
+---
+
+## What's new in v1.10.6
+
+Live since 2026-05-06:
+
+- **Free tier unlocked** — every supported coin + every supported timeframe is accessible at the free tier (was BTC/ETH on 15m/1h only). 100 calls/mo cap is the only ceiling. HOLD calls remain free at every tier. All 11 timeframes (`1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d`) callable on demand.
+- **Free-tier exhaustion path** — when an agent hits the 100-calls/month cap, the response includes a direct upgrade link: `Free tier limit reached (X/100 calls this month). Upgrade to Starter ($9.99/mo) for 3,000 calls/mo, or pay per call via x402. → https://api.algovault.com/signup?plan=starter`
+- **Output-sanitization v1** — composite-verdict-reverse-engineering surface closed (`rsi`, `ema_*`, `hurst`, `funding_z_score`, `squeeze_active` stripped from public response). `_algovault` metadata block + `also_see` cross-asset leads remain.
+- **Connect-Your-MCP-Client docs** — Claude Desktop, Cursor, Cline, Claude Code, Smithery, plain HTTP/curl walkthroughs at [`algovault.com/docs.html#connect-mcp`](https://algovault.com/docs.html#connect-mcp).
+
+> **Upgrading from v1.9.x or earlier?** MCP clients (Claude Desktop, Claude.ai custom connectors, Cursor, Cline) cache the tool list at session start. **Refresh your tool list:**
+> - **Claude.ai / Claude Desktop**: Settings → Connectors → AlgoVault → toggle off + on
 > - **Cursor / Cline**: restart the MCP server connection from the integration panel
->
-> Cached tool responses from before the unlock may still surface "requires Starter" upgrade hints on free-tier calls. Refreshing fixes it instantly. (See the v1.10.0 entry below for the prior `signal → call` rename context, also subject to this same refresh recipe.)
-
----
-
-## What's new in v1.10.0
-
-Live since 2026-04-28:
-
-- **`signal` → `call`** rename across the response shape, the tool name (`get_trade_call`), and the public dashboard. `get_trade_signal` is registered as an alias and continues to work for existing agents — no migration needed.
-- **`also_see` cross-asset leads** replace `try_next` with cells trimmed to `{coin, timeframe, confidence}`. Direction requires another call.
-- **5-exchange + 20-skill catalog refresh** below.
 
 ---
 
@@ -50,12 +81,12 @@ AlgoVault is different. We give your agent **one answer**: a directional verdict
 
 **What makes this not just another indicator wrapper:**
 
-- **Composite scoring, not single-indicator noise.** Multiple orthogonal signals — momentum oscillators, trend structure, derivatives positioning, volume dynamics, open interest flow — fused into a single weighted verdict. The weights are calibrated from live market outcome data, not textbook defaults.
-- **Regime-aware call generation.** Calls are filtered through a market regime classifier before emission. The engine knows when to issue calls and when to stay silent — a trend-following setup in a ranging market gets suppressed, not broadcast.
-- **Cross-venue intelligence.** Full signal generation on 5 exchanges — Hyperliquid, Binance, Bybit, OKX, and Bitget — with native candle, OI, funding, and volume data per venue. Cross-venue funding arbitrage scanning across all venues. Nobody else does multi-exchange derivatives analysis via MCP. <!-- SNAPSHOT-LINE -->
-- **Published track record with every release.** Every call is recorded with outcome prices at multiple horizons. Win rate, profit factor, and expected value are computed continuously. No cherry-picking, no survivorship bias.
-- **Adaptive scoring.** Indicator weights are retuned monthly from outcome data. The engine learns what works and adjusts — the call you get today is better than the one from last month.
-- **Crypto + TradFi coverage.** 710+ assets across 5 exchanges — standard crypto perps on all venues, TradFi perpetuals (stocks, indices, commodities, FX) on Hyperliquid, and liquidity-filtered meme coins. Assets are classified into quality tiers with per-exchange signal generation. <!-- SNAPSHOT-LINE -->
+- **Composite scoring, not single-indicator noise.** Multiple orthogonal signals — momentum oscillators, trend structure, derivatives positioning, volume dynamics, open interest flow — fused into a single weighted verdict. Weights are calibrated from live market outcome data, not textbook defaults.
+- **Regime-aware call generation.** Calls are filtered through a market regime classifier before emission. The engine knows when to stay silent — a trend-following setup in a ranging market gets suppressed, not broadcast. (HOLD rate ~99%; we issue calls only when the edge is clear.) <!-- SNAPSHOT-LINE -->
+- **Cross-venue intelligence.** Full signal generation on 5 exchanges with native candle, OI, funding, and volume data per venue. Cross-venue funding arbitrage scanning across all venues — nobody else does multi-exchange derivatives analysis via MCP. <!-- SNAPSHOT-LINE -->
+- **Published track record with every release.** Every call is recorded with outcome prices at multiple horizons. PFE Win Rate, Profit Factor, Expected Value computed continuously. No cherry-picking, no survivorship bias. **Anchored on-chain on Base L2 — we cannot rewrite history.**
+- **Adaptive scoring.** Indicator weights are retuned monthly from outcome data via the [Autonomous Optimization Engine](https://algovault.com/track-record). The engine learns what works.
+- **Crypto + TradFi coverage.** 710+ assets — standard crypto perps on all 5 venues, TradFi perpetuals (stocks, indices, commodities, FX) on Hyperliquid, liquidity-filtered meme coins. <!-- SNAPSHOT-LINE -->
 
 ---
 
@@ -94,19 +125,17 @@ Returns a composite **BUY / SELL / HOLD** verdict with confidence score for any 
 
 Under the hood: a multi-factor scoring engine evaluates momentum, trend structure, derivatives sentiment, open interest dynamics, and volume conviction. Scores pass through regime-aware filters and adaptive post-processing gates before a final verdict is emitted. Only high-conviction calls are generated; the engine stays silent when the edge is unclear.
 
-> Tool name `get_trade_signal` remains registered as an alias for backward compatibility — agents using the old name continue to work without changes. New integrations should call `get_trade_call`.
-
 **Parameters:**
-- `coin` (string, required): Asset symbol — e.g. `"ETH"`, `"BTC"`, `"SOL"`, `"GOLD"`, `"TSLA"`, or any of 290+ supported assets <!-- SNAPSHOT-LINE -->
+- `coin` (string, required): Asset symbol — e.g. `"ETH"`, `"BTC"`, `"SOL"`, `"GOLD"`, `"TSLA"`, or any of 710+ supported assets <!-- SNAPSHOT-LINE -->
 - `timeframe` (string, default `"15m"`): `"1m"`, `"3m"`, `"5m"`, `"15m"`, `"30m"`, `"1h"`, `"2h"`, `"4h"`, `"8h"`, `"12h"`, `"1d"`
 - `exchange` (string, default `"HL"`): `"HL"` (Hyperliquid), `"BINANCE"`, `"BYBIT"`, `"OKX"`, `"BITGET"`. TradFi assets (GOLD, TSLA, etc.) are HL-only.
 - `includeReasoning` (boolean, default `true`): Human-readable explanation of the call logic
 
-**Output:** v1.10.0 sanitized shape — `call` direction, `confidence` (0–100), bucketed `indicators` (`funding_rate` / `funding_24h_avg` / `funding_state` / `oi_change_pct` / `volume_24h` / `trend_persistence` / `breakout_pending`), detected `regime`, sanitized `reasoning` prose, and `_algovault` metadata for downstream tool composability. The seven raw indicator fields (`rsi`, `ema_*`, `hurst`, `funding_z_score`, `squeeze_active`) were stripped in v1.10.0 to close composite-verdict reverse-engineering.
+**Output:** v1.10.0 sanitized shape — `call` direction, `confidence` (0–100), bucketed `indicators` (`funding_rate` / `funding_24h_avg` / `funding_state` / `oi_change_pct` / `volume_24h` / `trend_persistence` / `breakout_pending`), detected `regime`, sanitized `reasoning` prose, and `_algovault` metadata for downstream tool composability.
 
-Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also_see` (top-3 cross-asset leads when the grid has non-HOLD cells), both trimmed to `{coin, timeframe, confidence}` only — direction requires another `get_trade_call` invocation.
+Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also_see` (top-3 cross-asset leads), trimmed to `{coin, timeframe, confidence}` only — direction requires another `get_trade_call` invocation.
 
-**Example response (v1.10.0):**
+**Example response:**
 
 ```json
 {
@@ -132,7 +161,7 @@ Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also
     { "coin": "SOL", "timeframe": "15m", "confidence": 73 }
   ],
   "_algovault": {
-    "version": "1.10.0",
+    "version": "1.10.7",
     "tool": "get_trade_call",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }
@@ -141,28 +170,73 @@ Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also
 
 ### `scan_funding_arb`
 
-Scans cross-venue funding rate differentials across Hyperliquid, Binance, and Bybit. Normalizes hourly vs 8-hour rate conventions, computes basis-point spreads, and ranks opportunities by composite score (spread magnitude, time urgency, and funding conviction from 24h history). OKX and Bitget funding data is available via their respective adapters — arb scanning expansion is planned.
+Scans cross-venue funding rate differentials across Hyperliquid, Binance, and Bybit. Normalizes hourly vs 8-hour rate conventions, computes basis-point spreads, ranks opportunities by composite score (spread magnitude, time urgency, funding conviction from 24h history). OKX and Bitget funding data is available via their respective adapters — arb scanning expansion is planned.
 
-This is the only MCP server that provides cross-venue funding arbitrage intelligence — long one exchange, short another, capture the spread.
+This is the only MCP server providing cross-venue funding arbitrage intelligence — long one exchange, short another, capture the spread.
 
 **Parameters:**
 - `minSpreadBps` (number, default `5`): Minimum spread in basis points to include
-- `limit` (number, default `10`): Maximum results returned
+- `limit` (number, default `10`): Maximum results returned (free tier capped at 5)
 
 **Output includes:** per-opportunity venue rates, optimal long/short direction, annualized spread percentage, and next funding timestamps.
 
 ### `get_market_regime`
 
-Classifies the current market environment into one of four regimes: **TRENDING_UP**, **TRENDING_DOWN**, **RANGING**, or **VOLATILE**.
+Classifies the current market environment: **TRENDING_UP**, **TRENDING_DOWN**, **RANGING**, or **VOLATILE**.
 
-Uses a multi-dimensional classification approach combining directional strength measurement with ADX slope analysis (detecting trend strengthening vs exhaustion), volume-weighted pivot detection, ATR-adaptive funding thresholds, and cross-venue funding sentiment divergence. The regime classification directly informs how `get_trade_call` filters its output — agents can also use it independently for strategy selection and position sizing.
+Combines directional strength measurement with ADX slope analysis (detecting trend strengthening vs exhaustion), volume-weighted pivot detection, ATR-adaptive funding thresholds, and cross-venue funding sentiment divergence. The regime classification directly informs how `get_trade_call` filters its output — agents can also use it independently for strategy selection and position sizing.
 
 **Parameters:**
 - `coin` (string, required): Asset symbol
 - `timeframe` (string, default `"4h"`): Candle timeframe for analysis
-- `exchange` (string, default `"HL"`): Exchange to analyze — same options as get_trade_call
+- `exchange` (string, default `"HL"`): Exchange to analyze — same options as `get_trade_call`
 
 **Output includes:** regime label, confidence score, underlying metrics (trend strength, volatility interpretation, price structure), cross-venue funding sentiment, and a plain-English strategy suggestion.
+
+---
+
+## When You Hit the Free Limit
+
+Free tier is 100 calls per calendar month. **HOLD calls don't count against it** — you only consume quota on BUY/SELL verdicts.
+
+When the cap is reached, the next call's response includes:
+
+```
+Free tier limit reached (100/100 calls this month).
+Upgrade to Starter ($9.99/mo) for 3,000 calls/mo,
+or pay per call via x402.
+→ https://api.algovault.com/signup?plan=starter
+```
+
+**Two zero-friction upgrade paths:**
+
+| Path | When to use | Friction |
+|------|-------------|----------|
+| **Starter $9.99/mo** | Your agent runs on a known schedule (cron, hourly digests, daily scans). | Stripe checkout · API key delivered instantly · [signup →](https://api.algovault.com/signup?plan=starter) |
+| **x402 micropayment** | Your agent is autonomous and pays per call in USDC on Base. No signup. | Wallet · ~$0.01–0.05 per BUY/SELL · zero account state · [x402.org](https://x402.org) |
+
+---
+
+## Pricing
+
+| Feature | Free | Starter ($9.99/mo) | Pro ($49/mo) | Enterprise ($299/mo) | x402 (per call) |
+|---------|------|-------------------|-------------|---------------------|-----------------|
+| Exchanges | All 5 | All 5 | All 5 | All 5 | All 5 | <!-- SNAPSHOT-LINE-TABLE -->
+| Assets | All 710+ | All 710+ | All 710+ | All 710+ | All 710+ | <!-- SNAPSHOT-LINE-TABLE -->
+| Asset classes | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi |
+| Timeframes | All 11 | All 11 | All 11 | All 11 | All 11 |
+| Funding arb results | Top 5 | Unlimited | Unlimited | Unlimited | Unlimited |
+| Track record | Full access | Full access | Full access | Full access | Full access |
+| Monthly calls | 100/mo | 3,000/mo | 15,000/mo | 100,000/mo | Unlimited |
+| Support | Community | Email | Priority | Dedicated | — |
+| Price | $0 | $9.99/mo | $49/mo | $299/mo | $0.01–0.05/call |
+| HOLD calls | Free | Free | Free | Free | Free |
+
+\* HOLD verdicts (engine says "don't trade") are always free across all tiers — no x402 charge, no quota deduction. We only get paid when we see a tradeable opportunity.
+
+**Subscriptions:** Sign up at [api.algovault.com/signup](https://api.algovault.com/signup). Starter ($9.99/mo) unlocks 3,000 calls/mo. API key delivered instantly after checkout.
+
+**x402 micropayments:** AI agents pay per HTTP call with USDC on Base — no signup, no API key, no billing. The payment receipt is the credential. See [x402.org](https://x402.org).
 
 ---
 
@@ -179,19 +253,20 @@ End-to-end tutorials pairing AlgoVault with each major exchange's Agent Trade Ki
 | 04 | Bitget | [`docs/integrations/bitget.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bitget.md) | [`examples/bitget/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bitget/demo.mjs) | [algovault.com/docs/integrations/bitget](https://algovault.com/docs/integrations/bitget) |
 <!-- /BUILD:README_INTEGRATIONS_TABLE -->
 
-Distribution surface tracker: [`algovault-skills/docs/INTEGRATIONS_DISTRIBUTION.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/INTEGRATIONS_DISTRIBUTION.md).
-
 ---
 
-## Skills
+## Skills (20 ready-to-use Anthropic Agent Skills)
 
-20 ready-to-use Anthropic Agent Skills wrapping the AlgoVault MCP server. Each Skill is a single-prompt wrapper over 1–3 tool calls — composite verdicts, regime gating, multi-timeframe consensus, funding-arb monitoring, and more.
+20 single-prompt wrappers over 1–3 AlgoVault tool calls — composite verdicts, regime gating, multi-timeframe consensus, funding-arb monitoring, and more.
 
 ```bash
 claude plugin install AlgoVaultLabs/algovault-skills
 ```
 
-Browse the full catalog at <https://algovault.com/skills> or <https://github.com/AlgoVaultLabs/algovault-skills>.
+Browse the full catalog at [algovault.com/skills](https://algovault.com/skills) or [github.com/AlgoVaultLabs/algovault-skills](https://github.com/AlgoVaultLabs/algovault-skills).
+
+<details>
+<summary><strong>Show all 20 Skills</strong></summary>
 
 <!-- BUILD:README_SKILLS_TABLE -->
 | # | Slug | Name | Difficulty | Tools |
@@ -218,9 +293,11 @@ Browse the full catalog at <https://algovault.com/skills> or <https://github.com
 | 20 | [`multi-agent-war-room`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/skills/multi-agent-war-room/SKILL.md) | Multi-Agent War Room | Expert | `get_market_regime`, `get_trade_call`, `scan_funding_arb` |
 <!-- /BUILD:README_SKILLS_TABLE -->
 
+</details>
+
 ---
 
-## Performance Tracking
+## Performance Tracking & On-Chain Verification
 
 Every call is tracked from emission to outcome. No exceptions.
 
@@ -232,47 +309,17 @@ Every call is tracked from emission to outcome. No exceptions.
 - Peak Favorable Excursion (PFE) and Maximum Adverse Excursion (MAE)
 - Running statistics per asset, timeframe, and quality tier
 
-**HOLD calls are free** — when the engine says "don't trade," you don't pay. Only BUY and SELL verdicts are charged via x402 or count against subscription quotas. This aligns our incentives: you only pay when we see a tradeable opportunity.
-
-- **HOLD Rate**: Percentage of scans where the engine declines to issue a trade call. A high HOLD rate (currently ~84%) means the engine is selective — it only calls BUY/SELL when conditions align across multiple indicators.
-
-**Infrastructure:**
-- Remote mode: PostgreSQL with automated outcome backfill
-- Local mode: SQLite at `~/.crypto-quant-signal/performance.db`
-- Only high-confidence BUY/SELL calls are tracked — HOLD is excluded
-- Signals are tracked per exchange — the track record shows performance on each venue independently
+**HOLD calls are free.** When the engine says "don't trade," you don't pay. Only BUY/SELL verdicts charge x402 or count against subscription quotas. Aligns incentives: we only get paid when we see a tradeable opportunity. Current HOLD rate ~99%. <!-- SNAPSHOT-LINE -->
 
 ### On-Chain Verification
 
-Every call is hashed (keccak256) at creation time and anchored on Base L2 via daily Merkle batches. This makes the track record tamper-proof — we cannot edit past calls.
+Every call is hashed (keccak256) at creation time and anchored on Base L2 via daily Merkle batches. The track record is tamper-proof — we cannot edit past calls.
 
 - **Contract**: [`0x6485...0f81`](https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81) (Base L2)
-- **Verify any call**: `https://api.algovault.com/api/verify-signal?signalId=<ID>`
-- **View all batches**: `https://api.algovault.com/api/merkle-batches`
+- **Verify any call**: [`api.algovault.com/api/verify-signal?signalId=<ID>`](https://api.algovault.com/api/verify-signal)
+- **View all batches**: [`api.algovault.com/api/merkle-batches`](https://api.algovault.com/api/merkle-batches)
 - **Visual verification**: [algovault.com/verify](https://algovault.com/verify)
-
----
-
-## Pricing
-
-| Feature | Free | Starter ($9.99/mo) | Pro ($49/mo) | Enterprise ($299/mo) | x402 (per call) |
-|---------|------|-------------------|-------------|---------------------|-----------------|
-| Exchanges | All 5 | All 5 | All 5 | All 5 | All 5 | <!-- SNAPSHOT-LINE-TABLE -->
-| Assets | All 710+ | All 710+ | All 710+ | All 710+ | All 710+ | <!-- SNAPSHOT-LINE-TABLE -->
-| Asset classes | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi |
-| Timeframes | All 11 | All 11 | All 11 | All 11 | All 11 | <!-- SNAPSHOT-LINE-TABLE -->
-| Funding arb results | Top 5 | Unlimited | Unlimited | Unlimited | Unlimited |
-| Track record | Full access | Full access | Full access | Full access | Full access |
-| Monthly calls | 100/mo | 3,000/mo | 15,000/mo | 100,000/mo | Unlimited |
-| Support | Community | Email | Priority | Dedicated | — |
-| Price | $0 | $9.99/mo | $49/mo | $299/mo | $0.01–0.05/call |
-| HOLD calls | Free | Free | Free | Free | Free |
-
-\* HOLD verdicts (engine says "don't trade") are always free across all tiers — no x402 charge, no quota deduction.
-
-**x402 micropayments:** AI agents pay per HTTP call with USDC on Base — no signup, no API key, no billing. The payment receipt is the credential. See [x402.org](https://x402.org).
-
-**Subscriptions:** Sign up at [api.algovault.com/signup](https://api.algovault.com/signup). Starter ($9.99/mo) unlocks all assets and timeframes. API key delivered instantly after checkout.
+- **Live dashboard**: [algovault.com/track-record](https://algovault.com/track-record)
 
 ---
 
@@ -334,7 +381,7 @@ api.algovault.com/mcp (Streamable HTTP)
   │
   ├─ x402 payment verification (USDC on Base)
   ├─ API key / subscription check
-  ├─ Free tier fallback
+  ├─ Free tier fallback (100 calls/mo, all assets, all timeframes)
   │
   ▼
 MCP Server (Express + @modelcontextprotocol/sdk)
@@ -360,8 +407,6 @@ MCP Server (Express + @modelcontextprotocol/sdk)
   │
   └─ Exchange Public APIs (free, no auth — all 5 venues)
 ```
-
-**Exchange adapter pattern:** All exchange interactions go through the `ExchangeAdapter` interface — supporting full signal generation on all 5 exchanges. Each adapter implements candles, OI, funding rates, and current price via native exchange APIs. TradFi perps are Hyperliquid-exclusive. <!-- SNAPSHOT-LINE -->
 
 ---
 
@@ -395,6 +440,10 @@ MIT
 
 > **Disclaimer:** AlgoVault provides directional entry interpretation for AI agents. Exit timing is determined by your agent or strategy. This is not financial advice. Past performance does not guarantee future results.
 
-Built by [AlgoVault Labs](https://algovault.com)
-
-[Landing page](https://algovault.com) · [API endpoint](https://api.algovault.com/mcp)
+<p align="center">
+  Built by <a href="https://algovault.com"><strong>AlgoVault Labs</strong></a><br/>
+  <a href="https://algovault.com">algovault.com</a> ·
+  <a href="https://algovault.com/track-record">track-record</a> ·
+  <a href="https://api.algovault.com/mcp">MCP endpoint</a> ·
+  <a href="https://api.algovault.com/signup">sign up</a>
+</p>

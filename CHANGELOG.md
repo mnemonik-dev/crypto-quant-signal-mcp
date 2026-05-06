@@ -5,6 +5,23 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.7] - 2026-05-06 — README hero refresh + track-record image embed
+
+### Changed
+
+- README hero rebuilt around the live track-record image
+  (`docs/screenshots/track-record-2026-05-06.png`, 2468×528 PNG, 90.0% PFE
+  Win Rate across 74,733 trade calls, 26 Merkle batches anchored on Base
+  L2). New `algovault.com` + `algovault.com/track-record` links surfaced
+  prominently. Snapshot KPI line uses `<span data-tr-field="…">` tags so
+  `algovault.com` can live-replace; npm renders the snapshot value as-is.
+- Snapshot baseline refreshed from prior `89.4%+` / `60,000+` / `v1.10.3`
+  to current `90.0%` / `74,733` / `v1.10.7`. All snapshot lines marked
+  `<!-- SNAPSHOT-LINE -->` for future refetch.
+- Documentation-only release. No API, schema, or tool changes.
+  `_algovault.version` envelope bumps to `1.10.7`. Public response shape
+  unchanged. Free-tier behavior unchanged.
+
 ## [1.10.6] - 2026-05-02 — README link fix (npm view 404s)
 
 ### Fixed
