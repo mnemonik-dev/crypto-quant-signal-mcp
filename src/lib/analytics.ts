@@ -20,8 +20,16 @@ const CREATE_TABLE_SQL = `
     response_time_ms INTEGER NOT NULL,
     verdict TEXT,
     confidence INTEGER,
-    ip_hash TEXT
+    ip_hash TEXT,
+    is_bot_internal ${process.env.DATABASE_URL ? 'BOOLEAN' : 'INTEGER'} DEFAULT ${process.env.DATABASE_URL ? 'FALSE' : '0'}
   );
+`;
+
+// BOT-W1 / D1-C, 2026-05-08: idempotent ALTER for existing deployments where
+// request_log was created before is_bot_internal landed. PG 9.6+ + SQLite 3.35+
+// both support `ADD COLUMN IF NOT EXISTS`; older versions hit the catch-all.
+const ALTER_BOT_INTERNAL_SQL = `
+  ALTER TABLE request_log ADD COLUMN IF NOT EXISTS is_bot_internal ${process.env.DATABASE_URL ? 'BOOLEAN' : 'INTEGER'} DEFAULT ${process.env.DATABASE_URL ? 'FALSE' : '0'};
 `;
 
 // C6 (algovault-skills SKILLS-W1): per-Skill attribution.
@@ -46,6 +54,14 @@ const CREATE_SKILL_INVOCATIONS_INDEX_TS_SQL = `
 
 export function initAnalytics(): void {
   dbExec(CREATE_TABLE_SQL);
+  // BOT-W1 / D1-C: backward-compat migration for request_log (is_bot_internal).
+  try {
+    dbExec(ALTER_BOT_INTERNAL_SQL);
+  } catch {
+    // Older PG (<9.6) / SQLite (<3.35) — column may already exist or syntax
+    // differs. Best-effort; the column has DEFAULT 0/FALSE so old rows remain
+    // queryable.
+  }
   dbExec(CREATE_SKILL_INVOCATIONS_SQL);
   dbExec(CREATE_SKILL_INVOCATIONS_INDEX_SLUG_SQL);
   dbExec(CREATE_SKILL_INVOCATIONS_INDEX_TS_SQL);
@@ -69,13 +85,20 @@ interface LogEntry {
   verdict?: string;
   confidence?: number;
   ipHash?: string;
+  // BOT-W1 / D1-C: true when the request matched the X-AlgoVault-Internal-Key
+  // bypass header. Preserved for analytics attribution — bot calls don't tick
+  // the user quota counter, but we still want to count them by tool.
+  isBotInternal?: boolean;
 }
 
 export function logRequest(entry: LogEntry): void {
   try {
+    const botInternalValue = entry.isBotInternal
+      ? (process.env.DATABASE_URL ? true : 1)
+      : (process.env.DATABASE_URL ? false : 0);
     dbRun(
-      `INSERT INTO request_log (timestamp, session_id, tool_name, asset, timeframe, license_tier, response_time_ms, verdict, confidence, ip_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO request_log (timestamp, session_id, tool_name, asset, timeframe, license_tier, response_time_ms, verdict, confidence, ip_hash, is_bot_internal)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       new Date().toISOString(),
       entry.sessionId || null,
       entry.toolName,
@@ -86,6 +109,7 @@ export function logRequest(entry: LogEntry): void {
       entry.verdict || null,
       entry.confidence ?? null,
       entry.ipHash || null,
+      botInternalValue,
     );
   } catch {
     // Never fail the request — logging is best-effort

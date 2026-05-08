@@ -74,8 +74,35 @@ export interface PendingSettlement {
 }
 
 /**
- * Resolve license from request headers using the 3-tier gate:
- * x402 payment → API key → free tier.
+ * Internal-bypass check (BOT-W1 / D1-C, 2026-05-08).
+ *
+ * If BOT_INTERNAL_BYPASS_ENABLED=true AND the request carries
+ * X-AlgoVault-Internal-Key matching ALGOVAULT_INTERNAL_BYPASS_KEY, return
+ * tier:'internal' (Infinity quota, no counter tick). Used by the public
+ * Telegram bot (`algovault-bot`) which loop-calls signal-MCP from the same
+ * Hetzner host. Quota for the bot's end-users is enforced bot-side in its own
+ * SQLite — `request_log.is_bot_internal` preserves the attribution column for
+ * any server-side analytics.
+ *
+ * Two-flag firewall per CLAUDE.md `## Build rules > Cross-repo wire-up`:
+ * outer `BOT_INTERNAL_BYPASS_ENABLED` (default false) + inner key match.
+ */
+function checkInternalBypass(
+  headers: Record<string, string | undefined>,
+): LicenseInfo | null {
+  if (process.env.BOT_INTERNAL_BYPASS_ENABLED !== 'true') return null;
+  const expected = process.env.ALGOVAULT_INTERNAL_BYPASS_KEY;
+  if (!expected || expected.length < 16) return null;
+  const supplied =
+    headers['x-algovault-internal-key'] || headers['X-AlgoVault-Internal-Key'];
+  if (!supplied) return null;
+  if (supplied !== expected) return null;
+  return { tier: 'internal', key: null };
+}
+
+/**
+ * Resolve license from request headers using the 4-tier gate:
+ * internal-bypass → x402 payment → API key → free tier.
  *
  * Async because x402 verification hits the Facilitator (~100ms).
  * If x402 is not configured (no wallet address), skips to API key / free.
@@ -83,6 +110,10 @@ export interface PendingSettlement {
 export async function resolveLicense(
   headers: Record<string, string | undefined>,
 ): Promise<{ license: LicenseInfo; pendingSettlement?: PendingSettlement }> {
+  // Tier 0 (BOT-W1 / D1-C): internal bypass for AlgoVault Telegram bot
+  const bypass = checkInternalBypass(headers);
+  if (bypass) return { license: bypass };
+
   // Tier 1: x402 payment proof (only if configured)
   if (isX402Configured()) {
     const x402Result = await verifyX402Payment(headers);
@@ -106,6 +137,8 @@ export async function resolveLicense(
  * Synchronous license resolution (no x402). Used for stdio mode.
  */
 export function resolveLicenseSync(headers: Record<string, string | undefined>): LicenseInfo {
+  const bypass = checkInternalBypass(headers);
+  if (bypass) return bypass;
   const authHeader = headers['authorization'] || headers['Authorization'];
   return resolveFromApiKey(authHeader);
 }
@@ -284,6 +317,9 @@ export function getMonthlyQuota(tier: LicenseTier): number {
     case 'pro': return 15_000;
     case 'enterprise': return 100_000;
     case 'x402': return Infinity;
+    // BOT-W1 / D1-C: internal bypass — server-side counter is bypassed; the
+    // bot enforces per-user quota in its own SQLite.
+    case 'internal': return Infinity;
     default: return 100;
   }
 }
@@ -302,7 +338,7 @@ export interface TrackCallResult {
  * (e.g., get_trade_signal only charges for non-HOLD results).
  */
 export function checkQuota(license: LicenseInfo): TrackCallResult {
-  if (license.tier === 'x402') {
+  if (license.tier === 'x402' || license.tier === 'internal') {
     return { allowed: true, remaining: Infinity, overage: 0, used: 0, total: Infinity };
   }
 
@@ -325,7 +361,7 @@ export function checkQuota(license: LicenseInfo): TrackCallResult {
  * Returns whether the call is allowed after incrementing.
  */
 export function trackCall(license: LicenseInfo): TrackCallResult {
-  if (license.tier === 'x402') {
+  if (license.tier === 'x402' || license.tier === 'internal') {
     return { allowed: true, remaining: Infinity, overage: 0, used: 0, total: Infinity };
   }
 

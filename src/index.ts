@@ -118,6 +118,7 @@ function createServer(): McpServer {
           verdict: result.call,
           confidence: result.confidence,
           ipHash: getRequestIpHash(),
+          isBotInternal: license.tier === 'internal',
         });
         const sessionIdForCohort = getRequestSessionId() ?? null;
         if (sessionIdForCohort !== null) {
@@ -174,6 +175,7 @@ function createServer(): McpServer {
           licenseTier: license.tier,
           responseTimeMs: Date.now() - startMs,
           ipHash: getRequestIpHash(),
+          isBotInternal: license.tier === 'internal',
         });
         const sessionIdForCohort = getRequestSessionId() ?? null;
         if (sessionIdForCohort !== null) {
@@ -215,6 +217,7 @@ function createServer(): McpServer {
           licenseTier: license.tier,
           responseTimeMs: Date.now() - startMs,
           ipHash: getRequestIpHash(),
+          isBotInternal: license.tier === 'internal',
         });
         const sessionIdForCohort = getRequestSessionId() ?? null;
         if (sessionIdForCohort !== null) {

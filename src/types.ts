@@ -363,7 +363,12 @@ export interface PerformanceStats {
 
 // ── License Types ──
 
-export type LicenseTier = 'free' | 'starter' | 'pro' | 'enterprise' | 'x402';
+// 'internal' added 2026-05-08 (BOT-W1 / D1-C). Used by the AlgoVault Telegram
+// bot (algovault-bot) for server-internal calls — bypasses quota counters via
+// the X-AlgoVault-Internal-Key header (gated on BOT_INTERNAL_BYPASS_ENABLED).
+// Bot-side enforces user-level quota in its own SQLite; signal-MCP only sees
+// the bypass and tags request_log.is_bot_internal so attribution is preserved.
+export type LicenseTier = 'free' | 'starter' | 'pro' | 'enterprise' | 'x402' | 'internal';
 
 export interface LicenseInfo {
   tier: LicenseTier;
