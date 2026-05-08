@@ -143,17 +143,24 @@ export interface GridCell {
 }
 
 /**
- * Trimmed cross-asset leaderboard cell (v1.10.0). Used by `also_see` and
- * `closest_tradeable` fields on `TradeCallResult`. Strips the leaky
- * `signal` / `exchange` / `regime` fields that `GridCell` carries — agents
- * reading the leaderboard see only "go look here" pointers; the direction
- * (BUY/SELL) requires another `get_trade_call` invocation. This is the
- * call-volume-driver per moat #3 (data flywheel) + #5 (suite lock-in).
+ * Trimmed cross-asset leaderboard cell.
+ *
+ * v1.10.0: introduced as `{coin, timeframe, confidence}` — strips
+ * `signal` / `exchange` / `regime` so agents reading `also_see` had to issue
+ * a fresh `get_trade_call` to act on the lead.
+ *
+ * v1.10.8 (BOT-ALERT-IMAGE-W1, 2026-05-08): re-added `exchange` to support
+ * the bot's "See Also" surface, where end users want suggestions on the
+ * SAME exchange they're already trading on (otherwise the suggestion is
+ * unactionable for their account). Direction (`signal` BUY/SELL) is still
+ * stripped — that's the actionability seam that drives the second
+ * `get_trade_call`.
  */
 export interface LeaderboardCell {
   coin: string;
   timeframe: string;
   confidence: number;
+  exchange: ExchangeId;
 }
 
 export interface TradeCallResult {

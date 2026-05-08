@@ -93,29 +93,33 @@ describe('also_see — trimmed cells + dual-emit invariant with try_next', () =>
     expect(result.also_see!.length).toBeGreaterThan(0);
   });
 
-  it('every also_see cell has EXACTLY the 3 trimmed keys {coin, timeframe, confidence}', async () => {
+  it('every also_see cell has EXACTLY the 4 trimmed keys {coin, timeframe, confidence, exchange}', async () => {
+    // BOT-ALERT-IMAGE-W1 (2026-05-08): exchange re-added to support the
+    // bot's See Also surface (same-TF + same-exchange suggestion). Direction
+    // (signal) and macro context (regime) remain stripped.
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
     for (const cell of result.also_see!) {
       const keys = Object.keys(cell).sort();
-      expect(keys).toEqual(['coin', 'confidence', 'timeframe']);
+      expect(keys).toEqual(['coin', 'confidence', 'exchange', 'timeframe']);
     }
   });
 
-  it('also_see cells do NOT contain signal/exchange/regime (leak prevention)', async () => {
+  it('also_see cells do NOT contain signal/regime (direction + context still stripped)', async () => {
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
     for (const cell of result.also_see!) {
       expect((cell as unknown as { signal?: unknown }).signal).toBeUndefined();
-      expect((cell as unknown as { exchange?: unknown }).exchange).toBeUndefined();
       expect((cell as unknown as { regime?: unknown }).regime).toBeUndefined();
+      // exchange IS now present (BOT-ALERT-IMAGE-W1 2026-05-08)
+      expect(cell.exchange).toBeDefined();
     }
   });
 
   it('also_see content matches top-3 by confidence (ETH/1h, SOL/15m, DOGE/5m)', async () => {
     const result = await getTradeSignal({ coin: 'BTC', timeframe: '1h' });
     expect(result.also_see).toEqual([
-      { coin: 'ETH', timeframe: '1h', confidence: 80 },
-      { coin: 'SOL', timeframe: '15m', confidence: 75 },
-      { coin: 'DOGE', timeframe: '5m', confidence: 65 },
+      { coin: 'ETH', timeframe: '1h', confidence: 80, exchange: 'HL' },
+      { coin: 'SOL', timeframe: '15m', confidence: 75, exchange: 'HL' },
+      { coin: 'DOGE', timeframe: '5m', confidence: 65, exchange: 'HL' },
     ]);
   });
 
@@ -130,11 +134,10 @@ describe('also_see — trimmed cells + dual-emit invariant with try_next', () =>
     expect(result.call).toBe('HOLD');
     expect(result.closest_tradeable).toBeDefined();
     const keys = Object.keys(result.closest_tradeable!).sort();
-    expect(keys).toEqual(['coin', 'confidence', 'timeframe']);
+    expect(keys).toEqual(['coin', 'confidence', 'exchange', 'timeframe']);
     expect((result.closest_tradeable as unknown as { signal?: unknown }).signal).toBeUndefined();
-    expect((result.closest_tradeable as unknown as { exchange?: unknown }).exchange).toBeUndefined();
     expect((result.closest_tradeable as unknown as { regime?: unknown }).regime).toBeUndefined();
-    // Top non-HOLD cell is ETH/1h BUY 80
-    expect(result.closest_tradeable).toEqual({ coin: 'ETH', timeframe: '1h', confidence: 80 });
+    // Top non-HOLD cell is ETH/1h BUY 80 on HL
+    expect(result.closest_tradeable).toEqual({ coin: 'ETH', timeframe: '1h', confidence: 80, exchange: 'HL' });
   });
 });

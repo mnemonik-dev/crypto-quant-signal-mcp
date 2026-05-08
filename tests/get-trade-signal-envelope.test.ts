@@ -143,12 +143,13 @@ describe('get_trade_signal response envelope (v1.9.0)', () => {
     // Sanity: the scorer did produce HOLD (otherwise the test doesn't exercise the branch)
     expect(result.call).toBe('HOLD');
     expect(result.closest_tradeable).toBeDefined();
-    // v1.10.0 (C4): closest_tradeable is now LeaderboardCell-shaped — `signal`,
-    // `exchange`, `regime` are stripped (leak-prevention). Direction requires
-    // another get_trade_call invocation per AlgoVault positioning rule.
-    expect(result.closest_tradeable).toEqual({ coin: 'ETH', timeframe: '1h', confidence: 80 });
+    // v1.10.0 (C4): closest_tradeable trimmed to LeaderboardCell shape.
+    // v1.10.8 BOT-ALERT-IMAGE-W1 (2026-05-08): exchange re-added to support
+    // bot's See Also surface (same-TF + same-exchange suggestion). Direction
+    // (signal) and macro context (regime) remain stripped — those still
+    // require a follow-up get_trade_call to act on.
+    expect(result.closest_tradeable).toEqual({ coin: 'ETH', timeframe: '1h', confidence: 80, exchange: 'HL' });
     expect((result.closest_tradeable as unknown as { signal?: unknown }).signal).toBeUndefined();
-    expect((result.closest_tradeable as unknown as { exchange?: unknown }).exchange).toBeUndefined();
     expect((result.closest_tradeable as unknown as { regime?: unknown }).regime).toBeUndefined();
   });
 
