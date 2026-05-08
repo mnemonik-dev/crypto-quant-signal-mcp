@@ -86,7 +86,7 @@ AlgoVault is different. We give your agent **one answer**: a directional verdict
 - **Cross-venue intelligence.** Full signal generation on 5 exchanges with native candle, OI, funding, and volume data per venue. Cross-venue funding arbitrage scanning across all venues — nobody else does multi-exchange derivatives analysis via MCP. <!-- SNAPSHOT-LINE -->
 - **Published track record with every release.** Every call is recorded with outcome prices at multiple horizons. PFE Win Rate, Profit Factor, Expected Value computed continuously. No cherry-picking, no survivorship bias. **Anchored on-chain on Base L2 — we cannot rewrite history.**
 - **Adaptive scoring.** Indicator weights are retuned monthly from outcome data via the [Autonomous Optimization Engine](https://algovault.com/track-record). The engine learns what works.
-- **Crypto + TradFi coverage.** 710+ assets — standard crypto perps on all 5 venues, TradFi perpetuals (stocks, indices, commodities, FX) on Hyperliquid, liquidity-filtered meme coins. <!-- SNAPSHOT-LINE -->
+- **Crypto + TradFi coverage.** 720+ assets — standard crypto perps on all 5 venues, TradFi perpetuals (stocks, indices, commodities, FX) on Hyperliquid, liquidity-filtered meme coins. <!-- SNAPSHOT-LINE -->
 
 ---
 
@@ -195,6 +195,14 @@ Combines directional strength measurement with ADX slope analysis (detecting tre
 
 ---
 
+## Free Telegram bot — `@algovaultofficialbot`
+
+Want regime alerts + AlgoVault trade calls (BUY / SELL) pushed to a Telegram chat without writing any code? Open Telegram → search `@algovaultofficialbot` → `/start`. The bot is a thin client over this same MCP server — the same composite-verdict signal stream, no extra subscription, your free 100-calls/mo quota is shared with bot-driven calls.
+
+Source: [github.com/AlgoVaultLabs/algovault-bot](https://github.com/AlgoVaultLabs/algovault-bot).
+
+---
+
 ## When You Hit the Free Limit
 
 Free tier is 100 calls per calendar month. **HOLD calls don't count against it** — you only consume quota on BUY/SELL verdicts.
@@ -222,7 +230,7 @@ or pay per call via x402.
 | Feature | Free | Starter ($9.99/mo) | Pro ($49/mo) | Enterprise ($299/mo) | x402 (per call) |
 |---------|------|-------------------|-------------|---------------------|-----------------|
 | Exchanges | All 5 | All 5 | All 5 | All 5 | All 5 | <!-- SNAPSHOT-LINE-TABLE -->
-| Assets | All 710+ | All 710+ | All 710+ | All 710+ | All 710+ | <!-- SNAPSHOT-LINE-TABLE -->
+| Assets | All 720+ | All 720+ | All 720+ | All 720+ | All 720+ | <!-- SNAPSHOT-LINE-TABLE -->
 | Asset classes | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi | Crypto + TradFi |
 | Timeframes | All 11 | All 11 | All 11 | All 11 | All 11 |
 | Funding arb results | Top 5 | Unlimited | Unlimited | Unlimited | Unlimited |
