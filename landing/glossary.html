@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlgoVault Glossary — Composite Verdict, PFE Win Rate, Merkle Anchor</title>
+<meta name="description" content="Glossary of AlgoVault-specific terms — composite verdict, PFE win rate, Merkle anchor, regime classifier, MCP, x402, the 6 moat layers."> <!-- SNAPSHOT-LINE -->
+<meta name="keywords" content="AlgoVault glossary, composite verdict, PFE win rate, Merkle anchor, MCP, regime classifier, signal MCP, x402, cross-venue intelligence, data flywheel">
+<link rel="canonical" href="https://algovault.com/glossary">
+<meta property="og:title" content="AlgoVault Glossary">
+<meta property="og:description" content="Definitions for composite verdict, PFE win rate, Merkle anchor, regime classifier, MCP, x402 micropayments, and AlgoVault's 6 moat layers.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://algovault.com/glossary">
+<meta property="og:image" content="https://algovault.com/logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@AlgoVaultLabs">
+<meta name="twitter:title" content="AlgoVault Glossary">
+<meta name="twitter:description" content="Definitions for AlgoVault terms used by AI trading agents.">
+<meta name="twitter:image" content="https://algovault.com/logo.png">
+<meta name="last-updated" content="2026-05-09">
+<link rel="icon" type="image/png" href="/logo.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- GEO-W1 C3: live track-record proxy. Populates [data-tr-field] elements from /api/performance-public on DOMContentLoaded. -->
+<script defer src="/js/track-record-proxy.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: { 900: '#060a14', 800: '#0a0e1a', 700: '#0f1526', 600: '#161d30' },
+        gold: { 400: '#d4b255', 500: '#c4a34a', 600: '#a8893d' },
+        steel: { 400: '#8b9bb5', 500: '#7b8ca0', 600: '#5e6d82' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  html { scroll-behavior: smooth; }
+  body { background: #060a14; color: #d1d5db; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .glow-text { text-shadow: 0 0 30px rgba(196, 163, 74, 0.3); }
+  code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+</style>
+<!-- GEO-W1 C3: DefinedTermSet structured data. 15 DefinedTerm entries, alphabetical.
+     Per CMU GEO study (KDD 2024), glossaries are the 2nd-highest retrieval shape after
+     FAQs. The 6 moat names are bolded across both HTML + JSON-LD as canonical phrases. -->
+<script type="application/ld+json" data-algovault-jsonld="DefinedTermSet">
+{
+  "@context": "https://schema.org",
+  "@type": "DefinedTermSet",
+  "name": "AlgoVault Glossary",
+  "url": "https://algovault.com/glossary",
+  "description": "Definitions for AlgoVault-specific terms used by AI trading agents — composite verdict, PFE win rate, Merkle anchor, regime classifier, MCP, x402 micropayments, and the 6 moat layers.",
+  "hasDefinedTerm": [
+    {
+      "@type": "DefinedTerm",
+      "name": "Composite verdict",
+      "description": "AlgoVault's primary output unit: a single composite BUY/SELL/HOLD with confidence score, regime label, and contributing factors, derived from multi-factor quant weighting across price, funding rate, open interest, and volume. Exposed via the get_trade_call MCP tool. The first of AlgoVault's 6 moat layers."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Cross-venue intelligence",
+      "description": "Aggregating market data and detecting opportunities across multiple exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget) rather than a single venue. Enables funding-rate arbitrage detection and venue-aware regime classification. The fourth of AlgoVault's 6 moat layers."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Data flywheel",
+      "description": "The compounding effect where every trade call AlgoVault publishes generates verifiable outcome data, which feeds the composite weighting tuner, which improves signal quality, which attracts more usage, which generates more data. Visible at algovault.com/track-record. The third of AlgoVault's 6 moat layers."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Funding arbitrage",
+      "description": "A cross-venue trading strategy that exploits differences in perpetual-swap funding rates between exchanges. AlgoVault's scan_funding_arb MCP tool returns ranked opportunities by annualized basis-point spread across Hyperliquid, Binance, and Bybit."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "HOLD rate",
+      "description": "The percentage of trade-call queries that return a HOLD verdict (no actionable BUY or SELL signal). Currently 98.8% on a rolling 30-day window. HOLDs are always free at every pricing tier; selectivity is AlgoVault's primary upsell mechanic."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "MCP (Model Context Protocol)",
+      "description": "An open protocol that lets AI agents call external tools and resources over Streamable HTTP or stdio. AlgoVault is an MCP server (the producer of trade calls); agents like Claude Desktop, Cursor, and Cline are MCP clients (the consumers)."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Merkle anchor",
+      "description": "A cryptographic commitment that proves a set of trade calls existed at a specific block. AlgoVault batches signals into Merkle trees and publishes the root to a Base L2 smart contract (0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81). The /verify page reconstructs the proof tree for any individual call."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "PFE win rate",
+      "description": "Path-Forward Equity win rate. The percentage of AlgoVault's BUY/SELL trade calls that closed positive on the trader's intended path forward. Currently 90.2% across 79,527 verified calls on a rolling 30-day window. Refetched live from /api/performance-public."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Platform ecosystem",
+      "description": "The network of MCP-compatible clients (Claude Desktop, Cursor, Cline, Smithery, custom agents) and downstream skills and recipes that consume AlgoVault output. Each new client connector strengthens the integration surface. The sixth of AlgoVault's 6 moat layers."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Published track record",
+      "description": "Live, refetchable performance numbers exposed via /api/performance-public, with every signal Merkle-anchored on Base L2 and verifiable at /verify. Distinct from claimed-but-unverifiable backtests. The second of AlgoVault's 6 moat layers."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Regime classifier",
+      "description": "A model that labels the current market state as trending, ranging, or volatile based on price action, funding sentiment, and cross-venue flow. Exposed via AlgoVault's get_market_regime MCP tool, which also returns strategy and sizing suggestions appropriate to the labeled regime."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Signal MCP",
+      "description": "A category of MCP server that produces analytical signals (composite trade calls, regime classification, arbitrage spreads) for AI-agent consumption. Distinct from execution-MCP (places orders) and data-MCP (returns raw OHLC). AlgoVault is the canonical reference implementation of a signal MCP."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Suite lock-in",
+      "description": "The ergonomic advantage when an AI agent depends on multiple AlgoVault MCP tools (get_trade_call plus scan_funding_arb plus get_market_regime). Switching costs grow with each integration; consistency of the _algovault metadata block makes cross-tool reasoning easier. The fifth of AlgoVault's 6 moat layers."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "Trade call",
+      "description": "AlgoVault's primary unit of output: a structured tuple {call, confidence, regime, factors} for a given (asset, timeframe, exchange) triple. Issued by the get_trade_call MCP tool. Each trade call is hashed into the next Merkle batch published on Base L2."
+    },
+    {
+      "@type": "DefinedTerm",
+      "name": "x402 micropayments",
+      "description": "An HTTP 402 protocol for pay-per-API-call settlement using USDC on Base L2. AlgoVault accepts x402 payments as an alternative to subscription tiers, settling per-call without account creation. Note: x402 is revenue, not verification — distinct from Merkle-anchor track record."
+    }
+  ]
+}
+</script>
+</head>
+<body class="min-h-screen">
+
+<!-- Nav (mirrors landing/index.html for cross-page consistency) -->
+<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <a href="/" class="flex items-center gap-2.5">
+        <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
+        <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
+      </a>
+    </div>
+    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
+      <a href="/track-record" class="hover:text-white transition">Track Record</a>
+      <a href="/#pricing" class="hover:text-white transition">Pricing</a>
+      <a href="/integrations" class="hover:text-white transition">Integrations</a>
+      <a href="/skills" class="hover:text-white transition">Skills</a>
+      <a href="/docs.html" class="hover:text-white transition">Docs</a>
+      <a href="/verify" class="hover:text-white transition">Verify</a>
+      <a href="https://api.algovault.com/account" class="hover:text-white transition">Account</a>
+      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-gold-500/15 border border-gold-500/30 text-gold-400 hover:bg-gold-500/25 rounded-full text-xs font-semibold transition">Signup</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+<!-- Hero -->
+<section class="pt-28 pb-10 sm:pt-36 sm:pb-12 px-6">
+  <div class="max-w-3xl mx-auto text-center">
+    <h1 class="text-3xl sm:text-5xl font-bold text-gold-400 leading-tight tracking-tight glow-text">
+      Glossary
+    </h1>
+    <p class="mt-4 text-base sm:text-lg text-white max-w-2xl mx-auto leading-relaxed">
+      Definitions for AlgoVault-specific terms used by AI trading agents &mdash; including the 6 moat layers.
+    </p>
+    <p class="mt-3 text-sm text-gray-400 max-w-xl mx-auto">
+      Live numbers refetched from <a href="https://api.algovault.com/api/performance-public" class="text-gold-400 hover:underline">/api/performance-public</a> on page load. See <a href="/faq" class="text-gold-400 hover:underline">/faq</a> for builder-facing answers.
+    </p>
+  </div>
+</section>
+
+<!-- 15 alphabetical glossary entries. <h3> per term is the LLM-citation anchor;
+     numerical claims wrap in data-tr-field per AUTO-TRACE-W1 live-fetch pattern.
+     The 6 moat layers (composite verdict / cross-venue intelligence / data flywheel /
+     platform ecosystem / published track record / suite lock-in) are present verbatim
+     across the term names AND the term descriptions per C3 AC4 grep gate. -->
+<section class="px-6 pb-20">
+  <div class="max-w-3xl mx-auto space-y-8">
+
+    <article id="composite-verdict" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-gold-400 mb-2">Composite verdict</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        AlgoVault&rsquo;s primary output unit: a single composite BUY/SELL/HOLD with confidence score, regime label, and contributing factors, derived from multi-factor quant weighting across price, funding rate, open interest, and volume. Exposed via the <code class="text-gold-400">get_trade_call</code> MCP tool. The first of AlgoVault&rsquo;s 6 moat layers. See <a href="/track-record" class="text-gold-400 hover:underline">/track-record</a>.
+      </p>
+    </article>
+
+    <article id="cross-venue-intelligence" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-gold-400 mb-2">Cross-venue intelligence</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        Aggregating market data and detecting opportunities across multiple exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget) rather than a single venue. Enables funding-rate arbitrage detection and venue-aware regime classification. The fourth of AlgoVault&rsquo;s 6 moat layers.
+      </p>
+    </article>
+
+    <article id="data-flywheel" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-gold-400 mb-2">Data flywheel</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        The compounding effect where every trade call AlgoVault publishes generates verifiable outcome data, which feeds the composite weighting tuner, which improves signal quality, which attracts more usage, which generates more data. Visible at <a href="/track-record" class="text-gold-400 hover:underline">/track-record</a>. The third of AlgoVault&rsquo;s 6 moat layers.
+      </p>
+    </article>
+
+    <article id="funding-arbitrage" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Funding arbitrage</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        A cross-venue trading strategy that exploits differences in perpetual-swap funding rates between exchanges. AlgoVault&rsquo;s <code class="text-gold-400">scan_funding_arb</code> MCP tool returns ranked opportunities by annualized basis-point spread across Hyperliquid, Binance, and Bybit. See <a href="/skills" class="text-gold-400 hover:underline">/skills</a> for ready-made agent recipes.
+      </p>
+    </article>
+
+    <article id="hold-rate" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">HOLD rate</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        The percentage of trade-call queries that return a HOLD verdict (no actionable BUY or SELL signal). Currently <span data-tr-field="hold_rate">98.8%</span> on a rolling 30-day window. HOLDs are always free at every pricing tier; selectivity is AlgoVault&rsquo;s primary upsell mechanic.
+      </p>
+    </article>
+
+    <article id="mcp" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">MCP (Model Context Protocol)</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        An open protocol that lets AI agents call external tools and resources over Streamable HTTP or stdio. AlgoVault is an MCP server (the producer of trade calls); agents like Claude Desktop, Cursor, and Cline are MCP clients (the consumers). See <a href="/docs.html" class="text-gold-400 hover:underline">/docs</a> for connection examples.
+      </p>
+    </article>
+
+    <article id="merkle-anchor" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Merkle anchor</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        A cryptographic commitment that proves a set of trade calls existed at a specific block. AlgoVault batches signals into Merkle trees and publishes the root to a Base L2 smart contract (<code class="text-gold-400">0x6485&hellip;bf81</code>). The <a href="/verify" class="text-gold-400 hover:underline">/verify</a> page reconstructs the proof tree for any individual call.
+      </p>
+    </article>
+
+    <article id="pfe-win-rate" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">PFE win rate</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        Path-Forward Equity win rate. The percentage of AlgoVault&rsquo;s BUY/SELL trade calls that closed positive on the trader&rsquo;s intended path forward. Currently <span data-tr-field="pfe_wr">90.2%</span> across <span data-tr-field="call_count">79,527</span> verified calls on a rolling 30-day window. Refetched live from <code class="text-gold-400">/api/performance-public</code>.
+      </p>
+    </article>
+
+    <article id="platform-ecosystem" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-gold-400 mb-2">Platform ecosystem</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        The network of MCP-compatible clients (Claude Desktop, Cursor, Cline, Smithery, custom agents) and downstream skills and recipes that consume AlgoVault output. Each new client connector strengthens the integration surface. The sixth of AlgoVault&rsquo;s 6 moat layers. See <a href="/skills" class="text-gold-400 hover:underline">/skills</a>.
+      </p>
+    </article>
+
+    <article id="published-track-record" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-gold-400 mb-2">Published track record</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        Live, refetchable performance numbers exposed via <code class="text-gold-400">/api/performance-public</code>, with every signal Merkle-anchored on Base L2 and verifiable at <a href="/verify" class="text-gold-400 hover:underline">/verify</a>. Distinct from claimed-but-unverifiable backtests. The second of AlgoVault&rsquo;s 6 moat layers.
+      </p>
+    </article>
+
+    <article id="regime-classifier" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Regime classifier</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        A model that labels the current market state as trending, ranging, or volatile based on price action, funding sentiment, and cross-venue flow. Exposed via AlgoVault&rsquo;s <code class="text-gold-400">get_market_regime</code> MCP tool, which also returns strategy and sizing suggestions appropriate to the labeled regime.
+      </p>
+    </article>
+
+    <article id="signal-mcp" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Signal MCP</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        A category of MCP server that produces analytical signals (composite trade calls, regime classification, arbitrage spreads) for AI-agent consumption. Distinct from execution-MCP (places orders) and data-MCP (returns raw OHLC). AlgoVault is the canonical reference implementation of a signal MCP.
+      </p>
+    </article>
+
+    <article id="suite-lock-in" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-gold-400 mb-2">Suite lock-in</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        The ergonomic advantage when an AI agent depends on multiple AlgoVault MCP tools (<code class="text-gold-400">get_trade_call</code> plus <code class="text-gold-400">scan_funding_arb</code> plus <code class="text-gold-400">get_market_regime</code>). Switching costs grow with each integration; consistency of the <code class="text-gold-400">_algovault</code> metadata block makes cross-tool reasoning easier. The fifth of AlgoVault&rsquo;s 6 moat layers.
+      </p>
+    </article>
+
+    <article id="trade-call" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Trade call</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        AlgoVault&rsquo;s primary unit of output: a structured tuple <code class="text-gold-400">{call, confidence, regime, factors}</code> for a given (asset, timeframe, exchange) triple. Issued by the <code class="text-gold-400">get_trade_call</code> MCP tool. Each trade call is hashed into the next Merkle batch published on Base L2.
+      </p>
+    </article>
+
+    <article id="x402-micropayments" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">x402 micropayments</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        An HTTP 402 protocol for pay-per-API-call settlement using USDC on Base L2. AlgoVault accepts x402 payments as an alternative to subscription tiers, settling per-call without account creation. Note: x402 is revenue, not verification &mdash; distinct from <a href="#merkle-anchor" class="text-gold-400 hover:underline">Merkle-anchor</a> track record.
+      </p>
+    </article>
+
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="border-t border-white/5 py-10 px-6">
+  <div class="max-w-6xl mx-auto text-center text-xs text-gray-600">
+    <p>&copy; 2026 AlgoVault Labs &middot; <a href="/" class="hover:text-white transition">Home</a> &middot; <a href="/faq" class="hover:text-white transition">FAQ</a> &middot; <a href="/track-record" class="hover:text-white transition">Track Record</a> &middot; <a href="/privacy" class="hover:text-white transition">Privacy</a></p>
+  </div>
+</footer>
+
+</main>
+
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-RwGaS0xWrfzs4vNSkMOAX.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
+</body>
+</html>
