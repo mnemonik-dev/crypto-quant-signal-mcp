@@ -37,13 +37,17 @@ jobs:
       - name: Landing-page sync guard (build_landing --check)
         run: node scripts/build_landing.mjs --check
 
-      # GEO-W1 C4: JSON-LD live-data sync guard. Generator runs locally on dev
-      # machine + commits the rendered output; this --check canary fail-closes
-      # the deploy if landing/*.html JSON-LD blocks have drifted from the
-      # 5 templates (product/service/application/organization/website). Per
-      # Plan Mode D3 + the live-data-template-with-generator-and-canary skill.
-      - name: JSON-LD live-data sync guard (generate_jsonld --check)
-        run: node scripts/generate_jsonld.mjs --check
+      # GEO-W1 C4: JSON-LD structural integrity test. Network-free unit tests
+      # validate the SHAPE of JSON-LD blocks across landing/*.html (Product /
+      # Organization / WebSite / Service / SoftwareApplication on every page;
+      # FAQPage on /faq; DefinedTermSet on /glossary; no placeholder leakage;
+      # no forbidden phrases per Build Rule 9). NOTE: numerical fields (PFE WR,
+      # totalCalls, batchCount) are NOT byte-pinned because the cron-driven
+      # live API drifts every few minutes; commit-time freshness is the
+      # numerical refresh seam (developer runs `node scripts/generate_jsonld.mjs`
+      # locally + commits). Unit tests catch structural regressions.
+      - name: JSON-LD structural integrity (unit tests)
+        run: node --test tests/unit/geo_jsonld_consistency.test.mjs
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
