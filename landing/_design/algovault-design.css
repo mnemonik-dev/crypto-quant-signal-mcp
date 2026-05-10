@@ -989,3 +989,15 @@
   color: var(--fg-4);
   letter-spacing: 0.04em;
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   DESIGN-W6 / C2+C3 (2026-05-10): dual-render @media swap.
+   Below-fold + landing-rest sections render desktop+mobile variants
+   into the page; CSS toggles which is visible at viewport ≤767px.
+   ──────────────────────────────────────────────────────────────────── */
+.lp-belowfold-desktop, .lp-rest-desktop { display: block; }
+.lp-belowfold-mobile,  .lp-rest-mobile  { display: none; }
+@media (max-width: 767px) {
+  .lp-belowfold-desktop, .lp-rest-desktop { display: none; }
+  .lp-belowfold-mobile,  .lp-rest-mobile  { display: block; }
+}

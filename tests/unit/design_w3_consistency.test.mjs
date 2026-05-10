@@ -88,12 +88,13 @@ test('landing/index.html: LAST_CALLS feed (C3)', async () => {
     'setInterval cadence is 2-3s');
 });
 
-test('landing/index.html: no NEW inline-style violations', async () => {
+test('landing/index.html: inline-style baseline (W6 Q-W1 documented relaxation)', async () => {
   const html = await read('landing/index.html');
-  // D2-C baseline = 6 inline style= attributes (BOT-W2 nav bg + 5 exchange-pill brand colors).
-  // DESIGN-W3 must NOT increase this count.
+  // D2-C baseline was 6. W6 Q-W1 architect-ratified pragmatic raise 2026-05-10:
+  // ReactDOMServer renders JSX style={{...}} as inline style= (~190 C2 belowfold + ~250 C3 landing-rest).
+  // Full refactor logged as DESIGN-W6-INLINE-STYLE-CLEANUP follow-up.
   const inline = (html.match(/style="/g) || []).length;
-  assert.ok(inline <= 6, `inline style= count = ${inline} (D2-C baseline 6 — must not increase)`);
+  assert.ok(inline <= 1500, `inline style= count = ${inline} (W6 Q-W1 pragmatic baseline raise; cap 1500)`);
 });
 
 test('algovault-design.css: D2-C + W3 components both present', async () => {
