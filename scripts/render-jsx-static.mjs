@@ -218,9 +218,11 @@ function adjustPricingGridCols(html) {
 
 function patchV1Minimal(src) {
   // Pre-Babel patches.
-  // 1. Drop <TrustRow /> renders entirely (W3 ratification stands per H-A1; 14.2k/3.1k are fictional)
-  let s = src.replace(/<TrustRow\s+compact\s*\/>/g, 'null');
-  s = s.replace(/<TrustRow\s*\/>/g, 'null');
+  // 1. Drop <TrustRow /> renders entirely (W3 ratification stands per H-A1; 14.2k/3.1k are fictional).
+  //    Use `{null}` JSX expression (React renders null as nothing) NOT bare `null` (which becomes
+  //    text content "null" inside JSX). Pre-W7-fix-forward shipped the broken bare-null literal.
+  let s = src.replace(/<TrustRow\s+compact\s*\/>/g, '{null}');
+  s = s.replace(/<TrustRow\s*\/>/g, '{null}');
   return s;
 }
 
@@ -332,6 +334,21 @@ function w7HeroStripNav(html) {
   return html.replace(/<nav class="nav"[^>]*>[\s\S]*?<\/nav>/g, '');
 }
 
+function w7HeroCallStreamLiveBind(html) {
+  // Mr.1 fix-forward 2026-05-10 23:50: V1Feed (CALL STREAM · LIVE) currently renders FICTIONAL
+  // FEED_BASE constants (BTC/ETH/SOL/etc with hardcoded confidence values 0.84/0.62/etc).
+  // Mr.1 question: "Is the Call Stream Live & updated? what's the 0.79, 0.66 number means?"
+  // → Live-bind to /api/recent-calls?limit=6 + 2.5s polling. Confidence values (0.84 etc) are
+  // confidence/100 (decimal form) — JSX renders r.c.toFixed(2) = '0.84' from server's confidence=84.
+  // Mark the V1Feed scrolling container with data-w7-call-stream so a vanilla-JS poller can
+  // populate rows on each fetch. Strip the FEED_BASE-rendered initial rows (replaced by live data).
+  // The V1Feed container is identified by the unique `animation: feed-scroll` style.
+  return html.replace(
+    /(<div style="animation:feed-scroll [^"]*;will-change:transform">)([\s\S]*?)(<\/div><div style="position:absolute;inset:28px 0 0 0;pointer-events:none;background:linear-gradient\(180deg, oklch\(0\.13)/g,
+    '$1<!-- DESIGN-W7 / Mr.1 fix-forward 2026-05-10: rows live-bound via fetchCallStream poller (2.5s, /api/recent-calls?limit=6); FEED_BASE placeholders stripped --><div data-w7-call-stream-rows aria-live="polite"></div>$3'
+  );
+}
+
 function w7HeroDiagramChipsToLogos(html) {
   // Q-W7 carry-forward (W6 hero chip→logo migration extends to V0Diagram chips).
   // V0Diagram featured chips render: outer rect (40×32) + inner colored rect (22×22) + monogram text + name text.
@@ -353,40 +370,87 @@ function w7HeroDiagramChipsToLogos(html) {
   );
 }
 
-// MOST RECENT CALL poller (vanilla JS — appended after hero render at C3 inject time)
+// MOST RECENT CALL + CALL STREAM pollers (vanilla JS — appended after hero render at C3 inject time)
 const W7_RECENT_CALL_POLLER_JS = `<script>
 (function(){
   // DESIGN-W7 / H-PR2 (Mr.1 ratification 2026-05-10):
-  // MOST RECENT CALL poller — fetches /api/recent-calls?limit=1 every 1.5s + populates [data-w7-recent-call] mount-points
-  // (one per dual-render variant). Format matches JSX LAST_CALLS shape: '{slug} {tf} {exchange} · {call} · {seconds_ago}s ago'.
+  // MOST RECENT CALL poller — /api/recent-calls?limit=1 every 1.5s → [data-w7-recent-call] mount-points.
+  // Plus DESIGN-W7 fix-forward 2026-05-10 23:50 (Mr.1 directive):
+  // CALL STREAM poller — /api/recent-calls?limit=6 every 2.5s → [data-w7-call-stream-rows] container.
   if (window.__w7RecentCallInit) return;
   window.__w7RecentCallInit = true;
-  var POLL_MS = 1500;
+  var EX_NAMES = {HL:'Hyperliquid',BINANCE:'Binance',BYBIT:'Bybit',OKX:'OKX',BITGET:'Bitget'};
+  var EX_SHORT = {HL:'HL',BINANCE:'BN',BYBIT:'BY',OKX:'OK',BITGET:'BG'};
   function fmtAgo(secs){
     if (secs == null || !isFinite(secs) || secs < 0) return '—';
     if (secs < 60) return secs.toFixed(0) + 's ago';
     if (secs < 3600) return Math.round(secs/60) + 'm ago';
     return Math.round(secs/3600) + 'h ago';
   }
-  function refresh(){
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c;
+    });
+  }
+  function refreshRecentCall(){
     fetch('/api/recent-calls?limit=1').then(function(r){
       if (!r.ok) throw new Error('HTTP '+r.status);
       return r.json();
     }).then(function(rows){
       if (!Array.isArray(rows) || !rows.length) return;
       var r = rows[0];
-      var ex = ({HL:'Hyperliquid',BINANCE:'Binance',BYBIT:'Bybit',OKX:'OKX',BITGET:'Bitget'})[r.exchange] || r.exchange;
+      var ex = EX_NAMES[r.exchange] || r.exchange;
       var line = (r.slug||'') + ' ' + (r.timeframe||'') + ' ' + ex + ' · ' + ((r.call||'').toUpperCase()) + ' · ' + fmtAgo(r.seconds_ago);
       document.querySelectorAll('[data-w7-recent-call]').forEach(function(el){ el.textContent = line; });
     }).catch(function(err){
-      // Keep last-known on error; log for ops debugging
       console.warn('[w7-recent-call] refresh failed', err);
     });
   }
+  function refreshCallStream(){
+    fetch('/api/recent-calls?limit=6').then(function(r){
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(function(rows){
+      if (!Array.isArray(rows)) return;
+      // Render rows matching V1Feed grid markup. V1Feed grid columns:
+      //   46px (sym) · 30px (tf) · 26px (vx) · 1fr (verdict) · 38px (conf) · 38px (lat→ago)
+      // Replace lat/ms (fictional) with seconds_ago since canonical canvas's ms timing is fictional;
+      // confidence renders as r.confidence/100 to match JSX r.c.toFixed(2) format (e.g. 84 → '0.84').
+      var dirColor = function(d){
+        d = (d||'').toUpperCase();
+        if (d === 'BUY' || d === 'LONG') return 'oklch(0.78 0.15 165)';
+        if (d === 'SELL' || d === 'SHORT') return 'oklch(0.65 0.20 25)';
+        return 'oklch(0.78 0.005 265)';
+      };
+      // Duplicate rows for seamless scroll loop (matches V1Feed FEED_BASE × 2 pattern)
+      var seamlessRows = rows.concat(rows);
+      var html = seamlessRows.map(function(r){
+        var sym = escapeHtml(r.slug || '');
+        var tf = escapeHtml(r.timeframe || '');
+        var vx = escapeHtml(EX_SHORT[r.exchange] || r.exchange || '');
+        var d = ((r.call||'').toUpperCase());
+        var conf = (typeof r.confidence === 'number') ? (r.confidence/100).toFixed(2) : '—';
+        var ago = fmtAgo(r.seconds_ago);
+        return '<div style="display:grid;grid-template-columns:46px 30px 26px 1fr 38px 38px;align-items:center;gap:6px;padding:3px 10px;height:22px;line-height:16px;border-bottom:1px solid oklch(0.2 0.012 265 / 0.7);color:var(--fg-2)">' +
+          '<span style="color:var(--fg)">' + sym + '</span>' +
+          '<span style="color:var(--fg-3)">' + tf + '</span>' +
+          '<span style="color:var(--fg-4)">' + vx + '</span>' +
+          '<span style="color:' + dirColor(d) + ';font-weight:600;letter-spacing:0.04em">' + escapeHtml(d) + '</span>' +
+          '<span style="color:var(--fg-2);text-align:right">' + conf + '</span>' +
+          '<span style="color:var(--fg-4);text-align:right;font-size:9px">' + escapeHtml(ago) + '</span>' +
+        '</div>';
+      }).join('');
+      document.querySelectorAll('[data-w7-call-stream-rows]').forEach(function(el){ el.innerHTML = html; });
+    }).catch(function(err){
+      console.warn('[w7-call-stream] refresh failed', err);
+    });
+  }
+  function bothRefresh(){ refreshRecentCall(); refreshCallStream(); }
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', refresh);
-  } else { refresh(); }
-  setInterval(refresh, 1500); // POLL_MS — keep literal so verification gate matches
+    document.addEventListener('DOMContentLoaded', bothRefresh);
+  } else { bothRefresh(); }
+  setInterval(refreshRecentCall, 1500); // 1.5s — Mr.1 H-PR2
+  setInterval(refreshCallStream, 2500); // 2.5s — matches W3 recent-calls-feed cadence
 })();
 </script>`;
 
@@ -505,6 +569,7 @@ async function main() {
       raw = w7HeroDiagramFooter(raw);              // Q-W7-4 footer "5 venues integrated · 5 featured" live-bind
       raw = w7HeroNavVersion(raw, version);        // Q-W7-3 nav v1.x shipped
       raw = w7HeroDiagramChipsToLogos(raw);        // W6 Q-W7 carry-forward (5 SVG <image> logos in V0Diagram chips)
+      raw = w7HeroCallStreamLiveBind(raw);         // Mr.1 fix-forward: V1Feed FEED_BASE → live /api/recent-calls?limit=6 poller
       raw = w7HeroStripNav(raw);                   // strip V1Hero's nav (existing live W3 nav preserved for cross-page consistency)
       // Append vanilla-JS poller for MOST RECENT CALL (mounts to all [data-w7-recent-call] in the dual-render block)
       html = raw + W7_RECENT_CALL_POLLER_JS;

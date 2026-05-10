@@ -51,9 +51,13 @@
   --violet-2: oklch(0.62 0.18 290);
   --violet-soft: oklch(0.32 0.08 290);
 
-  --cyan: oklch(0.86 0.13 200);
-  --cyan-2: oklch(0.74 0.14 205);
-  --cyan-soft: oklch(0.32 0.08 210);
+  /* DESIGN-W7 fix-forward 2026-05-11 (Mr.1 directive): "change the color to Plasma Mint, not
+     electric cyan. The HTML color is Plasma Mint, not cyan." JSX V1Hero references both
+     `var(--cyan)` and `accent-cyan` class — alias --cyan to mint values so all `var(--cyan)`
+     references resolve to Plasma Mint without changing JSX markup. */
+  --cyan: oklch(0.86 0.16 165);       /* aliased to mint per Mr.1 */
+  --cyan-2: oklch(0.72 0.16 165);     /* aliased to mint-2 */
+  --cyan-soft: oklch(0.32 0.08 170);  /* aliased to mint-soft */
 
   /* Plasma Mint — D1-C anchor at oklch(0.86 0.16 165) ↔ #5BEEB3 */
   --mint: oklch(0.86 0.16 165);
@@ -995,9 +999,15 @@
    Below-fold + landing-rest sections render desktop+mobile variants
    into the page; CSS toggles which is visible at viewport ≤767px.
    ──────────────────────────────────────────────────────────────────── */
-.lp-belowfold-desktop, .lp-rest-desktop, .lp-hero-desktop { display: block; }
-.lp-belowfold-mobile,  .lp-rest-mobile,  .lp-hero-mobile  { display: none; }
+/* DESIGN-W7 fix-forward 2026-05-11 (Mr.1 directive: "Remove the Mobile view at desktop website,
+   mobile view stay mobile website"): defensive `!important` to ensure cascade doesn't get
+   overridden by JSX inline-style `display:flex` etc. on the inner artboard container.
+   The artboard wrapper (V1Hero outer div) has `style="width:375px"` for mobile but no `display`
+   override — the parent .lp-hero-mobile class controls visibility. `!important` defends against
+   any future inline `display:` on children leaking up. */
+.lp-belowfold-desktop, .lp-rest-desktop, .lp-hero-desktop { display: block !important; }
+.lp-belowfold-mobile,  .lp-rest-mobile,  .lp-hero-mobile  { display: none !important; }
 @media (max-width: 767px) {
-  .lp-belowfold-desktop, .lp-rest-desktop, .lp-hero-desktop { display: none; }
-  .lp-belowfold-mobile,  .lp-rest-mobile,  .lp-hero-mobile  { display: block; }
+  .lp-belowfold-desktop, .lp-rest-desktop, .lp-hero-desktop { display: none !important; }
+  .lp-belowfold-mobile,  .lp-rest-mobile,  .lp-hero-mobile  { display: block !important; }
 }

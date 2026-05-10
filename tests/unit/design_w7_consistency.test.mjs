@@ -58,7 +58,7 @@ test('H-PR2: MOST RECENT CALL poller (1.5s, /api/recent-calls?limit=1)', async (
   const mounts = (html.match(/data-w7-recent-call/g) || []).length;
   assert.ok(mounts >= 2, `≥2 data-w7-recent-call mount-points (got ${mounts})`);
   // 1.5s polling cadence (literal so the gate matches — not POLL_MS variable)
-  assert.match(html, /setInterval\(refresh,\s*1500\)/, '1.5s polling cadence (literal)');
+  assert.match(html, /setInterval\(refreshRecentCall,\s*1500\)/, '1.5s polling cadence (literal)');
   // /api/recent-calls?limit=1 endpoint
   assert.match(html, /\/api\/recent-calls\?limit=1/, 'polls /api/recent-calls?limit=1');
   // aria-live="polite" for screen-reader updates
