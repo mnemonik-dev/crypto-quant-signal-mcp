@@ -120,10 +120,12 @@ function filterX402Tier(html) {
 }
 
 function injectLiveDataLiveTrack(html) {
-  // Q-W11: 3 LIVE-tagged stats live-bind via existing track-record-proxy.js W3 hydration
+  // Q-W11: 3 LIVE-tagged stats live-bind via existing track-record-proxy.js W3 hydration.
+  // Mr.1 fix-forward 2026-05-11: % moved INSIDE span (was outside, causing double-% when
+  // proxy.js setField writes formatted "90.2%" string).
   // 90.2% (LIVE PFE) — first occurrence only (LiveTrackRecord LIVE row)
-  html = html.replace(/>90\.2%</, '><span data-tr-field="pfe_wr">90.2</span>%<');
-  // 80,059+ (LIVE Calls) — first occurrence
+  html = html.replace(/>90\.2%</, '><span data-tr-field="pfe_wr">90.2%</span><');
+  // 80,059+ (LIVE Calls) — first occurrence; + stays outside span (proxy.js writes "80,059")
   html = html.replace(/>80,059\+</, '><span data-tr-field="call_count">80,059</span>+<');
   // 29 → context anchor on Merkle batches (avoid generic "29" matches)
   html = html.replace(/>29(<\/div><div[^>]*>[^<]*Merkle batches on-chain)/, '><span data-tr-field="merkle_batch_count">29</span>$1');
@@ -149,12 +151,20 @@ function wrapCounterLiteralsInProse(html) {
 
 function injectLiveDataPricingTagline(html) {
   // Q-W14: SimplePricing tagline 3 placeholder values
+  // Mr.1 fix-forward 2026-05-11: % moved INSIDE span (was outside, causing double-% when JS
+  // setField populates with formatted "98.8%" string). Same pattern as Q-W7-1 PFE WR fix.
   // 98.8% big in tagline (single occurrence in SimplePricing render)
-  html = html.replace(/>98\.8%</, '><span data-tr-field="hold_rate">98.8</span>%<');
+  html = html.replace(/>98\.8%</, '><span data-tr-field="hold_rate">98.8%</span><');
   // Tagline body paragraph: "We reject 98.8% of scans"
-  html = html.replace(/We reject 98\.8% of scans/, 'We reject <span data-tr-field="hold_rate">98.8</span>% of scans');
-  // "90.2%+ Merkle-verified accuracy on 80,059+ signals"
-  html = html.replace(/90\.2%\+ Merkle-verified accuracy on 80,059\+ signals/, '<span data-tr-field="pfe_wr">90.2</span>%+ Merkle-verified accuracy on <span data-tr-field="call_count">80,059</span>+ signals');
+  html = html.replace(/We reject 98\.8% of scans/, 'We reject <span data-tr-field="hold_rate">98.8%</span> of scans');
+  // "90.2%+ Merkle-verified accuracy on 80,059+ signals" — % stays outside span here because
+  // track-record-proxy.js formats pfe_wr as "90.2%" but the literal in canvas is "90.2%+" (with
+  // trailing PLUS sign indicating "or higher"). Strip the trailing + or move it. Going with %+
+  // staying outside, but binding span to a NEW field that returns just the number. Since
+  // track-record-proxy.js doesn't have a "pfe_wr_value" field returning just the number, use
+  // the existing pfe_wr "90.2%" and SHIFT the +. Final form: span="<live>"+ "%+" → "<live>%+".
+  // setField("pfe_wr") writes "90.2%" → final renders "90.2%+" (correct, % only once).
+  html = html.replace(/90\.2%\+ Merkle-verified accuracy on 80,059\+ signals/, '<span data-tr-field="pfe_wr">90.2%</span>+ Merkle-verified accuracy on <span data-tr-field="call_count">80,059</span>+ signals');
   return html;
 }
 
@@ -276,13 +286,16 @@ function w7HeroDropVerdict(html) {
 }
 
 function w7HeroP50ToPfeWr(html) {
-  // Q-W7-1: replace `p50 latency / 640ms` slot in 4-stat row with `PFE WR / <span data-tr-field="pfe_wr">90.2</span>%`.
+  // Q-W7-1: replace `p50 latency / 640ms` slot in 4-stat row with `PFE WR / <span data-tr-field="pfe_wr">90.2%</span>`.
   // Label substitution
   html = html.replaceAll('>p50 latency<', '>PFE WR<');
-  // Value substitution: `>640<span style="...">ms</span><` → live-bind PFE WR
+  // Value substitution: `>640<span style="...">ms</span><` → live-bind PFE WR.
+  // Mr.1 fix-forward 2026-05-11: % moved INSIDE the span so track-record-proxy.js's
+  // setField (which sets full "90.2%" string) replaces correctly. Pre-fix had `>90.2</span>%<`
+  // resulting in "90.2%%" double-%.
   html = html.replace(
     />640<span style="[^"]*">ms<\/span></g,
-    '><span data-tr-field="pfe_wr">90.2</span>%<'
+    '><span data-tr-field="pfe_wr">90.2%</span><'
   );
   return html;
 }
@@ -353,6 +366,11 @@ function w7HeroDiagramChipsToLogos(html) {
   // Q-W7 carry-forward (W6 hero chip→logo migration extends to V0Diagram chips).
   // V0Diagram featured chips render: outer rect (40×32) + inner colored rect (22×22) + monogram text + name text.
   // Replace inner colored rect + monogram with <image href> + <title> (WCAG accessible-name).
+  //
+  // Mr.1 fix-forward 2026-05-11: "make the exchange logo fillup the shape" — increase image
+  // size from 22×22 (centered with whitespace) to 38×30 (fill the entire 40×32 chip with 1px
+  // margin on each side). preserveAspectRatio stays "xMidYMid meet" (no distortion); larger
+  // bounding box means logos appear visually larger inside the chip.
   const logoMap = {
     'H':  { src: '/_design/logos/hyperliquid.png', alt: 'Hyperliquid logo' },
     'B':  { src: '/_design/logos/binance.png',     alt: 'Binance logo' },
@@ -365,9 +383,37 @@ function w7HeroDiagramChipsToLogos(html) {
     (match, mono) => {
       const cfg = logoMap[mono];
       if (!cfg) return match;
-      return `<image href="${cfg.src}" x="-15" y="-11" width="22" height="22" preserveAspectRatio="xMidYMid meet"><title>${cfg.alt}</title></image>`;
+      return `<image href="${cfg.src}" x="-19" y="-15" width="38" height="30" preserveAspectRatio="xMidYMid meet"><title>${cfg.alt}</title></image>`;
     }
   );
+}
+
+function w7HeroHideFlowDiagramLabel(html) {
+  // Mr.1 fix-forward 2026-05-11: "remove the flow.diagram words"
+  // The canonical canvas has a "flow.diagram" placeholder-cap header above the V0Diagram panel.
+  // Strip it via class addition (CSS .flow-diagram-hide rule sets display:none).
+  return html.replace(
+    /(<span class="placeholder-cap")(>flow\.diagram<\/span>)/g,
+    '$1 style="display:none"$2'
+  );
+}
+
+function w7HeroArtboardWidth(html) {
+  // Mr.1 fix-forward 2026-05-11: "Fill up the whole page, you can see the right side is blank"
+  // V1Hero JSX renders <div class="artboard" style="width:1440px;height:900px;padding:28px 80px">.
+  // Fixed width:1440px causes left-aligned layout on wider viewports (>1440px).
+  // Strip fixed width + height; replace with max-width + auto margin so artboard centers and
+  // fills viewport up to 1440px. Padding stays for inner layout.
+  return html
+    .replace(
+      /<div class="artboard" style="width:1440px;height:900px;padding:28px 80px">/g,
+      '<div class="artboard" style="padding:28px 80px;max-width:1440px;margin:0 auto;width:100%">'
+    )
+    // Mobile artboard (375px wide) — keep narrow but center
+    .replace(
+      /<div class="artboard" style="width:375px;height:1100px;padding:20px 22px">/g,
+      '<div class="artboard" style="padding:20px 22px;max-width:375px;margin:0 auto;width:100%">'
+    );
 }
 
 // MOST RECENT CALL + CALL STREAM pollers (vanilla JS — appended after hero render at C3 inject time)
@@ -568,8 +614,10 @@ async function main() {
       raw = w7HeroFourStatLiveBinds(raw);          // VENUES + TIMEFRAMES + Total Trade Calls
       raw = w7HeroDiagramFooter(raw);              // Q-W7-4 footer "5 venues integrated · 5 featured" live-bind
       raw = w7HeroNavVersion(raw, version);        // Q-W7-3 nav v1.x shipped
-      raw = w7HeroDiagramChipsToLogos(raw);        // W6 Q-W7 carry-forward (5 SVG <image> logos in V0Diagram chips)
+      raw = w7HeroDiagramChipsToLogos(raw);        // W6 Q-W7 carry-forward (5 SVG <image> logos in V0Diagram chips, Mr.1 fix-forward: fill chip)
       raw = w7HeroCallStreamLiveBind(raw);         // Mr.1 fix-forward: V1Feed FEED_BASE → live /api/recent-calls?limit=6 poller
+      raw = w7HeroHideFlowDiagramLabel(raw);       // Mr.1 fix-forward 2026-05-11: hide "flow.diagram" placeholder-cap label
+      raw = w7HeroArtboardWidth(raw);              // Mr.1 fix-forward 2026-05-11: strip fixed 1440px width, allow max-width centering
       raw = w7HeroStripNav(raw);                   // strip V1Hero's nav (existing live W3 nav preserved for cross-page consistency)
       // Append vanilla-JS poller for MOST RECENT CALL (mounts to all [data-w7-recent-call] in the dual-render block)
       html = raw + W7_RECENT_CALL_POLLER_JS;

@@ -1011,3 +1011,217 @@
   .lp-belowfold-desktop, .lp-rest-desktop, .lp-hero-desktop { display: none !important; }
   .lp-belowfold-mobile,  .lp-rest-mobile,  .lp-hero-mobile  { display: block !important; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   DESIGN-W7 fix-forward 2026-05-11 (Mr.1 directive — match canonical
+   Claude Design HTML desktop view): canonical class definitions extracted
+   from Design/AlgoVault Landing Hero v1/styles.css that were missing from
+   algovault-design.css. Plasma Mint accents throughout (--cyan aliased
+   to mint hue 165 already; --accent set on .theme-mint root).
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Theme: Plasma Mint accent system */
+.theme-mint, body {
+  --accent:        oklch(0.86 0.16 165);
+  --accent-edge:   oklch(0.42 0.08 165);
+  --accent-deep:   oklch(0.56 0.14 170);
+  --accent-glow-1: oklch(0.34 0.12 165 / 0.55);
+  --accent-glow-2: oklch(0.28 0.08 180 / 0.4);
+  --accent-glow-3: oklch(0.26 0.06 200 / 0.3);
+}
+
+/* Top nav (V1Hero shipped variant — when not stripped) + nav-pill / nav-cta / nav-logo */
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.nav-logo-mark {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent, var(--mint)), oklch(0.5 0.16 200));
+  color: oklch(0.13 0.012 265);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+}
+.nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; color: oklch(0.78 0.008 265); }
+.nav-links a { color: oklch(0.78 0.008 265); text-decoration: none; transition: color 0.15s; }
+.nav-links a:hover { color: oklch(0.97 0.005 265); }
+.nav-pill {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: oklch(0.78 0.008 265);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.nav-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: oklch(0.97 0.005 265);
+  color: oklch(0.13 0.012 265);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+/* Buttons — Plasma Mint accent system (Mr.1 directive: "Try Free in Claude" is Plasma Mint) */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 0 20px;
+  height: 46px;
+  border-radius: 10px;
+  font-family: var(--font-text);
+  font-weight: 500;
+  font-size: 14.5px;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform 0.1s, background 0.15s, border-color 0.15s, filter 0.15s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: oklch(0.97 0.005 265); color: oklch(0.13 0.012 265); }
+.btn-primary:hover { background: oklch(1 0 0); }
+.btn-primary.accent-violet {
+  background: var(--violet, oklch(0.72 0.15 290));
+  color: oklch(0.18 0.04 290);
+}
+/* Plasma Mint primary button (Mr.1 directive 2026-05-11) */
+.btn-primary.accent-cyan {
+  background: var(--accent, var(--mint));
+  color: oklch(0.16 0.05 165);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.35),
+    0 0 0 1px oklch(0.96 0.05 165 / 0.25),
+    0 8px 30px -10px oklch(0.86 0.16 165 / 0.55);
+}
+.btn-primary.accent-cyan:hover { filter: brightness(1.05); }
+.btn-secondary {
+  background: transparent;
+  color: oklch(0.97 0.005 265);
+  border-color: var(--line-2);
+}
+.btn-secondary:hover { border-color: oklch(0.58 0.01 265); background: oklch(0.22 0.012 265 / 0.6); }
+
+/* Exchange tile — placeholder monogram chips (W7 V0Diagram chip slots are now <image> SVG logos) */
+.xchg-tile {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: oklch(0.2 0.012 265 / 0.6);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: oklch(0.78 0.008 265);
+}
+.xchg-mark {
+  width: 20px; height: 20px;
+  border-radius: 5px;
+  display: grid; place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  color: oklch(0.13 0.012 265);
+  background: var(--mark, oklch(0.7 0.06 265));
+  flex-shrink: 0;
+}
+
+/* Mono captions for placeholders */
+.placeholder-cap {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: oklch(0.44 0.012 265);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Animated diagram primitives (canonical canvas — V0Diagram + flow.diagram panel) */
+.flow-line {
+  stroke: oklch(0.4 0.012 265);
+  stroke-width: 1;
+  fill: none;
+}
+.flow-line.dashed { stroke-dasharray: 3 4; }
+.flow-pulse {
+  stroke-width: 1.5;
+  fill: none;
+  filter: drop-shadow(0 0 4px var(--accent, var(--mint)));
+}
+@keyframes pulse-dash { to { stroke-dashoffset: -120; } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes orbit-sweep { to { transform: rotate(360deg); } }
+@keyframes feed-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes ticker-flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: 0.55; }
+  98% { opacity: 1; }
+  99% { opacity: 0.7; }
+}
+
+/* Counter digit ticking */
+.counter {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+/* Trust bar (W3 ratification: dropped in W7 hero render — shown for completeness) */
+.trust-row {
+  display: flex; align-items: center; gap: 24px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: oklch(0.58 0.01 265);
+}
+.trust-item { display: inline-flex; align-items: center; gap: 8px; }
+.trust-num { color: oklch(0.78 0.008 265); font-weight: 600; }
+
+/* Code window — TryIn30 quickstart + ForDevelopers code snippets */
+.code-window {
+  background: oklch(0.13 0.01 265);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.code-window-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: oklch(0.16 0.01 265);
+  font-size: 11.5px;
+  color: oklch(0.58 0.01 265);
+}
+.code-dot { width: 9px; height: 9px; border-radius: 50%; }
+.code-body {
+  padding: 16px 18px;
+  overflow: hidden;
+}
+.code-line { white-space: pre; }
+/* Syntax tokens (Build Rule 8 preserve orange/yellow on tk-num + tk-str etc.) */
+.tk-key { color: oklch(0.78 0.13 290); }
+.tk-str { color: oklch(0.82 0.12 145); }
+.tk-num { color: oklch(0.82 0.12 65); }
+.tk-com { color: oklch(0.44 0.012 265); font-style: italic; }
+.tk-fn  { color: oklch(0.8 0.13 220); }
+.tk-pun { color: oklch(0.58 0.01 265); }
+
+/* Hide canvas-only "flow.diagram" label per Mr.1 directive 2026-05-11 */
+.placeholder-cap.flow-diagram-hide { display: none !important; }
+
+/* Artboard width — fix Mr.1 "right side blank" issue. Canonical canvas is 1440px wide;
+   on wider viewports center the artboard so it doesn't sit left-aligned. */
+.lp-hero-desktop > .artboard,
+.lp-belowfold-desktop > .artboard,
+.lp-rest-desktop > .artboard {
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+}
