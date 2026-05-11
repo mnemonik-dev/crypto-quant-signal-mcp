@@ -1662,7 +1662,7 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
       <div class="verify-any-call-left">
         <div class="verify-any-call-eyebrow">&middot; VERIFY</div>
         <h2 class="verify-any-call-h2">Verify Any <span class="verify-any-call-h2-accent">Call</span></h2>
-        <p class="verify-any-call-p">Every signal is hashed on Base L2 <em class="verify-any-call-em">before</em> the outcome is known. Inspect the contract on Basescan &mdash; we can&rsquo;t edit history.</p>
+        <p class="verify-any-call-p">Every Call is hashed on Base L2 <em class="verify-any-call-em">before</em> the outcome is known. Inspect the contract on Basescan &mdash; we can&rsquo;t edit history.</p>
         <div class="verify-any-call-meta">
           <div class="verify-any-call-meta-row">
             <span class="verify-any-call-meta-label">contract</span>
@@ -1682,9 +1682,9 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
         </div>
       </div>
       <form class="verify-any-call-form" action="/verify" method="get" onsubmit="return verifyAnyCallSubmit(event);">
-        <label class="verify-any-call-form-label" for="verify-any-call-input">signal id or call timestamp</label>
+        <label class="verify-any-call-form-label" for="verify-any-call-input">call id or call timestamp</label>
         <div class="verify-any-call-form-row">
-          <input id="verify-any-call-input" name="id" type="text" class="verify-any-call-input" placeholder="0x4a2&hellip;f91   &middot;   or   2026-05-09T17:42:18Z" aria-label="Signal ID or call timestamp" autocomplete="off">
+          <input id="verify-any-call-input" name="id" type="text" class="verify-any-call-input" placeholder="0x4a2&hellip;f91   &middot;   or   2026-05-09T17:42:18Z" aria-label="Call ID or call timestamp" autocomplete="off">
           <button type="submit" class="verify-any-call-btn">Verify on-chain &rarr;</button>
         </div>
         <div class="verify-any-call-form-sub">opens <span class="verify-any-call-form-sub-mid">algovault.com/verify?id=&hellip;</span> &middot; shareable, deep-linkable proof page</div>
