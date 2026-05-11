@@ -877,88 +877,81 @@ document.addEventListener('input', function(e) {
 async function verifySignal() {
   var inputEl = document.getElementById('signal-id');
   if (!inputEl) {
-    // Fallback: try the first .signal-id-input with a value (mobile artboard active, desktop hidden).
     var inputs = document.querySelectorAll('.signal-id-input');
     for (var i = 0; i < inputs.length; i++) { if (inputs[i].value) { inputEl = inputs[i]; break; } }
   }
   var id = inputEl ? inputEl.value : '';
-  var el = document.getElementById('result');
+  // W9-FIX-FORWARD R2 (2026-05-11): class-based mount + wrapper. Dual-render aware (one mount
+  // per artboard); verifySignal writes innerHTML to all. Wrapper toggles display:block on
+  // user call OR on ?id= URL param. Removed emerald-500 border wrapper per Mr.1 visual review.
+  var mounts = document.querySelectorAll('.verify-result-mount');
+  var wrappers = document.querySelectorAll('.verify-result-wrapper');
   var btn = document.getElementById('verify-btn');
-  // W9-FIX-FORWARD Fix 6 (2026-05-11): reveal wrapper on user-initiated verifySignal call so the
-  // result panel becomes visible. wrapper starts hidden by default to prevent auto-display.
-  var wrapper = document.getElementById('verify-result-wrapper');
-  if (wrapper) wrapper.style.display = 'block';
-  if (!el) return;
-  if (!id) { el.className = 'verify-result-panel hidden'; el.style.display = 'none'; if (wrapper) wrapper.style.display = 'none'; return; }
-
+  if (!mounts.length) return;
+  if (!id) {
+    mounts.forEach(function(m){ m.innerHTML = ''; });
+    wrappers.forEach(function(w){ w.style.display = 'none'; });
+    return;
+  }
+  wrappers.forEach(function(w){ w.style.display = 'block'; });
   if (btn) { btn.textContent = 'Checking...'; btn.disabled = true; }
-
+  function setAll(content) { mounts.forEach(function(m){ m.innerHTML = content; }); }
   try {
     var res = await fetch(API_BASE + '/api/verify-signal?signalId=' + id);
     var data = await res.json();
-
     if (data.error === 'Signal not found') {
-      el.innerHTML = '<div class="bg-red-500/5 border border-red-500/20 rounded-xl p-6 text-center">' +
-        '<div class="text-red-400 text-lg font-bold mb-1">NOT FOUND</div>' +
-        '<p class="text-gray-400 text-sm">No call with ID ' + id + ' exists.</p></div>';
-      el.style.display = '';
-      el.className = 'verify-result-panel mt-5';
+      setAll(
+        '<div style="padding:20px 0">' +
+          '<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px"><span style="width:7px;height:7px;border-radius:50%;background:oklch(0.7 0.18 25)"></span><span style="font-family:var(--font-mono);font-size:11px;color:oklch(0.7 0.18 25);letter-spacing:0.14em;font-weight:700">NOT FOUND</span></div>' +
+          '<p style="font-size:14px;color:var(--fg-3);margin:0">No call with ID ' + id + ' exists.</p>' +
+        '</div>'
+      );
       return;
     }
-
     if (data.verified === false && data.reason) {
-      el.innerHTML = '<div class="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-6 text-center">' +
-        '<div class="text-yellow-400 text-lg font-bold mb-1">PENDING</div>' +
-        '<p class="text-gray-400 text-sm">Call recorded, awaiting next daily batch (00:05 UTC).</p>' +
-        '<div class="mt-3 text-gray-500 text-xs">' + data.signal.coin + ' &middot; ' + data.signal.direction + ' &middot; ' + data.signal.confidence + '% confidence</div></div>';
-      el.style.display = '';
-      el.className = 'verify-result-panel mt-5';
+      setAll(
+        '<div style="padding:20px 0">' +
+          '<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px"><span style="width:7px;height:7px;border-radius:50%;background:oklch(0.78 0.13 220)"></span><span style="font-family:var(--font-mono);font-size:11px;color:oklch(0.78 0.13 220);letter-spacing:0.14em;font-weight:700">PENDING</span></div>' +
+          '<p style="font-size:14px;color:var(--fg-3);margin:0 0 8px">Call recorded, awaiting next daily batch (00:05 UTC).</p>' +
+          '<div style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg-4)">' + data.signal.coin + ' &middot; ' + data.signal.direction + ' &middot; ' + data.signal.confidence + '% confidence</div>' +
+        '</div>'
+      );
       return;
     }
-
     var s = data.signal;
     var b = data.batch;
-    el.innerHTML =
-      '<div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-6">' +
-        '<div class="flex items-center gap-2 mb-4">' +
-          '<div class="w-2 h-2 rounded-full bg-emerald-400"></div>' +
-          '<span class="text-emerald-400 font-bold text-sm">VERIFIED ON-CHAIN</span>' +
-        '</div>' +
-        '<div class="text-white font-semibold text-lg mb-1">Call #' + s.id + '</div>' +
-        '<p class="text-gray-400 text-sm mb-4">' + s.coin + ' &middot; ' + s.direction + ' &middot; ' + s.confidence + '% confidence &middot; ' + (s.timeframe || '') + '</p>' +
-        '<div class="grid sm:grid-cols-2 gap-4 mb-4">' +
-          '<div>' +
-            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Price at Call</div>' +
-            '<div class="text-white text-sm">$' + Number(s.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6}) + '</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Timestamp</div>' +
-            '<div class="text-white text-sm">' + fmtDate(s.timestamp) + '</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Batch</div>' +
-            '<div class="text-white text-sm">#' + b.id + ' &middot; ' + b.signalCount + ' calls</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Published</div>' +
-            '<div class="text-white text-sm">' + fmtDate(b.publishedAt) + '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="border-t border-white/5 pt-4 space-y-2">' +
-          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Call Hash</span><span class="hash-text text-gray-300">' + s.hash + '</span></div>' +
-          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Merkle Root</span><span class="hash-text text-gray-300">' + b.root + '</span></div>' +
-          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Tx Hash</span><span class="hash-text text-gray-300">' + truncHash(b.txHash) + ' <a href="' + b.basescanUrl + '" target="_blank" class="text-mint-400 hover:underline ml-1">View on Basescan &rarr;</a></span></div>' +
-          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Contract</span><span class="hash-text text-gray-300">' + truncHash(data.contractAddress) + ' <a href="https://basescan.org/address/' + data.contractAddress + '" target="_blank" class="text-mint-400 hover:underline ml-1">View on Basescan &rarr;</a></span></div>' +
-          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Chain</span><span class="text-gray-300 text-xs">Base (8453)</span></div>' +
-        '</div>' +
-      '</div>';
-    el.style.display = '';
-    el.className = 'verify-result-panel mt-5';
+    var rowStyle = 'display:grid;grid-template-columns:120px 1fr;align-items:start;gap:14px;padding:10px 0;border-bottom:1px solid var(--line);font-family:var(--font-mono)';
+    var labelStyle = 'font-size:10.5px;color:var(--fg-4);letter-spacing:0.1em;text-transform:uppercase';
+    var valueStyle = 'font-size:13px;color:var(--fg-2);word-break:break-all;line-height:1.4';
+    setAll(
+      // VERIFIED ON-CHAIN status header — borderless (Mr.1 "remove black frame")
+      '<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:18px">' +
+        '<span style="width:7px;height:7px;border-radius:50%;background:var(--accent, var(--mint));box-shadow:0 0 8px var(--accent, var(--mint))"></span>' +
+        '<span style="font-family:var(--font-mono);font-size:11px;color:var(--accent, var(--mint));letter-spacing:0.14em;font-weight:700">VERIFIED ON-CHAIN</span>' +
+      '</div>' +
+      '<div style="font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:-0.018em;color:var(--fg);margin-bottom:6px">Call #' + s.id + '</div>' +
+      '<p style="font-family:var(--font-mono);font-size:12.5px;color:var(--fg-3);margin:0 0 22px">' + s.coin + ' &middot; ' + s.direction + ' &middot; ' + s.confidence + '% confidence' + (s.timeframe ? ' &middot; ' + s.timeframe : '') + '</p>' +
+      // 2-col stats row
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">' +
+        '<div><div style="' + labelStyle + ';margin-bottom:5px">Price at Call</div><div style="font-family:var(--font-mono);font-size:13.5px;color:var(--fg)">$' + Number(s.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6}) + '</div></div>' +
+        '<div><div style="' + labelStyle + ';margin-bottom:5px">Timestamp</div><div style="font-family:var(--font-mono);font-size:13.5px;color:var(--fg)">' + fmtDate(s.timestamp) + '</div></div>' +
+        '<div><div style="' + labelStyle + ';margin-bottom:5px">Batch</div><div style="font-family:var(--font-mono);font-size:13.5px;color:var(--fg)">#' + b.id + ' &middot; ' + b.signalCount + ' calls</div></div>' +
+        '<div><div style="' + labelStyle + ';margin-bottom:5px">Published</div><div style="font-family:var(--font-mono);font-size:13.5px;color:var(--fg)">' + fmtDate(b.publishedAt) + '</div></div>' +
+      '</div>' +
+      // Hashes + tx
+      '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Call Hash</span><span style="' + valueStyle + '">' + s.hash + '</span></div>' +
+      '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Merkle Root</span><span style="' + valueStyle + '">' + b.root + '</span></div>' +
+      '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Tx Hash</span><span style="' + valueStyle + '">' + truncHash(b.txHash) + ' <a href="' + b.basescanUrl + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent, var(--mint));text-decoration:none;margin-left:6px">View on Basescan &rarr;</a></span></div>' +
+      '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Contract</span><span style="' + valueStyle + '">' + truncHash(data.contractAddress) + ' <a href="https://basescan.org/address/' + data.contractAddress + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent, var(--mint));text-decoration:none;margin-left:6px">View on Basescan &rarr;</a></span></div>' +
+      '<div style="' + rowStyle + ';border-bottom:none"><span style="' + labelStyle + '">Chain</span><span style="' + valueStyle + '">Base (8453)</span></div>'
+    );
   } catch (err) {
-    el.innerHTML = '<div class="bg-red-500/5 border border-red-500/20 rounded-xl p-6 text-center">' +
-      '<div class="text-red-400 text-sm">Verification request failed. Try again.</div></div>';
-    el.style.display = '';
-    el.className = 'verify-result-panel mt-5';
+    setAll(
+      '<div style="padding:20px 0">' +
+        '<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px"><span style="width:7px;height:7px;border-radius:50%;background:oklch(0.7 0.18 25)"></span><span style="font-family:var(--font-mono);font-size:11px;color:oklch(0.7 0.18 25);letter-spacing:0.14em;font-weight:700">ERROR</span></div>' +
+        '<p style="font-size:14px;color:var(--fg-3);margin:0">Verification request failed. Try again.</p>' +
+      '</div>'
+    );
   } finally {
     if (btn) { btn.textContent = 'Verify on-chain \\u2192'; btn.disabled = false; }
   }
@@ -1022,8 +1015,7 @@ document.querySelectorAll('.signal-id-input').forEach(function(el) {
 // loads with ?id= present but verifySignal hasn't yet completed).
 document.addEventListener('DOMContentLoaded', function() {
   if (new URLSearchParams(location.search).has('id') || new URLSearchParams(location.search).has('signalId')) {
-    var r = document.getElementById('verify-result-wrapper');
-    if (r) r.style.display = 'block';
+    document.querySelectorAll('.verify-result-wrapper').forEach(function(w){ w.style.display = 'block'; });
   }
 });
 </script>`;
@@ -1073,19 +1065,14 @@ function preserveVerifyW4Form(html, isDesktop) {
 
 // Wrap desktop + mobile artboards in lp-verify-{desktop,mobile} divs. @media swap CSS is in the
 // VERIFY_HEAD_AND_NAV <style> block.
-// DESIGN-W9-FIX-FORWARD Fix 6 (2026-05-11): #result div wrapped in verify-result-wrapper —
-// hidden by default; revealed only on ?id= URL param OR on user-initiated verifySignal() call.
-// Removes the auto-PENDING-display Mr.1 observed on page load (root cause: W4 URL-param IIFE
-// fell through to /api/performance-public.recentSignals[0].id auto-load; fix removes that
-// fallback + adds the wrapper for visual layered defense).
+// DESIGN-W9-FIX-FORWARD R2 (2026-05-11): result mount moved INSIDE each artboard, immediately
+// after VInput section. Class-based selectors (.verify-result-wrapper > .verify-result-mount)
+// support dual-render — verifySignal queries class + writes to all mounts. Wrapper hidden by
+// default; revealed on user-initiated verifySignal call OR on ?id= URL param.
 function wrapVerifyDualRender(desktopHtml, mobileHtml) {
   return `<main class="verify-main">\n` +
     `<div class="lp-verify-desktop">${desktopHtml}</div>\n` +
     `<div class="lp-verify-mobile">${mobileHtml}</div>\n` +
-    // Fix 6 wrapper — hidden by default; visibility toggled by DOMContentLoaded JS + verifySignal call.
-    `<div id="verify-result-wrapper" style="display:none">\n` +
-    `<div id="result" class="verify-result-panel hidden" aria-live="polite" style="display:none;max-width:48rem;margin:1.25rem auto 0;padding:0 1.5rem"></div>\n` +
-    `</div>\n` +
     `</main>\n`;
 }
 
@@ -1255,6 +1242,97 @@ function applyVerifyFixForward4bTipsCopy(html) {
   );
 }
 
+// ── DESIGN-W9 FIX-FORWARD ROUND 2 (2026-05-11 Mr.1 visual review post-Round-1-deploy) ──
+
+// Fix R2-1: insert result-mount immediately after VInput section close (currently the result mount
+// sat after both artboards at page-bottom). Class-based (.verify-result-mount + wrapper) for
+// dual-render. verifySignal writes innerHTML to all mounts; wrapper toggles display.
+// Anchor: VInput section ends with `Latest Trade Calls to Verify</span></div></div></section>` (post Fix 4b).
+function applyVerifyFixForwardR2InsertResultMount(html, isDesktop) {
+  const sectionPadding = isDesktop ? '0 80px 56px' : '0 22px 36px';
+  const mountSection =
+    `<section style="padding:${sectionPadding}" class="verify-result-section">` +
+      `<div class="verify-result-wrapper" style="display:none">` +
+        `<div class="verify-result-mount" aria-live="polite" style="padding:0"></div>` +
+      `</div>` +
+    `</section>`;
+  return html.replace(
+    /(Latest Trade Calls to Verify<\/span><\/div><\/div><\/section>)/g,
+    '$1' + mountSection
+  );
+}
+
+// Fix R2-2: strip bg-radial-accent divs (the green/mint radial glow Mr.1 saw bleeding above the
+// global W7 sticky nav). bg-grid + bg-noise preserved — Mr.1 only flagged the green shape.
+function applyVerifyFixForwardR2StripRadialAccent(html) {
+  return html.replace(/<div class="bg-radial-accent"><\/div>/g, '');
+}
+
+// Fix R2-3: insert "How to Verify" (3-step) + "How It Works" (4-step) sections immediately before
+// VFaq section. Restores pre-W9 verify.html content as VCard-style cards per Mr.1 directive
+// "Put back How to Verify + How It Works as cards, Above FAQ".
+// Anchor: VFaq's opening `<section ...><div ...>· faq</div>`.
+function applyVerifyFixForwardR2AddHowSections(html, isDesktop) {
+  const sectionPadding = isDesktop ? '0 80px 80px' : '0 22px 36px';
+  const headingSize = isDesktop ? 38 : 26;
+  const cardCols = isDesktop ? '1fr 1fr 1fr' : '1fr';
+  const cardCols4 = isDesktop ? 'repeat(4, 1fr)' : '1fr';
+  const cardPad = isDesktop ? '24px 22px' : '20px 20px';
+
+  const eyebrow = (text) =>
+    `<div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:18px;font-family:var(--font-mono);font-size:11px;color:var(--fg-3);letter-spacing:0.14em;text-transform:uppercase">` +
+      `<span style="width:5px;height:5px;border-radius:50%;background:var(--accent, var(--mint));box-shadow:0 0 8px var(--accent, var(--mint))"></span>` +
+      `· ${text}` +
+    `</div>`;
+  const h2 = (text) =>
+    `<h2 style="font-family:var(--font-display);font-size:${headingSize}px;font-weight:500;letter-spacing:-0.022em;line-height:1.05;margin:0 0 28px;text-wrap:balance">${text}</h2>`;
+  const card = (num, title, body) =>
+    `<div style="border:1px solid var(--line);border-radius:14px;background:oklch(0.18 0.014 265 / 0.55);padding:${cardPad};display:flex;flex-direction:column;gap:12px">` +
+      `<div style="display:flex;align-items:center;justify-content:space-between">` +
+        `<span style="width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:oklch(0.32 0.08 170 / 0.22);border:1px solid oklch(0.5 0.14 165 / 0.4);color:var(--accent, var(--mint));font-family:var(--font-mono);font-size:12px;font-weight:600">${num}</span>` +
+      `</div>` +
+      `<div>` +
+        `<div style="font-family:var(--font-display);font-size:16px;font-weight:500;letter-spacing:-0.012em;color:var(--fg);margin-bottom:6px">${title}</div>` +
+        `<p style="font-size:13px;color:var(--fg-3);margin:0;line-height:1.55">${body}</p>` +
+      `</div>` +
+    `</div>`;
+
+  const howToVerify =
+    `<section style="padding:${sectionPadding}">` +
+      eyebrow('How to Verify') +
+      h2('Verify any AlgoVault call in 3 steps.') +
+      `<div style="display:grid;grid-template-columns:${cardCols};gap:14px">` +
+        card('01', 'Pick a Call',
+          `Use a Recent ID pill above, click a Signal ID on <a href="/track-record" style="color:var(--accent, var(--mint));text-decoration:none">/track-record</a> &gt; Latest Trade Calls, or pull <span style="font-family:var(--font-mono);color:var(--accent, var(--mint))">GET /api/performance-public</span> for any call.id.`) +
+        card('02', 'Check the Proof',
+          'Enter the ID above and click Verify on-chain. You’ll see the call’s hash, its Merkle proof, and the on-chain batch it belongs to.') +
+        card('03', 'Verify On-Chain',
+          'Click the Basescan link to inspect the Merkle root in the smart contract. The proof confirms the call existed before its outcome window opened.') +
+      `</div>` +
+    `</section>`;
+
+  const howItWorks =
+    `<section style="padding:${sectionPadding}">` +
+      eyebrow('How It Works') +
+      h2('Hashed first. Anchored daily. Immutable forever.') +
+      `<div style="display:grid;grid-template-columns:${cardCols4};gap:14px">` +
+        card('01', 'Call Created',
+          'Every BUY/SELL/HOLD call is hashed via keccak256(coin, signal, confidence, timeframe, timestamp, price) at the moment it’s generated — BEFORE the outcome is known.') +
+        card('02', 'Hash Stored',
+          'The hash is stored alongside the call in our database. Deterministic; anyone with the call data can recompute and verify it.') +
+        card('03', 'Daily Batch',
+          'At 00:05 UTC, all new call hashes assemble into a Merkle tree. Each leaf is a call hash; the tree produces a single root committing the entire set.') +
+        card('04', 'On-Chain Anchor',
+          'The Merkle root is published to the AlgoVault contract on Base L2 — permanent, immutable, publicly verifiable by anyone.') +
+      `</div>` +
+    `</section>`;
+
+  return html.replace(
+    /(<section[^>]*>\s*<div[^>]*>\s*<span[^>]*><\/span>· faq)/g,
+    howToVerify + howItWorks + '$1'
+  );
+}
+
 // Aggregate C3 overrides for a single artboard.
 // DESIGN-W9-FIX-FORWARD (2026-05-11): Q-W9-4 REVERSED by architect — applyVerifyOverride2VRecentEmpty
 // REMOVED from chain (ship JSX VRecent 10 rows verbatim per Mr.1's "we publish Merkle batches
@@ -1267,10 +1345,14 @@ function applyVerifyC3Overrides(html, isDesktop) {
   html = applyVerifyOverride3Contract(html);
   html = applyVerifyOverride45Links(html);
   html = applyVerifyOverride6PreOutcomeStrip(html);
-  // Fix-Forward additions (post-deploy 2026-05-11):
+  // Fix-Forward Round 1 additions (post-deploy 2026-05-11):
   html = applyVerifyFixForward1StripNav(html);                  // Fix 1: strip JSX VerifyNav (duplicate nav)
   html = applyVerifyFixForward4aPillsMarkup(html, isDesktop);   // Fix 4a: replace JSX helper text with #sample-ids div (desktop) / class-only (mobile)
   html = applyVerifyFixForward4bTipsCopy(html);                 // Fix 4b: replace JSX tip copy
+  // Fix-Forward Round 2 additions (Mr.1 post-Round-1 visual review 2026-05-11):
+  html = applyVerifyFixForwardR2InsertResultMount(html, isDesktop); // R2-1: result mount inside VInput
+  html = applyVerifyFixForwardR2StripRadialAccent(html);            // R2-2: strip green radial glow
+  html = applyVerifyFixForwardR2AddHowSections(html, isDesktop);    // R2-3: How to Verify + How It Works cards above VFaq
   return html;
 }
 

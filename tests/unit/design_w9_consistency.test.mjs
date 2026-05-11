@@ -64,10 +64,11 @@ test('landing/verify.html: C2 7 JSX sections render in canonical order (VHero H1
     'section order violated: must be VHero → VInput → VHowItWorks → VRecent → VFaq → VFooter');
 });
 
-test('landing/verify.html: C2 H1 + H2 + H3 counts match JSX SoT dual-render (2 H1 + 6 H2 + 2 H3)', async () => {
+test('landing/verify.html: C2 H1 + H2 + H3 counts match JSX SoT dual-render + R2-3 additions (2 H1 + 10 H2 + 2 H3)', async () => {
   const html = await read('landing/verify.html');
   assert.strictEqual(countOcc(html, /<h1[^>]*>/), 2, 'expected 2 H1 (1 per artboard)');
-  assert.strictEqual(countOcc(html, /<h2[^>]*>/), 6, 'expected 6 H2 (3 JSX H2s × 2 dual-render)');
+  // R2-3 added "How to Verify" + "How It Works" sections (2 new H2s × dual = 4 new); 3 JSX H2s × dual = 6; total 10.
+  assert.strictEqual(countOcc(html, /<h2[^>]*>/), 10, 'expected 10 H2 (3 JSX + 2 R2-3 = 5 × 2 dual-render)');
   assert.strictEqual(countOcc(html, /<h3[^>]*>/), 2, 'expected 2 H3 (VFooter × 2 dual-render)');
 });
 
@@ -81,12 +82,14 @@ test('landing/verify.html: 5 JSON-LD blocks preserved byte-identical (Product / 
 
 // ── C2 W4 form preservation (Q-W9-10) ───────────────────────────────────────
 
-test('landing/verify.html: C2 W4 form preservation — verifySignal + #signal-id + #verify-btn + #result single-instance ids', async () => {
+test('landing/verify.html: C2 W4 form preservation — verifySignal + #signal-id + #verify-btn + .verify-result-mount (R2-1 supersedes #result)', async () => {
   const html = await read('landing/verify.html');
   assert.ok(countOcc(html, 'verifySignal') >= 5, 'verifySignal function references missing');
   assert.strictEqual(countOcc(html, /id="signal-id"/g), 1, '#signal-id must be unique (desktop only; mobile strips id)');
   assert.strictEqual(countOcc(html, /id="verify-btn"/g), 1, '#verify-btn must be unique (desktop only)');
-  assert.strictEqual(countOcc(html, /id="result"/g), 1, '#result must be unique (single instance after artboards)');
+  // R2-1: #result superseded by class .verify-result-mount (dual-render = 2 instances).
+  assert.strictEqual(countOcc(html, /id="result"/g), 0, '#result id superseded by .verify-result-mount class (R2-1)');
+  assert.strictEqual(countOcc(html, /class="verify-result-mount"/g), 2, '.verify-result-mount class must appear in both artboards (dual-render)');
   // Both inputs share class for cross-artboard querying
   assert.ok(countOcc(html, /class="signal-id-input"/g) >= 2, 'class="signal-id-input" must appear on both desktop + mobile inputs');
   // Both buttons have onclick handler
@@ -175,6 +178,64 @@ test('landing/verify.html: C3 hydration order (Q-W9-11) — track-record-proxy.j
   assert.ok(proxyIdx < inlineIdx, `Q-W9-11 hydration order violated: proxy.js must precede inline W9 block (proxyIdx=${proxyIdx}, inlineIdx=${inlineIdx})`);
   // Countdown setInterval present
   assert.ok(html.includes('updateNextBatchCountdown') && html.includes('60000'), 'countdown setInterval missing');
+});
+
+// ── W9 FIX-FORWARD ROUND 2 (post-deploy Mr.1 visual review 2026-05-11) ──────
+
+test('landing/verify.html: R2-1 result mount inside VInput (class-based, dual-render) + emerald frame stripped', async () => {
+  const html = await read('landing/verify.html');
+  // Wrapper + mount classes present (one per artboard = 2 dual-render)
+  assert.strictEqual(countOcc(html, /class="verify-result-wrapper"/g), 2, '2 verify-result-wrapper class instances (dual-render)');
+  assert.strictEqual(countOcc(html, /class="verify-result-mount"/g), 2, '2 verify-result-mount class instances (dual-render)');
+  // Legacy id-based wrapper removed
+  assert.strictEqual(countOcc(html, /id="verify-result-wrapper"/g), 0, 'legacy id="verify-result-wrapper" must be 0 (switched to class)');
+  // verifySignal must NOT use emerald-500 wrapper (frame stripped per Mr.1 "remove black frame too")
+  assert.strictEqual(countOcc(html, 'bg-emerald-500/5 border border-emerald-500/20'), 0, 'emerald-500 border frame must be 0 (verifySignal innerHTML rewritten borderless)');
+  // verifySignal uses class-based queries
+  assert.ok(html.includes("querySelectorAll('.verify-result-mount')"), 'verifySignal must query .verify-result-mount');
+});
+
+test('landing/verify.html: R2-1 result mount position — section appears immediately after VInput (before VHowItWorks)', async () => {
+  const html = await read('landing/verify.html');
+  const tipIdx = html.indexOf('Latest Trade Calls to Verify');
+  const resultSectionIdx = html.indexOf('verify-result-section');
+  const howItWorksIdx = html.indexOf('· how verification works');
+  assert.ok(tipIdx > 0 && resultSectionIdx > 0 && howItWorksIdx > 0, 'all 3 anchors present');
+  assert.ok(tipIdx < resultSectionIdx, 'result section must come AFTER VInput tip line');
+  assert.ok(resultSectionIdx < howItWorksIdx, 'result section must come BEFORE VHowItWorks');
+});
+
+test('landing/verify.html: R2-2 bg-radial-accent stripped (green shape at top removed)', async () => {
+  const html = await read('landing/verify.html');
+  assert.strictEqual(countOcc(html, /<div class="bg-radial-accent"><\/div>/g), 0, 'bg-radial-accent must be stripped');
+  // bg-grid + bg-noise preserved (Mr.1 only flagged green shape)
+  assert.ok(countOcc(html, /<div class="bg-grid"><\/div>/g) >= 2, 'bg-grid preserved (dual-render)');
+});
+
+test('landing/verify.html: R2-3 How to Verify (3-step) section present, above VFaq', async () => {
+  const html = await read('landing/verify.html');
+  assert.ok(countOcc(html, '· How to Verify') >= 2, '· How to Verify eyebrow present (dual-render)');
+  assert.ok(html.includes('Verify any AlgoVault call in 3 steps'), 'How to Verify h2 present');
+  for (const card of ['Pick a Call', 'Check the Proof', 'Verify On-Chain']) {
+    assert.ok(html.includes(card), `card "${card}" present`);
+  }
+  // Position: above VFaq
+  const howToIdx = html.indexOf('· How to Verify');
+  const faqIdx = html.indexOf('· faq');
+  assert.ok(howToIdx < faqIdx, 'How to Verify must be ABOVE VFaq');
+});
+
+test('landing/verify.html: R2-3 How It Works (4-step) section present, above VFaq', async () => {
+  const html = await read('landing/verify.html');
+  assert.ok(countOcc(html, '· How It Works') >= 2, '· How It Works eyebrow present (dual-render)');
+  assert.ok(html.includes('Hashed first. Anchored daily. Immutable forever'), 'How It Works h2 present');
+  for (const card of ['Call Created', 'Hash Stored', 'Daily Batch', 'On-Chain Anchor']) {
+    assert.ok(html.includes(card), `card "${card}" present`);
+  }
+  // Position: above VFaq
+  const howItIdx = html.indexOf('· How It Works');
+  const faqIdx = html.indexOf('· faq');
+  assert.ok(howItIdx < faqIdx, 'How It Works must be ABOVE VFaq');
 });
 
 test('landing/verify.html: C3 API field-name correctness (Q-W9-12 inline-fix — batch_id + published_at, NOT batchNumber + timestamp)', async () => {
