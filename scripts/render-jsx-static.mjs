@@ -1231,14 +1231,15 @@ function applyVerifyFixForward4aPillsMarkup(html, isDesktop) {
 }
 
 // Fix 4b: replace JSX literal `tip: use the share button on any /track-record row to get a deep-link`
-// with new copy `Tips: Click Signal ID on /track-record > Latest Trade Calls to Verify`.
+// with new copy `Tips: Click Call ID on /track-record > Latest Trade Calls to Verify`.
 // JSX renders the tip with React `<!-- -->` separator between adjacent text nodes and JSX children
 // (React's classic-runtime renderToString inserts a comment marker to split text-children regions
 // for hydration boundary tracking). Regex accounts for the `<!-- --> ` between "any" and the anchor.
+// R3.1 amendment (2026-05-11 Mr.1 directive): "Signal ID" → "Call ID" in tip text.
 function applyVerifyFixForward4bTipsCopy(html) {
   return html.replace(
     /<span style="color:var\(--fg-3\)">tip: use the share button on any<!-- --> (<a href="\/track-record"[^>]*>\/track-record<\/a>) row to get a deep-link<\/span>/g,
-    '<span style="color:var(--fg-3)">Tips: Click Signal ID on $1 &gt; Latest Trade Calls to Verify</span>'
+    '<span style="color:var(--fg-3)">Tips: Click Call ID on $1 &gt; Latest Trade Calls to Verify</span>'
   );
 }
 
@@ -1424,6 +1425,11 @@ function applyVerifyFixForwardR3SignalToCall(html) {
   html = html.replaceAll(
     'A signal can’t be edited after the market answers',
     'A trade call cannot be edited after the market answers'
+  );
+  // 9. R3.1 amendment: JSX VHowItWorks step 1 body "Model emits a typed call..." → "Model emits a Trade Call..."
+  html = html.replaceAll(
+    'Model emits a typed call (asset · TF · direction · confidence)',
+    'Model emits a Trade Call (asset · TF · direction · confidence)'
   );
   // 8. JSX VHowItWorks step 1 body: "Model emits a typed call (asset · TF · direction · confidence) from live market features."
   //    — already uses "call", fine. No change.
