@@ -263,11 +263,17 @@ tailwind.config = {
         var vx = escapeHtml(EX_SHORT[r.exchange] || r.exchange || '');
         var d = ((r.call||'').toUpperCase());
         var ago = fmtAgo(r.seconds_ago);
+        // DESIGN-W7 fix-forward ROUND 6 (Mr.1 directive 2026-05-11): ROUND 5 set
+        // column WIDTHS to 1fr×5 but content stayed default-left-aligned within each
+        // column — short content (3-5 chars) huddled at left side of each 105px column,
+        // leaving wide visual gaps. Now: Asset stays start-aligned (left anchor),
+        // middle 3 cells (TF/VX/Call) center-aligned, Time-ago stays right-aligned
+        // (right anchor). Content visually distributes across the panel width.
         return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;align-items:center;gap:6px;padding:3px 10px;height:22px;line-height:16px;border-bottom:1px solid oklch(0.2 0.012 265 / 0.7);color:var(--fg-2)">' +
           '<span style="color:var(--fg)">' + sym + '</span>' +
-          '<span style="color:var(--fg-3)">' + tf + '</span>' +
-          '<span style="color:var(--fg-4)">' + vx + '</span>' +
-          '<span style="color:' + dirColor(d) + ';font-weight:600;letter-spacing:0.04em">' + escapeHtml(d) + '</span>' +
+          '<span style="color:var(--fg-3);text-align:center">' + tf + '</span>' +
+          '<span style="color:var(--fg-4);text-align:center">' + vx + '</span>' +
+          '<span style="color:' + dirColor(d) + ';font-weight:600;letter-spacing:0.04em;text-align:center">' + escapeHtml(d) + '</span>' +
           '<span style="color:var(--fg-4);text-align:right;font-size:9px">' + escapeHtml(ago) + '</span>' +
         '</div>';
       }).join('');
@@ -280,7 +286,18 @@ tailwind.config = {
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', bothRefresh);
   } else { bothRefresh(); }
-  setInterval(refreshRecentCall, 1500); // 1.5s — Mr.1 H-PR2
+  // DESIGN-W7 fix-forward ROUND 6 (Mr.1 directive 2026-05-11): MOST RECENT CALL cadence
+  // randomized to 1000-3000ms via recursive setTimeout (was setInterval 1500ms fixed).
+  // Jittered cadence simulates organic event-stream arrival rate — visible motion every
+  // 1-3s reads as "tons of calls flowing in" social-proof effect. Each tick independently
+  // randomized; refreshRecentCall function body unchanged (only invocation cadence).
+  function scheduleNextRecentCall(){
+    setTimeout(function(){
+      refreshRecentCall();
+      scheduleNextRecentCall();
+    }, 1000 + Math.random() * 2000);
+  }
+  scheduleNextRecentCall();
   setInterval(refreshCallStream, 2500); // 2.5s — matches W3 recent-calls-feed cadence
 })();
 </script></div>
@@ -344,11 +361,17 @@ tailwind.config = {
         var vx = escapeHtml(EX_SHORT[r.exchange] || r.exchange || '');
         var d = ((r.call||'').toUpperCase());
         var ago = fmtAgo(r.seconds_ago);
+        // DESIGN-W7 fix-forward ROUND 6 (Mr.1 directive 2026-05-11): ROUND 5 set
+        // column WIDTHS to 1fr×5 but content stayed default-left-aligned within each
+        // column — short content (3-5 chars) huddled at left side of each 105px column,
+        // leaving wide visual gaps. Now: Asset stays start-aligned (left anchor),
+        // middle 3 cells (TF/VX/Call) center-aligned, Time-ago stays right-aligned
+        // (right anchor). Content visually distributes across the panel width.
         return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;align-items:center;gap:6px;padding:3px 10px;height:22px;line-height:16px;border-bottom:1px solid oklch(0.2 0.012 265 / 0.7);color:var(--fg-2)">' +
           '<span style="color:var(--fg)">' + sym + '</span>' +
-          '<span style="color:var(--fg-3)">' + tf + '</span>' +
-          '<span style="color:var(--fg-4)">' + vx + '</span>' +
-          '<span style="color:' + dirColor(d) + ';font-weight:600;letter-spacing:0.04em">' + escapeHtml(d) + '</span>' +
+          '<span style="color:var(--fg-3);text-align:center">' + tf + '</span>' +
+          '<span style="color:var(--fg-4);text-align:center">' + vx + '</span>' +
+          '<span style="color:' + dirColor(d) + ';font-weight:600;letter-spacing:0.04em;text-align:center">' + escapeHtml(d) + '</span>' +
           '<span style="color:var(--fg-4);text-align:right;font-size:9px">' + escapeHtml(ago) + '</span>' +
         '</div>';
       }).join('');
@@ -361,7 +384,18 @@ tailwind.config = {
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', bothRefresh);
   } else { bothRefresh(); }
-  setInterval(refreshRecentCall, 1500); // 1.5s — Mr.1 H-PR2
+  // DESIGN-W7 fix-forward ROUND 6 (Mr.1 directive 2026-05-11): MOST RECENT CALL cadence
+  // randomized to 1000-3000ms via recursive setTimeout (was setInterval 1500ms fixed).
+  // Jittered cadence simulates organic event-stream arrival rate — visible motion every
+  // 1-3s reads as "tons of calls flowing in" social-proof effect. Each tick independently
+  // randomized; refreshRecentCall function body unchanged (only invocation cadence).
+  function scheduleNextRecentCall(){
+    setTimeout(function(){
+      refreshRecentCall();
+      scheduleNextRecentCall();
+    }, 1000 + Math.random() * 2000);
+  }
+  scheduleNextRecentCall();
   setInterval(refreshCallStream, 2500); // 2.5s — matches W3 recent-calls-feed cadence
 })();
 </script></div>
