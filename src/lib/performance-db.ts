@@ -678,6 +678,30 @@ export async function getSignalWithBatch(signalId: number): Promise<any | null> 
 }
 
 /**
+ * DESIGN-W9 (2026-05-11): lookup a signal by its on-chain leaf hash (signal_hash).
+ * Used by the `verify://signal/{id}` MCP resource (C4) per Q-W9-8 architect ratification
+ * — `{id}` accepts BOTH integer DB ID (existing flow) AND hex `0x…` leaf hash (new flow).
+ * Hash form is what agents see in the JSX VFooter demo + via public MCP discovery.
+ */
+export async function getSignalByHash(signalHash: string): Promise<any | null> {
+  const b = getBackend();
+  const sql = `
+    SELECT s.id, s.coin, s.signal, s.confidence, s.timeframe, s.price_at_signal,
+           s.created_at, s.signal_hash, s.merkle_batch_id, s.merkle_proof,
+           mb.merkle_root, mb.tx_hash, mb.block_number, mb.signal_count, mb.published_at
+    FROM signals s
+    LEFT JOIN merkle_batches mb ON s.merkle_batch_id = mb.batch_id
+    WHERE s.signal_hash = ?
+  `;
+  if (isPg && b instanceof PgBackend) {
+    const rows = await b.query(sql, [signalHash]);
+    return rows.length > 0 ? rows[0] : null;
+  }
+  const rows = b.all(sql, signalHash);
+  return rows.length > 0 ? rows[0] : null;
+}
+
+/**
  * OPTIMIZE-FUNDING-CACHE-W1 (2026-04-30): cached `funding_history` aggregate
  * stats per coin. The DB query at the heart of `getFundingZScore` was the #1
  * CPU sink on the CPX22 box (audit at `audits/CPX22-baseline-2026-04-30.md`):

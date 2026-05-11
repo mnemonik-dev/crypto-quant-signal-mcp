@@ -41,6 +41,8 @@ import { renderToString } from 'react-dom/server';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const VAULT_DESIGN = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault Landing Hero v1';
+// DESIGN-W9 (2026-05-11): verify.jsx canonical SoT lives in a sibling vault folder.
+const VAULT_TRACK_RECORD = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault Track Record v1';
 
 // JSDOM globals for JSX module-end Object.assign(window, {...}) hooks.
 // Node 25 has read-only navigator getter on globalThis; assign defensively via defineProperty.
@@ -645,6 +647,548 @@ const FAQ_ACCORDION_JS = `<script>
 })();
 </script>`;
 
+// ── DESIGN-W9 /verify canonical rebuild ──────────────────────────────────────
+//
+// C2 (this section): JSX-faithful render of verify.jsx (771 LoC, 7 components)
+// via Babel + ReactDOMServer; dual-render desktop+mobile with @media swap;
+// preserves W4 form behavior (verifySignal + URL-param auto-lookup + Enter
+// key + dual-input value sync) byte-identical per Q-W9-10 architect-ratified
+// preservation strategy 2026-05-11.
+//
+// C3 (verify-overrides functions added later): eyebrow rename, VRecent empty
+// state, contract address full EIP-55 + Basescan link, VFooter <pre> outcome
+// strip per Q-W9-9 spec-cross-section-contradiction-probe, 4 data-tr-field
+// live-bind hydrations + track-record-proxy.js script include (Q-W9-11
+// hydration order: proxy.js FIRST, then inline W9 block).
+
+// Head + AlgoVault Labs sticky nav verbatim from the W4 landing/verify.html
+// shell. The 5 JSON-LD blocks (Product, Service, SoftwareApplication,
+// Organization, WebSite) are preserved byte-identical per spec rule 7.
+const VERIFY_HEAD_AND_NAV = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify Any AlgoVault Trade Call</title>
+<meta name="description" content="Verify any AlgoVault trade call on-chain. Every signal is hashed on Base L2 before the outcome is known.">
+<meta name="last-updated" content="2026-05-11">
+<link rel="icon" type="image/png" href="/logo.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- BEGIN: AlgoVault canonical design loader (DESIGN-W2 / D2-C) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/_design/algovault-design.css">
+<!-- END: AlgoVault canonical design loader -->
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: { 900: '#060a14', 800: '#0a0e1a', 700: '#0f1526', 600: '#161d30' },
+        mint: { 50: 'oklch(0.97 0.03 165)', 100: 'oklch(0.94 0.06 165)', 200: 'oklch(0.91 0.09 165)', 300: 'oklch(0.89 0.13 165)', 400: 'oklch(0.86 0.16 165)', 500: 'oklch(0.78 0.18 165)', 600: 'oklch(0.66 0.18 165)', 700: 'oklch(0.54 0.16 165)', 800: 'oklch(0.42 0.12 165)', 900: 'oklch(0.32 0.08 165)' },
+        steel: { 400: '#8b9bb5', 500: '#7b8ca0', 600: '#5e6d82' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  html { scroll-behavior: smooth; }
+  body { background: #060a14; color: #d1d5db; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+  .hash-text { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; word-break: break-all; }
+  /* DESIGN-W9 dual-render @media swap (lp-verify-{desktop,mobile} per dual-render-desktop-mobile-media-swap skill) */
+  @media (max-width: 767px) { .lp-verify-desktop { display: none !important; } }
+  @media (min-width: 768px) { .lp-verify-mobile { display: none !important; } }
+  /* DESIGN-W9: hide JSX VResult section by default (filled=false renders nothing inside the gated block,
+     but the wrapper class is reserved for VERIFY-DEEPLINK-W1 to reveal on ?id= URL param routing) */
+  [data-w9-result] { display: none; }
+</style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-RwGaS0xWrfzs4vNSkMOAX.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
+<script type="application/ld+json" data-algovault-jsonld="Product">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "AlgoVault",
+  "description": "Composite BUY/SELL/HOLD trade calls for AI trading agents. 5 crypto perp venues (Hyperliquid, Binance, Bybit, OKX, Bitget). Market regime classification and cross-venue funding-rate arbitrage. Every signal Merkle-anchored on Base L2.",
+  "url": "https://algovault.com",
+  "image": "https://algovault.com/logo.png",
+  "brand": { "@type": "Brand", "name": "AlgoVault Labs" },
+  "category": "Software / API / FinanceApplication",
+  "offers": [
+    { "@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free", "description": "100 calls/month, all assets, all 11 timeframes, HOLDs always free" },
+    { "@type": "Offer", "price": "9.99", "priceCurrency": "USD", "name": "Starter", "description": "3,000 calls/month", "url": "https://api.algovault.com/signup?plan=starter" },
+    { "@type": "Offer", "price": "49", "priceCurrency": "USD", "name": "Pro", "description": "15,000 calls/month", "url": "https://api.algovault.com/signup?plan=pro" },
+    { "@type": "Offer", "price": "299", "priceCurrency": "USD", "name": "Enterprise", "description": "100,000 calls/month, SLA, priority support", "url": "https://api.algovault.com/signup?plan=enterprise" }
+  ],
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "90.2",
+    "bestRating": "100",
+    "worstRating": "0",
+    "ratingCount": "81339"
+  },
+  "additionalProperty": [
+    { "@type": "PropertyValue", "name": "PFE win rate", "value": "90.2%" },
+    { "@type": "PropertyValue", "name": "Verified trade calls", "value": "81339" },
+    { "@type": "PropertyValue", "name": "Asset count", "value": "730" },
+    { "@type": "PropertyValue", "name": "Exchange count", "value": "5" },
+    { "@type": "PropertyValue", "name": "Timeframe count (API)", "value": "11" },
+    { "@type": "PropertyValue", "name": "Merkle batches on Base L2", "value": "30" },
+    { "@type": "PropertyValue", "name": "Track-record window", "value": "2026-04-10 to 2026-05-10" }
+  ]
+}
+</script>
+<script type="application/ld+json" data-algovault-jsonld="Service">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "name": "AlgoVault Trade Call Intelligence",
+  "serviceType": "Composite trade-call API for AI trading agents",
+  "provider": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com" },
+  "url": "https://algovault.com",
+  "description": "Composite BUY/SELL/HOLD trade calls with confidence, market regime classification, and cross-venue funding-rate arbitrage. 5 crypto perp venues. Every signal Merkle-anchored on Base L2 and verifiable at /verify.",
+  "areaServed": "Worldwide",
+  "audience": { "@type": "Audience", "audienceType": "AI trading agents, algorithmic trading systems, MCP-compatible clients" },
+  "hasOfferCatalog": {
+    "@type": "OfferCatalog",
+    "name": "AlgoVault subscription tiers",
+    "itemListElement": [
+      { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Starter", "price": "9.99", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Pro", "price": "49", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Enterprise", "price": "299", "priceCurrency": "USD" }
+    ]
+  }
+}
+</script>
+<script type="application/ld+json" data-algovault-jsonld="SoftwareApplication">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "AlgoVault",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Any (MCP-compatible)",
+  "description": "Composite trade calls for AI trading agents. 5 crypto perp venues, 730+ assets, 11 timeframes. Market regime classification + cross-venue funding-rate arbitrage. Every signal Merkle-anchored on Base L2.",
+  "url": "https://algovault.com",
+  "offers": [
+    { "@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free", "description": "All crypto + TradFi assets, all 11 timeframes (1m-1d), 100 calls/month, HOLD calls always free" },
+    { "@type": "Offer", "price": "9.99", "priceCurrency": "USD", "name": "Starter", "description": "All crypto + TradFi assets, all 11 timeframes, 3,000 calls/month", "url": "https://api.algovault.com/signup?plan=starter" },
+    { "@type": "Offer", "price": "49", "priceCurrency": "USD", "name": "Pro", "description": "All crypto and TradFi assets, all 11 timeframes, 15K calls/month", "url": "https://api.algovault.com/signup?plan=pro" },
+    { "@type": "Offer", "price": "299", "priceCurrency": "USD", "name": "Enterprise", "description": "Unlimited calls, SLA, priority support", "url": "https://api.algovault.com/signup?plan=enterprise" }
+  ],
+  "author": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com" },
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "90.2",
+    "bestRating": "100",
+    "worstRating": "0",
+    "ratingCount": "81339"
+  }
+}
+</script>
+<script type="application/ld+json" data-algovault-jsonld="Organization">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "AlgoVault Labs",
+  "url": "https://algovault.com",
+  "logo": "https://algovault.com/logo.png",
+  "description": "Composite signal-interpretation infrastructure for AI trading agents. TradingView is for human chart-readers, MT4 for human algo traders, AlgoVault for AI agents.",
+  "sameAs": [
+    "https://github.com/AlgoVaultLabs",
+    "https://twitter.com/AlgoVaultLabs"
+  ],
+  "foundingDate": "2026"
+}
+</script>
+<script type="application/ld+json" data-algovault-jsonld="WebSite">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "AlgoVault",
+  "url": "https://algovault.com",
+  "description": "The Brain Layer for AI Trading Agents. Composite trade calls + market regime + cross-venue funding arbitrage via MCP. 90.2% PFE win rate across 81339 verified calls, Merkle-anchored on Base L2.",
+  "publisher": { "@type": "Organization", "name": "AlgoVault Labs", "url": "https://algovault.com" },
+  "inLanguage": "en"
+}
+</script>
+</head>
+<body class="min-h-screen">
+
+<!-- Cross-page sticky nav (AlgoVault Labs canonical) — preserved across landing pages -->
+<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <a href="/" class="flex items-center gap-2.5">
+        <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
+        <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
+      </a>
+    </div>
+    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
+      <a href="/track-record" class="hover:text-white transition">Track Record</a>
+      <a href="/#pricing" class="hover:text-white transition">Pricing</a>
+      <a href="/integrations" class="hover:text-white transition">Integrations</a>
+      <a href="/skills" class="hover:text-white transition">Skills</a>
+      <a href="/docs.html" class="hover:text-white transition">Docs</a>
+      <a href="/verify" class="text-mint-400 font-medium">Verify</a>
+      <a href="https://api.algovault.com/account" class="hover:text-white transition">Account</a>
+      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
+    </div>
+  </div>
+</nav>
+`;
+
+// W4 preserved JS — verifySignal() + URL-param auto-lookup + dual-render adapter (input-sync + .signal-id-input
+// keydown listener for Enter). Byte-identical preservation of W4 verifySignal body + fmtDate + truncHash per
+// Q-W9-10 architect-ratified preservation strategy 2026-05-11. Null-guards on #batches-table /
+// #try-it-section /#sample-ids /#contract-info because the W4 landing/verify.html "Published Batches" +
+// "Try It" pills sections do NOT exist in the W9 JSX-faithful rebuild (canonical design drops them).
+const VERIFY_W4_PRESERVED_JS = `<script>
+var API_BASE = '';
+
+function truncHash(h) {
+  if (!h) return '';
+  return h.slice(0, 6) + '...' + h.slice(-4);
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  var dt = new Date(typeof d === 'number' ? d * 1000 : d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+         dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hour12: false }) + ' UTC';
+}
+
+// DESIGN-W9 dual-render adapter: keep desktop+mobile signal-id inputs synced so verifySignal()
+// always sees the typed value regardless of which artboard is visible at the user's viewport.
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('signal-id-input')) {
+    var inputs = document.querySelectorAll('.signal-id-input');
+    inputs.forEach(function(el) { if (el !== e.target) el.value = e.target.value; });
+  }
+});
+
+async function verifySignal() {
+  var inputEl = document.getElementById('signal-id');
+  if (!inputEl) {
+    // Fallback: try the first .signal-id-input with a value (mobile artboard active, desktop hidden).
+    var inputs = document.querySelectorAll('.signal-id-input');
+    for (var i = 0; i < inputs.length; i++) { if (inputs[i].value) { inputEl = inputs[i]; break; } }
+  }
+  var id = inputEl ? inputEl.value : '';
+  var el = document.getElementById('result');
+  var btn = document.getElementById('verify-btn');
+  if (!el) return;
+  if (!id) { el.className = 'verify-result-panel hidden'; el.style.display = 'none'; return; }
+
+  if (btn) { btn.textContent = 'Checking...'; btn.disabled = true; }
+
+  try {
+    var res = await fetch(API_BASE + '/api/verify-signal?signalId=' + id);
+    var data = await res.json();
+
+    if (data.error === 'Signal not found') {
+      el.innerHTML = '<div class="bg-red-500/5 border border-red-500/20 rounded-xl p-6 text-center">' +
+        '<div class="text-red-400 text-lg font-bold mb-1">NOT FOUND</div>' +
+        '<p class="text-gray-400 text-sm">No call with ID ' + id + ' exists.</p></div>';
+      el.style.display = '';
+      el.className = 'verify-result-panel mt-5';
+      return;
+    }
+
+    if (data.verified === false && data.reason) {
+      el.innerHTML = '<div class="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-6 text-center">' +
+        '<div class="text-yellow-400 text-lg font-bold mb-1">PENDING</div>' +
+        '<p class="text-gray-400 text-sm">Call recorded, awaiting next daily batch (00:05 UTC).</p>' +
+        '<div class="mt-3 text-gray-500 text-xs">' + data.signal.coin + ' &middot; ' + data.signal.direction + ' &middot; ' + data.signal.confidence + '% confidence</div></div>';
+      el.style.display = '';
+      el.className = 'verify-result-panel mt-5';
+      return;
+    }
+
+    var s = data.signal;
+    var b = data.batch;
+    el.innerHTML =
+      '<div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-6">' +
+        '<div class="flex items-center gap-2 mb-4">' +
+          '<div class="w-2 h-2 rounded-full bg-emerald-400"></div>' +
+          '<span class="text-emerald-400 font-bold text-sm">VERIFIED ON-CHAIN</span>' +
+        '</div>' +
+        '<div class="text-white font-semibold text-lg mb-1">Call #' + s.id + '</div>' +
+        '<p class="text-gray-400 text-sm mb-4">' + s.coin + ' &middot; ' + s.direction + ' &middot; ' + s.confidence + '% confidence &middot; ' + (s.timeframe || '') + '</p>' +
+        '<div class="grid sm:grid-cols-2 gap-4 mb-4">' +
+          '<div>' +
+            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Price at Call</div>' +
+            '<div class="text-white text-sm">$' + Number(s.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6}) + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Timestamp</div>' +
+            '<div class="text-white text-sm">' + fmtDate(s.timestamp) + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Batch</div>' +
+            '<div class="text-white text-sm">#' + b.id + ' &middot; ' + b.signalCount + ' calls</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="text-gray-500 text-xs uppercase tracking-wider mb-1">Published</div>' +
+            '<div class="text-white text-sm">' + fmtDate(b.publishedAt) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="border-t border-white/5 pt-4 space-y-2">' +
+          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Call Hash</span><span class="hash-text text-gray-300">' + s.hash + '</span></div>' +
+          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Merkle Root</span><span class="hash-text text-gray-300">' + b.root + '</span></div>' +
+          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Tx Hash</span><span class="hash-text text-gray-300">' + truncHash(b.txHash) + ' <a href="' + b.basescanUrl + '" target="_blank" class="text-mint-400 hover:underline ml-1">View on Basescan &rarr;</a></span></div>' +
+          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Contract</span><span class="hash-text text-gray-300">' + truncHash(data.contractAddress) + ' <a href="https://basescan.org/address/' + data.contractAddress + '" target="_blank" class="text-mint-400 hover:underline ml-1">View on Basescan &rarr;</a></span></div>' +
+          '<div class="flex items-start gap-2"><span class="text-gray-500 text-xs w-24 shrink-0">Chain</span><span class="text-gray-300 text-xs">Base (8453)</span></div>' +
+        '</div>' +
+      '</div>';
+    el.style.display = '';
+    el.className = 'verify-result-panel mt-5';
+  } catch (err) {
+    el.innerHTML = '<div class="bg-red-500/5 border border-red-500/20 rounded-xl p-6 text-center">' +
+      '<div class="text-red-400 text-sm">Verification request failed. Try again.</div></div>';
+    el.style.display = '';
+    el.className = 'verify-result-panel mt-5';
+  } finally {
+    if (btn) { btn.textContent = 'Verify on-chain \\u2192'; btn.disabled = false; }
+  }
+}
+
+// Enter key triggers verify on EITHER artboard input (dual-render aware).
+document.querySelectorAll('.signal-id-input').forEach(function(el) {
+  el.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') verifySignal();
+  });
+});
+
+// URL param auto-lookup or auto-load most recent signal — preserved byte-identical from W4.
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var id = params.get('signalId') || params.get('id');
+  if (id) {
+    document.querySelectorAll('.signal-id-input').forEach(function(el) { el.value = id; });
+    verifySignal();
+  } else {
+    fetch('/api/performance-public')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.recentSignals && data.recentSignals.length > 0) {
+          var recentId = data.recentSignals[0].id;
+          if (recentId) {
+            document.querySelectorAll('.signal-id-input').forEach(function(el) { el.value = recentId; });
+            verifySignal();
+          }
+        }
+      })
+      .catch(function() {});
+  }
+})();
+</script>`;
+
+// Pre-Babel patches for verify.jsx (none required for C2 — JSX is canonical SoT; all overrides
+// happen as post-render substitutions in C3 per jsx-source-patch-vs-post-render-substitution skill).
+function patchVerifyJsx(src) {
+  return src;
+}
+
+// W4 form preservation: rename JSX <input id="verify-input-d"> to id="signal-id" (desktop only;
+// mobile strips id for HTML id-uniqueness per dual-render-desktop-mobile-media-swap skill); add
+// class="signal-id-input" to BOTH inputs for cross-artboard querySelector; add
+// id="verify-btn" + onclick to desktop button only; both buttons get onclick + class.
+// Per Q-W9-10 architect-ratified preservation strategy.
+// isDesktop flag: desktop gets id="signal-id" + id="verify-btn"; mobile strips ids entirely.
+function preserveVerifyW4Form(html, isDesktop) {
+  if (isDesktop) {
+    // Desktop input — rename id + add class
+    html = html.replace(
+      /<input id="verify-input-d"/g,
+      '<input id="signal-id" class="signal-id-input"'
+    );
+    // Desktop label for-attr (JSX htmlFor renders as for)
+    html = html.replace(/<label for="verify-input-d"/g, '<label for="signal-id"');
+    // Desktop button: add id="verify-btn" + onclick + class
+    html = html.replace(
+      /<button type="button" class="btn btn-primary"\s+aria-label="Verify on-chain"/g,
+      '<button type="button" id="verify-btn" class="btn btn-primary verify-btn-trigger" onclick="verifySignal()" aria-label="Verify on-chain"'
+    );
+  } else {
+    // Mobile input — strip id, add class (avoids dual-id collision with desktop)
+    html = html.replace(
+      /<input id="verify-input-m"/g,
+      '<input class="signal-id-input"'
+    );
+    // Mobile label — strip for-attr entirely (no matching id)
+    html = html.replace(/<label for="verify-input-m"/g, '<label');
+    // Mobile button: onclick + class only (no id — avoids dual-id collision)
+    html = html.replace(
+      /<button type="button" class="btn btn-primary"\s+aria-label="Verify on-chain"/g,
+      '<button type="button" class="btn btn-primary verify-btn-trigger" onclick="verifySignal()" aria-label="Verify on-chain"'
+    );
+  }
+  return html;
+}
+
+// Wrap desktop + mobile artboards in lp-verify-{desktop,mobile} divs. @media swap CSS is in the
+// VERIFY_HEAD_AND_NAV <style> block.
+function wrapVerifyDualRender(desktopHtml, mobileHtml) {
+  return `<main class="verify-main">\n` +
+    `<div class="lp-verify-desktop">${desktopHtml}</div>\n` +
+    `<div class="lp-verify-mobile">${mobileHtml}</div>\n` +
+    // verifySignal()'s mount-point — hidden by default; populated on form submit.
+    // Sits AFTER both artboards (not dual-rendered — single instance in DOM).
+    `<div id="result" class="verify-result-panel hidden" aria-live="polite" style="display:none;max-width:48rem;margin:1.25rem auto 0;padding:0 1.5rem"></div>\n` +
+    `</main>\n`;
+}
+
+// Assemble full HTML document.
+function buildVerifyHtmlDocument(bodyContent, appendedJs) {
+  return VERIFY_HEAD_AND_NAV + bodyContent + (appendedJs || '') + '\n</body>\n</html>\n';
+}
+
+// ── DESIGN-W9 C3 — Wave overrides + 4 data-tr-field live-binds ──────────────
+
+// Override 1 (Mr.1 directive #3): VRecent eyebrow rename `· social proof` → `· Agent Verification Records`.
+function applyVerifyOverride1Eyebrow(html) {
+  return html.replaceAll('· social proof', '· Agent Verification Records');
+}
+
+// Override 2 (Q-W9-4 architect-ratified): VRecent rows REMOVED — replace with empty-state shell.
+// Anchor: VRecent VCard has unique `padding:0;overflow:hidden` style; last row contains literal `14m ago`;
+// closing structure ends with `</div></div></section>` (closing row + VCard + section).
+function applyVerifyOverride2VRecentEmpty(html) {
+  // Empty-state shell card — visually similar treatment to the VCard but with copy + cue.
+  const emptyShell = '<div class="recent-verifications-empty" style="border:1px solid var(--line);border-radius:14px;background:oklch(0.18 0.014 265 / 0.55);padding:32px 22px;text-align:center">'
+    + '<div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-4);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px">No recent verifications yet</div>'
+    + '<p style="font-size:14.5px;color:var(--fg-2);margin:0 auto;line-height:1.55;max-width:42rem">Verifications will appear here once requesters opt in to public attribution.</p>'
+    + '</div>';
+  // Match the VRecent VCard from opening (with padding:0;overflow:hidden style) through the
+  // close `</div></div>` immediately preceding `</section>` (positive lookahead).
+  return html.replace(
+    /<div [^>]*padding:0;overflow:hidden[^>]*>[\s\S]*?14m ago[\s\S]*?<\/div><\/div>(?=<\/section>)/g,
+    emptyShell + '</div>' // +1 </div> to compensate for the lookahead-anchored second </div> being consumed by match
+  );
+}
+
+// Override 3 + 5: VFooter contract address full EIP-55 + Basescan link wrap (+ basescan ↗ href rewrite).
+function applyVerifyOverride3Contract(html) {
+  // Replace JSX placeholder `0x9aF3…b21c` with the canonical full EIP-55 address.
+  html = html.replaceAll('0x9aF3…b21c', '0x6485396ac981Fe0A58540dfBF3E730f6F7BcbF81');
+  // Wrap the now-full address (rendered inside a mint-colored span) in a Basescan anchor.
+  html = html.replace(
+    /(<span style="color:var\(--accent, var\(--mint\)\)">)(0x6485396ac981Fe0A58540dfBF3E730f6F7BcbF81)(<\/span>)/g,
+    '<a href="https://basescan.org/address/0x6485396ac981Fe0A58540dfBF3E730f6F7BcbF81" target="_blank" rel="noopener noreferrer" style="text-decoration:none">$1$2$3</a>'
+  );
+  return html;
+}
+
+// Override 4 (Q-W9-2 + Q-W9-3): VerifyNav link rewrites.
+// Override 5: VFooter link rewrites (basescan ↗, docs ↗).
+function applyVerifyOverride45Links(html) {
+  // Q-W9-3 architect-ratified: REMOVE Verdicts link (/verdicts page doesn't exist).
+  html = html.replace(/<a href="#">Verdicts<\/a>/g, '');
+  // Q-W9-2: rewrite VerifyNav nav-cta "Open in Claude →" to /docs.html#mcp-install.
+  html = html.replace(
+    /<a href="#" class="nav-cta">Open in Claude →<\/a>/g,
+    '<a href="/docs.html#mcp-install" class="nav-cta">Open in Claude →</a>'
+  );
+  // VerifyNav Docs: rewrite to /docs.html.
+  html = html.replace(/<a href="#">Docs<\/a>/g, '<a href="/docs.html">Docs</a>');
+  // VFooter basescan ↗ link: full Basescan URL + target="_blank" + rel="noopener noreferrer".
+  html = html.replace(
+    /<a href="#"([^>]*)>basescan ↗<\/a>/g,
+    '<a href="https://basescan.org/address/0x6485396ac981Fe0A58540dfBF3E730f6F7BcbF81" target="_blank" rel="noopener noreferrer"$1>basescan ↗</a>'
+  );
+  // VFooter docs ↗ link: internal /docs.html (no target=_blank).
+  html = html.replace(
+    /<a href="#"([^>]*)>docs ↗<\/a>/g,
+    '<a href="/docs.html"$1>docs ↗</a>'
+  );
+  return html;
+}
+
+// Override 6 (Q-W9-9 architect-ratified — spec-cross-section-contradiction-probe 2nd sighting):
+// Strip the `outcome:{won,pfe_bps}` line from the VFooter <pre> code example. JSX text is
+// HTML-encoded by React (" → &quot;), so the literal pattern uses HTML entities. After strip,
+// the trailing comma on `"tx":...` is also removed so JSON-ish demo parses cleanly.
+function applyVerifyOverride6PreOutcomeStrip(html) {
+  return html.replace(
+    /(&quot;tx&quot;:\s*&quot;0x7f91…12cc&quot;),\n\s*&quot;outcome&quot;:\{[^}]+\}/g,
+    '$1'
+  );
+}
+
+// W9 live-bind hydration block — 4 data-tr-field spans + setInterval countdown.
+// Q-W9-11 architect-ratified hydration order: track-record-proxy.js FIRST (cross-page parity for
+// existing batch_count + call_count spans if present), THEN inline W9 block (verify-page-scoped
+// latest_batch + latest_batch_n + latest_batch_at + next_batch_in fields not supported by proxy.js).
+const VERIFY_W9_LIVEBIND_JS = `<!-- DESIGN-W9 hydration: proxy.js FIRST (Q-W9-11 ratification) for cross-page parity; inline W9 block THEN -->
+<script src="/js/track-record-proxy.js" defer></script>
+<script>
+(function(){
+  // DESIGN-W9 inline hydration (verify-page-scoped fields).
+  if (window.__w9VerifyHydrationInit) return;
+  window.__w9VerifyHydrationInit = true;
+  function fmtBatchAt(iso) {
+    if (!iso) return null;
+    var dt = new Date(iso);
+    if (isNaN(dt.getTime())) return null;
+    var Y = dt.getUTCFullYear();
+    var M = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    var D = String(dt.getUTCDate()).padStart(2, '0');
+    var h = String(dt.getUTCHours()).padStart(2, '0');
+    var m = String(dt.getUTCMinutes()).padStart(2, '0');
+    return Y + '-' + M + '-' + D + ' ' + h + ':' + m + ' UTC';
+  }
+  function fmtNextBatchIn() {
+    // Production batches publish 00:05 UTC daily (per system-map.md + live observation 2026-05-11).
+    var now = new Date();
+    var next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 5, 0));
+    if (next <= now) next = new Date(next.getTime() + 24 * 60 * 60 * 1000);
+    var totalMin = Math.max(0, Math.floor((next - now) / 60000));
+    var h = Math.floor(totalMin / 60);
+    var m = totalMin % 60;
+    return h > 0 ? (h + 'h ' + m + 'm') : (m + 'm');
+  }
+  function setField(name, value) {
+    if (value == null) return;
+    document.querySelectorAll('[data-tr-field="' + name + '"]').forEach(function(el){ el.textContent = value; });
+  }
+  // Q-W9-12 inline-fix: API field names are batch_id + published_at (NOT batchNumber + timestamp as spec said).
+  fetch('/api/merkle-batches').then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data){
+    if (!data || !Array.isArray(data.batches) || !data.batches.length) return;
+    var latest = data.batches[0];
+    setField('latest_batch', '#' + latest.batch_id);
+    setField('latest_batch_n', String(latest.batch_id));
+    setField('latest_batch_at', fmtBatchAt(latest.published_at));
+  }).catch(function(err){
+    console.warn('[w9-verify-hydration] /api/merkle-batches fetch failed', err);
+  });
+  // Client-computed countdown (W8-FIX pattern): 60s setInterval.
+  function updateNextBatchCountdown() { setField('next_batch_in', fmtNextBatchIn()); }
+  updateNextBatchCountdown();
+  setInterval(updateNextBatchCountdown, 60000);
+})();
+</script>`;
+
+// Aggregate C3 overrides for a single artboard.
+function applyVerifyC3Overrides(html) {
+  html = applyVerifyOverride1Eyebrow(html);
+  html = applyVerifyOverride2VRecentEmpty(html);
+  html = applyVerifyOverride3Contract(html);
+  html = applyVerifyOverride45Links(html);
+  html = applyVerifyOverride6PreOutcomeStrip(html);
+  return html;
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -653,8 +1197,8 @@ async function main() {
   const mobile = args.mobile === 'true';
   const out = args.out;
 
-  if (!['belowfold', 'landing-rest', 'hero'].includes(target)) {
-    console.error(`[render-jsx-static] invalid --target=${target} (expected belowfold|landing-rest|hero)`);
+  if (!['belowfold', 'landing-rest', 'hero', 'verify'].includes(target)) {
+    console.error(`[render-jsx-static] invalid --target=${target} (expected belowfold|landing-rest|hero|verify)`);
     process.exit(2);
   }
 
@@ -732,6 +1276,34 @@ async function main() {
       raw = w7HeroStripNav(raw);                   // strip V1Hero's nav (existing live W3 nav preserved for cross-page consistency)
       // Append vanilla-JS poller for MOST RECENT CALL (mounts to all [data-w7-recent-call] in the dual-render block)
       html = raw + W7_RECENT_CALL_POLLER_JS;
+    } else if (target === 'verify') {
+      // DESIGN-W9 C2 (2026-05-11): /verify canonical rebuild from verify.jsx (771 LoC, 7 components).
+      // Dual-render desktop + mobile; output is a FULL HTML document (not a section fragment).
+      // W4 form behavior preserved byte-identical per Q-W9-10 architect ratification.
+      const srcRaw = await readFile(path.join(VAULT_TRACK_RECORD, 'verify.jsx'), 'utf-8');
+      const src = patchVerifyJsx(srcRaw);
+      const exports = await evalJsxSrc(
+        src,
+        path.join(VAULT_TRACK_RECORD, 'verify.jsx'),
+        ['VerifyPage', 'VHero', 'VInput', 'VResult', 'VHowItWorks', 'VRecent', 'VFaq', 'VFooter', 'VerifyNav', 'VEyebrow', 'VPulse', 'VCard', 'VField']
+      );
+      // Render filled=false (VResult section gates on filled=true and renders nothing here;
+      // VERIFY-DEEPLINK-W1 will reveal on ?id= URL routing).
+      let desktopRaw = renderToString(React.createElement(exports.VerifyPage, { mobile: false, filled: false }));
+      let mobileRaw = renderToString(React.createElement(exports.VerifyPage, { mobile: true, filled: false }));
+      // Q-W9-10 preservation: W4 form primitives wired to JSX VInput shell.
+      // isDesktop flag prevents dual-id collision on #signal-id + #verify-btn.
+      desktopRaw = preserveVerifyW4Form(desktopRaw, true);
+      mobileRaw = preserveVerifyW4Form(mobileRaw, false);
+      // DESIGN-W9 C3: 5 wave-level overrides per architect ratification 2026-05-11.
+      desktopRaw = applyVerifyC3Overrides(desktopRaw);
+      mobileRaw = applyVerifyC3Overrides(mobileRaw);
+      // Dual-render @media swap wrap.
+      const wrapped = wrapVerifyDualRender(desktopRaw, mobileRaw);
+      // Full HTML document with head + nav + body + W4 JS preserved + W9 live-bind hydration.
+      // Q-W9-11 hydration order: W4_PRESERVED_JS first (verifySignal handler) then W9_LIVEBIND_JS
+      // (track-record-proxy.js script tag + inline batch hydration).
+      html = buildVerifyHtmlDocument(wrapped, VERIFY_W4_PRESERVED_JS + '\n' + VERIFY_W9_LIVEBIND_JS);
     }
   } catch (e) {
     console.error(`[render-jsx-static] render failed: ${e.message}`);

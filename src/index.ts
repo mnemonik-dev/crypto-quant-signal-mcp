@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ import { scanFundingArb } from './tools/scan-funding-arb.js';
 import { getMarketRegime } from './tools/get-market-regime.js';
 import { getSignalPerformance, runBackfill } from './resources/signal-performance.js';
 import { refreshGridIfStale } from './lib/cross-asset-grid.js';
-import { closeDb, getConfidenceBands, getHoldStats, getMerkleBatches, getSignalWithBatch, upsertAgentSession, getSampleSignalsFromLatestBatch, getRecentCallsAsync, type RecentCall } from './lib/performance-db.js';
+import { closeDb, getConfidenceBands, getHoldStats, getMerkleBatches, getSignalWithBatch, getSignalByHash, upsertAgentSession, getSampleSignalsFromLatestBatch, getRecentCallsAsync, type RecentCall } from './lib/performance-db.js';
 import { PKG_VERSION } from './lib/pkg-version.js';
 import { verifyProof } from './lib/merkle.js';
 import { warmTierCaches } from './lib/asset-tiers.js';
@@ -269,6 +269,77 @@ function createServer(): McpServer {
         contents: [{
           uri: 'performance://signal-performance',
           text: JSON.stringify(stats, null, 2),
+          mimeType: 'application/json',
+        }],
+      };
+    }
+  );
+
+  // ── DESIGN-W9 (2026-05-11): verify://signal/{id} resource ──
+  // PUBLIC-ONLY response shape per Q-W9-6 architect ratification: {status, leaf, root, batch, tx}.
+  // Phase-E aggregate columns (per-signal evaluation result + return basis-points) are
+  // INTENTIONALLY OMITTED — Data Integrity LAW (those numbers stay internal). Mr.1 directive #4
+  // ("MCP resource — Want to verify in code? — are we able to make this?") becomes LIVE here.
+  //
+  // {id} acceptance per Q-W9-8 BOTH-form ratification:
+  //   - `0x…` prefix → look up by signal_hash (matches JSX VFooter demo `verify://signal/0x4a2…f91`)
+  //   - else → parseInt({id}) → look up by integer DB ID (matches existing /api/verify-signal flow)
+  server.resource(
+    'verify-signal',
+    new ResourceTemplate('verify://signal/{id}', { list: undefined }),
+    {
+      description: 'Verify a single trade-call signal against its on-chain Merkle proof. Returns {status, leaf, root, batch, tx} — PUBLIC-ONLY shape (no outcome / PFE fields). Accepts both integer DB ID (e.g. 12345) and hex leaf hash (e.g. 0x4a2c…7f91).',
+      mimeType: 'application/json',
+    },
+    async (uri, variables) => {
+      const rawId = String((variables as any).id || '');
+      // Q-W9-8 dual-form: hex `0x…` → hash lookup; else integer DB ID.
+      const isHex = rawId.startsWith('0x') || rawId.startsWith('0X');
+      let row: any = null;
+      let status: 'verified' | 'pending' | 'notfound' = 'notfound';
+      if (isHex) {
+        row = await getSignalByHash(rawId);
+      } else {
+        const intId = parseInt(rawId, 10);
+        if (Number.isFinite(intId) && intId > 0) {
+          row = await getSignalWithBatch(intId);
+        }
+      }
+      const body: Record<string, unknown> = {
+        _algovault: {
+          tool: 'verify-signal',
+          version: PKG_VERSION,
+          source: 'verify://signal/{id}',
+          ts: new Date().toISOString(),
+        },
+      };
+      if (!row) {
+        body.status = 'notfound';
+        body.requested_id = rawId;
+      } else if (!row.merkle_batch_id || !row.merkle_root) {
+        // Signal recorded but not yet committed to an on-chain Merkle batch.
+        status = 'pending';
+        body.status = status;
+        body.leaf = row.signal_hash || null;
+        body.requested_id = rawId;
+      } else {
+        status = 'verified';
+        body.status = status;
+        body.leaf = row.signal_hash;
+        body.root = row.merkle_root;
+        body.batch = row.merkle_batch_id;
+        body.tx = row.tx_hash;
+        // NOTE (Q-W9-6 Data Integrity LAW): per-signal Phase-E evaluation fields (won-flag,
+        // peak-favorable-excursion basis points, return percentage) are intentionally omitted
+        // from this public-facing shape. Phase-E aggregates flow through the separate
+        // `performance://signal-performance` resource (rate-only aggregate; no per-signal data).
+      }
+      // Discard unused status var (lint guard).
+      void status;
+      return {
+        contents: [{
+          uri: uri.href,
+          text: JSON.stringify(body, null, 2),
           mimeType: 'application/json',
         }],
       };
