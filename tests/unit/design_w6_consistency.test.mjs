@@ -242,7 +242,8 @@ test('Preservation-LAW (W3+W4+D1-C+D2-C+W5 regression-free)', async () => {
   assert.ok(jsonLd >= 6, `≥6 JSON-LD blocks preserved (got ${jsonLd})`);
   // GEO-W1 H1 + hero opening verbatim
   assert.match(html, /The Brain Layer for AI Trading Agents/, 'H1 verbatim');
-  assert.match(html, /One MCP call returns a composite trade verdict/, 'hero opening verbatim');
+  // W7 fix-forward ROUND 10 (2026-05-11): hero rewritten to 3-line arrangement per Mr.1 directive.
+  assert.match(html, /One MCP call returns direction, confidence, and regime/, 'hero opening verbatim (ROUND 10)');
   // 5 exchange names verbatim
   for (const ex of ['Hyperliquid', 'Binance', 'Bybit', 'OKX', 'Bitget']) {
     assert.ok(html.includes(ex), `exchange "${ex}" verbatim`);

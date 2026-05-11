@@ -147,7 +147,8 @@ test('D1-C+D2-C+W3+W4+W6 preservation regression-free (W7 hero shift acknowledge
   assert.match(html, /lp-rest-desktop/, 'W6 landing-rest preserved');
   // GEO-W1 H1 + hero opening verbatim
   assert.match(html, /The Brain Layer/, 'H1 verbatim (V1Hero word-break: "The Brain Layer<br>for AI Trading Agents.")');
-  assert.match(html, /One MCP call returns a composite trade verdict/, 'hero opening verbatim');
+  // W7 fix-forward ROUND 10 (2026-05-11): hero rewritten to 3-line arrangement per Mr.1 directive.
+  assert.match(html, /One MCP call returns direction, confidence, and regime/, 'hero opening verbatim (ROUND 10)');
   // 5 exchange names
   for (const ex of ['Hyperliquid', 'Binance', 'Bybit', 'OKX', 'Bitget']) {
     assert.ok(html.includes(ex), `exchange "${ex}" preserved`);

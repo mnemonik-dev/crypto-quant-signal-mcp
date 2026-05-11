@@ -95,7 +95,7 @@ function patchBelowFold(src) {
   // Factuality LAW: AlgoVault has 3 MCP tools + 1 on-chain track record callout (NOT 4 tools).
   return src.replace(
     'Four MCP tools your agent can call directly. Each returns a single, structured verdict — not raw indicators.',
-    'Three MCP tools your agent can call — plus an on-chain track record.   Each returns a single, structured verdict — not raw indicators.'
+    'Three MCP tools your agent can call — plus an on-chain track record.<br/>Each returns a single, structured verdict — not raw indicators.'
   );
 }
 
