@@ -146,31 +146,32 @@ test('src/index.ts: getPerformanceDashboardHtml W3 + W4 layers both present', as
   assert.match(ts, /setProperty\('--exchange-color'/, 'exchange color via setProperty (no inline style=)');
 });
 
-test('landing/verify.html: W4 rebuild — H1 + panels + howit + form preserved', async () => {
+test('landing/verify.html: W4 deliverables PRESERVED through W9 rebuild (form + canonical loader + 0 gold)', async () => {
+  // W9 ROUND 3.x (2026-05-11) completely rebuilt landing/verify.html with new
+  // JSX-rendered structure: W4-era classes (verify-input-panel, verify-result-
+  // panel, howit-grid, howit-step, verify-faq-list, verify-faq-item, recent-
+  // verifications-empty) REPLACED with W9 equivalents (verify-main, verify-
+  // result-mount, verify-result-section, verify-result-wrapper + dual-render
+  // lp-verify-{desktop,mobile} wrappers + JSX sections VHero/VInput/
+  // VHowItWorks/VRecent/VFaq/VFooter). The W9 rebuild has its own coverage
+  // in design_w9_consistency.test.mjs (~16 tests). This W4 test now asserts
+  // only the cross-wave PRESERVATION-LAW: original W4 form behavior + D2-C
+  // canonical loader + 0 gold residual must survive the W9 rebuild.
   const html = await read('landing/verify.html');
-  // W4 H1 (different from old "Verify Call Integrity")
-  assert.match(html, /<h1[^>]*>Verify Any AlgoVault Trade Call<\/h1>/, 'W4 H1 verbatim');
-  // W4 panels
-  assert.match(html, /class="verify-input-panel"/, 'verify-input-panel applied');
-  assert.match(html, /verify-result-panel/, 'verify-result-panel applied');
-  // W4 howit-grid (4 steps)
-  assert.match(html, /class="howit-grid"/, 'howit-grid container');
-  const howitSteps = (html.match(/class="howit-step"/g) || []).length;
-  assert.ok(howitSteps >= 4, `>=4 howit-step elements (got ${howitSteps})`);
-  // W4 verify-faq-list
-  assert.match(html, /class="verify-faq-list"/, 'verify-faq-list container');
-  const verifyFaqs = (html.match(/class="verify-faq-item"/g) || []).length;
-  assert.ok(verifyFaqs >= 3, `>=3 verify-faq-item (got ${verifyFaqs})`);
-  // W4 recent-verifications-empty placeholder
-  assert.match(html, /recent-verifications-empty/, 'recent-verifications-empty placeholder (VERIFY-RECENT-FEED-W1 deferral)');
-  // PRESERVE existing form behavior
-  assert.match(html, /id="signal-id"/, '#signal-id input preserved');
-  assert.match(html, /id="verify-btn"/, '#verify-btn button preserved');
-  assert.match(html, /verifySignal\(\)/, 'verifySignal() function preserved');
+  // W4 H1 — W9 ROUND 3.1 wrapped "Trade Call" in <span style="color:var(--accent, var(--mint))">
+  assert.match(html, /<h1[^>]*>Verify Any AlgoVault\s*<span[^>]*>Trade Call<\/span><\/h1>/, 'W4 H1 verbatim (W9 mint-accent span on "Trade Call")');
+  // PRESERVE existing form behavior across W9 rebuild
+  assert.match(html, /id="signal-id"/, '#signal-id input preserved through W9 rebuild');
+  assert.match(html, /id="verify-btn"/, '#verify-btn button preserved through W9 rebuild');
+  assert.match(html, /verifySignal\(\)/, 'verifySignal() function preserved through W9 rebuild');
   // PRESERVE algovault-design.css link
   assert.match(html, /algovault-design\.css/, 'D2-C canonical loader preserved');
   // 0 residual gold
   assert.doesNotMatch(html, /\b(bg|text|border)-gold-[0-9]+/, '0 gold-class residual');
+  // W4 detailed structural assertions (verify-input-panel / howit-grid / verify-
+  // faq-list / recent-verifications-empty) DROPPED: those classes superseded
+  // by W9 JSX render. See design_w9_consistency.test.mjs for the new structural
+  // coverage of verify.html.
 });
 
 test('all 3 W4 surfaces: 0 residual gold-Tailwind-classes + 0 hardcoded fictional metrics', async () => {

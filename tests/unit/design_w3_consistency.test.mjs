@@ -80,14 +80,21 @@ test('landing/index.html: hero flow diagram (W7 V0Diagram supersedes W3 hero-flo
 
 test('landing/index.html: hero recent-call (W7 data-w7-recent-call supersedes W3 recent-calls-feed)', async () => {
   const html = await read('landing/index.html');
-  // W7 architectural shift 2026-05-10: W3 recent-calls-feed (5-row 2.5s polling) REPLACED with
-  // V1Hero ticker card showing MOST RECENT CALL (1-row 1.5s polling per Mr.1 H-PR2).
-  // Data-source equivalence: both poll /api/recent-calls. Different DOM + different cadence/limit.
+  // W7 architectural shift 2026-05-10: W3 recent-calls-feed (5-row 2.5s polling)
+  // REPLACED with V1Hero ticker card showing MOST RECENT CALL (per Mr.1 H-PR2).
+  // W7 fix-forward ROUND 6 (c08edd4 2026-05-11): cadence changed from
+  // setInterval(refresh, 1500) to recursive setTimeout(refresh, 1000 +
+  // Math.random() * 2000) for organic jitter (1-3s range). The original
+  // H-PR2 "1.5s" decision is preserved in spirit (range includes 1.5s) but
+  // no longer matches the literal setInterval pattern.
+  // Data-source equivalence: still polls /api/recent-calls. Different DOM
+  // + different cadence + different scheduling primitive.
   // The W3 5-row recent-calls-feed pattern STILL EXISTS on /track-record (W4 deliverable, out of W7 scope).
   assert.match(html, /data-w7-recent-call/, 'data-w7-recent-call mount-point present (W7 H-PR2)');
   assert.match(html, /aria-live="polite"/, 'aria-live for screen-reader updates');
   assert.match(html, /\/api\/recent-calls\?limit=1/, 'W7 hero polls /api/recent-calls?limit=1');
-  assert.match(html, /setInterval\([^,]+,\s*1500\)/, 'W7 hero polling cadence 1.5s (Mr.1 H-PR2)');
+  assert.match(html, /function scheduleNextRecentCall/, 'W7 hero recursive scheduler (ROUND 6 randomized 1-3s)');
+  assert.match(html, /1000 \+ Math\.random\(\) \* 2000/, 'W7 hero cadence range 1000-3000ms (ROUND 6)');
 });
 
 test('landing/index.html: inline-style baseline (W6 Q-W1 documented relaxation)', async () => {

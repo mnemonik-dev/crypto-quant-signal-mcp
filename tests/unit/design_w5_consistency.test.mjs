@@ -111,12 +111,18 @@ test('Q-F1 → W7 4-stat row (Venues/Timeframes/Total Trade Calls/PFE WR); p50 l
 
 test('Q-D2: /verify subhead adopted from JSX (shorter form)', async () => {
   const html = await read('landing/verify.html');
-  // JSX subhead literal
-  assert.match(html, /Every signal is hashed on Base L2/, 'JSX subhead opening present');
+  // JSX subhead literal. W9 ROUND 3.1 (e2f5027 2026-05-11) renamed
+  // "Every signal is hashed" → "Every trade call is hashed" per signal→Call
+  // terminology rewrite. "Inspect the contract on Basescan" preserved as the
+  // second-half tell.
+  assert.match(html, /Every trade call is hashed on Base L2/, 'JSX subhead opening present (W9 rename)');
   assert.match(html, /Inspect the contract on Basescan/, 'JSX subhead contract mention present');
   // W4 subhead REMOVED
   assert.doesNotMatch(html, /Daily Merkle batches anchor every signal before its outcome is known/,
     'W4 longer subhead replaced by JSX shorter form');
+  // Legacy "Every signal is hashed" must be gone post W9 ROUND 3.1
+  assert.doesNotMatch(html, /Every signal is hashed on Base L2/,
+    'W9 rename: "Every signal is hashed" -> "Every trade call is hashed"');
 });
 
 test('Q-D10 → W6-Q-W1: pragmatic inline-style baseline raised by ReactDOMServer JSX render', async () => {
