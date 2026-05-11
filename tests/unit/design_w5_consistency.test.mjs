@@ -174,5 +174,9 @@ test('src/index.ts: dashboard JSX-faithful H2 alignment + W3+W4 deliverables pre
     assert.ok(ts.includes(`data-tf="${tf}"`), `W4 tf-bar-row data-tf="${tf}" preserved`);
   }
   assert.match(ts, /id="tr-recent-calls-panel"/, 'W4 tr-recent-calls panel preserved');
-  assert.match(ts, /setInterval\(fetchTrRecent,\s*2500\)/, 'W4 tr-recent-calls 2.5s polling preserved');
+  // DESIGN-W8 (2026-05-11): 2.5s polling IIFE REMOVED; LATEST TRADE CALLS now
+  // hydrates from cachedData.recentSignals via renderAll() (30s page refresh)
+  // per Q-W8-1=B (real .id enables per-row deep-link). The tr-recent-calls-tbody
+  // is the new 8-col table body target.
+  assert.match(ts, /id="tr-recent-calls-tbody"/, 'W8 tr-recent-calls-tbody 8-col body target');
 });

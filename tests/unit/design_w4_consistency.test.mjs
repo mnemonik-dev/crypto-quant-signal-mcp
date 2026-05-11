@@ -126,11 +126,14 @@ test('src/index.ts: getPerformanceDashboardHtml W3 + W4 layers both present', as
   for (const tf of ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d']) {
     assert.ok(ts.includes(`data-tf="${tf}"`), `W4 tf-bar-row data-tf="${tf}"`);
   }
-  // W4 tr-recent-calls panel + polling
+  // W4 tr-recent-calls panel preserved through W8 architectural shift.
+  // DESIGN-W8 (2026-05-11): the 2.5s /api/recent-calls polling IIFE was
+  // REPLACED by 30s cachedData.recentSignals hydration via renderAll() to
+  // get real .id (per-row deep-link) + .tier per Q-W8-1=B architect ratification.
+  // Canonical track-record-2.jsx FeedSection has no polling.
   assert.match(ts, /id="tr-recent-calls-panel"/, 'tr-recent-calls-panel container');
   assert.match(ts, /id="tr-recent-calls-rows"/, 'tr-recent-calls-rows hydration target');
-  assert.match(ts, /function fetchTrRecent/, 'fetchTrRecent function');
-  assert.match(ts, /setInterval\(fetchTrRecent,\s*2500\)/, 'tr-recent-calls polling cadence 2500ms');
+  assert.match(ts, /id="tr-recent-calls-tbody"/, 'W8 tr-recent-calls-tbody 8-col table body');
   // byExchange + byTimeframe hydration
   assert.match(ts, /d\.byExchange/, 'byExchange hydration reference');
   assert.match(ts, /d\.byTimeframe/, 'byTimeframe hydration reference');

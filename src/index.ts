@@ -1300,6 +1300,34 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
   .recent-table th:nth-child(6), .recent-table td:nth-child(6) { width: 80px; }
   .recent-table th:nth-child(7), .recent-table td:nth-child(7) { width: 60px; }
   .recent-table th:nth-child(8), .recent-table td:nth-child(8) { width: 80px; }
+  /* DESIGN-W8 / C2: Verify Any Call card — matches canonical track-record-2.jsx:VerifySection */
+  .verify-any-call-section { margin-bottom: 28px; }
+  .verify-any-call-card { background: linear-gradient(180deg, rgba(91,238,179,0.06), rgba(91,238,179,0.02)); border: 1px solid rgba(91,238,179,0.25); border-radius: 14px; padding: 32px 36px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  @media (max-width: 768px) { .verify-any-call-card { grid-template-columns: 1fr; gap: 24px; padding: 24px 22px; } }
+  .verify-any-call-eyebrow { color: #5BEEB3; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 14px; }
+  .verify-any-call-h2 { font-family: 'Inter Tight', sans-serif; font-size: 32px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.05; color: #f0eee9; margin: 0 0 14px; text-transform: none; }
+  .verify-any-call-h2-accent { color: #5BEEB3; }
+  .verify-any-call-p { font-size: 14.5px; color: #c9d1d9; line-height: 1.55; margin: 0 0 22px; max-width: 460px; }
+  .verify-any-call-em { color: #5BEEB3; font-style: normal; }
+  .verify-any-call-meta { display: flex; flex-direction: column; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c9d1d9; }
+  .verify-any-call-meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .verify-any-call-meta-label { color: #6e7681; }
+  .verify-any-call-meta-mono { color: #e1e4e8; }
+  .verify-any-call-meta-accent { color: #5BEEB3; }
+  .verify-any-call-meta-dot { color: #6e7681; }
+  .verify-any-call-basescan { color: #8b949e; text-decoration: none; margin-left: auto; font-size: 11px; }
+  .verify-any-call-basescan:hover { color: #5BEEB3; }
+  .verify-any-call-meta-pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #5BEEB3; box-shadow: 0 0 8px rgba(91,238,179,0.5); }
+  .verify-any-call-form { display: flex; flex-direction: column; gap: 12px; }
+  .verify-any-call-form-label { color: #6e7681; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .verify-any-call-form-row { display: flex; gap: 10px; align-items: stretch; }
+  @media (max-width: 768px) { .verify-any-call-form-row { flex-direction: column; } }
+  .verify-any-call-input { flex: 1; height: 48px; padding: 0 16px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #f0eee9; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; outline: none; }
+  .verify-any-call-input:focus { border-color: rgba(91,238,179,0.45); }
+  .verify-any-call-btn { background: #5BEEB3; color: #0a2b1f; height: 48px; padding: 0 22px; font-size: 14.5px; font-weight: 600; border: none; border-radius: 10px; white-space: nowrap; flex-shrink: 0; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 24px -8px rgba(91,238,179,0.55); }
+  .verify-any-call-btn:hover { background: #82EFB8; }
+  .verify-any-call-form-sub { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #6e7681; line-height: 1.55; margin-top: 4px; }
+  .verify-any-call-form-sub-mid { color: #c9d1d9; }
 </style>
 </head>
 <body>
@@ -1537,11 +1565,53 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
     </div>
   </div>
 
-  <!-- DESIGN-W4 / C3: Live Recent Calls panel (10-row, 2.5s polling) —
-       translated from track-record-2.jsx RecentCallsSection. Reuses
-       /api/recent-calls?limit=10 endpoint shipped in LANDING-LIVE-CALL-TICKER-W1
-       (sanitized public shape). Same polling cadence as landing's LAST_CALLS
-       feed. aria-live="polite" for screen-reader updates. -->
+  <!-- DESIGN-W8 / C2: Verify Any Call teaser card — translated from
+       Design/AlgoVault Track Record v1/track-record-2.jsx VerifySection
+       (lines 195-275). Real Basescan contract address (NOT the canvas
+       placeholder address); live-bind batch number via merkle_batch_count
+       + NEW latest_batch_at from /api/merkle-batches.batches[0].published_at;
+       static next-batch-in placeholder (live countdown deferred to
+       VERIFY-COUNTDOWN-W1 per spec + architect ratification). -->
+  <div class="section verify-any-call-section">
+    <div class="verify-any-call-card">
+      <div class="verify-any-call-left">
+        <div class="verify-any-call-eyebrow">&middot; VERIFY</div>
+        <h2 class="verify-any-call-h2">Verify Any <span class="verify-any-call-h2-accent">Call</span></h2>
+        <p class="verify-any-call-p">Every signal is hashed on Base L2 <em class="verify-any-call-em">before</em> the outcome is known. Inspect the contract on Basescan &mdash; we can&rsquo;t edit history.</p>
+        <div class="verify-any-call-meta">
+          <div class="verify-any-call-meta-row">
+            <span class="verify-any-call-meta-label">contract</span>
+            <span class="verify-any-call-meta-mono verify-any-call-meta-accent">0x6485&hellip;bf81</span>
+            <a class="verify-any-call-basescan" href="https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81" target="_blank" rel="noopener">basescan &#x2197;</a>
+          </div>
+          <div class="verify-any-call-meta-row">
+            <span class="verify-any-call-meta-label">latest batch</span>
+            <span class="verify-any-call-meta-mono">#<span data-tr-field="merkle_batch_count">&mdash;</span></span>
+            <span class="verify-any-call-meta-dot">&middot;</span>
+            <span class="verify-any-call-meta-mono" data-tr-field="latest_batch_at">&mdash;</span>
+          </div>
+          <div class="verify-any-call-meta-row">
+            <span class="verify-any-call-meta-pulse"></span>
+            <span class="verify-any-call-meta-mono">next batch in <span class="verify-any-call-meta-accent">3h 41m</span></span>
+          </div>
+        </div>
+      </div>
+      <form class="verify-any-call-form" action="/verify" method="get" onsubmit="return verifyAnyCallSubmit(event);">
+        <label class="verify-any-call-form-label" for="verify-any-call-input">signal id or call timestamp</label>
+        <div class="verify-any-call-form-row">
+          <input id="verify-any-call-input" name="id" type="text" class="verify-any-call-input" placeholder="0x4a2&hellip;f91   &middot;   or   2026-05-09T17:42:18Z" aria-label="Signal ID or call timestamp" autocomplete="off">
+          <button type="submit" class="verify-any-call-btn">Verify on-chain &rarr;</button>
+        </div>
+        <div class="verify-any-call-form-sub">opens <span class="verify-any-call-form-sub-mid">algovault.com/verify?id=&hellip;</span> &middot; shareable, deep-linkable proof page</div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DESIGN-W8 / C1: Latest Trade Calls 8-col table — sources from
+       cachedData.recentSignals (already loaded via /api/performance-public,
+       30s refresh) per Q-W8-1=B. Real .id enables per-row deep-link to
+       /verify?signalId=<id>; real .tier from server. Wrapper + header
+       preserved from W4 panel; inner placeholder replaced with table. -->
   <div class="section"><h2>Latest Trade Calls</h2>
     <div class="tr-recent-calls-panel" id="tr-recent-calls-panel" aria-live="polite">
       <div class="tr-recent-calls-panel-header">
@@ -1549,69 +1619,22 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
         <span class="recent-calls-feed-tick"><span class="live-pulse"></span>tick</span>
       </div>
       <div id="tr-recent-calls-rows">
-        <div class="recent-calls-empty">Loading recent calls&hellip;</div>
+        <table class="recent-table"><thead><tr><th>ID</th><th>Time</th><th>Tier</th><th>Asset</th><th>Call</th><th class="num">Confidence</th><th class="num">Timeframe</th><th>Exchange</th></tr></thead>
+        <tbody id="tr-recent-calls-tbody"><tr><td colspan="8" class="empty">Loading recent calls&hellip;</td></tr></tbody></table>
       </div>
     </div>
   </div>
 
-  <!-- Existing JS-hydrated tier-cards (preserved untouched per Build Rule 4 / D2-C foundation) -->
-  <div class="section"><h2>Performance by Tier</h2>
-    <div class="tier-grid" id="tier-cards"></div>
-    <div style="text-align:center;color:#9ca3af;font-size:12px;margin:12px 0 0;padding:6px 12px;background:rgba(212,178,85,0.06);border:1px solid rgba(212,178,85,0.12);border-radius:8px">&#x1f4a1; HOLD calls are always free &mdash; You only pay for BUY and SELL verdicts</div>
-  </div>
-
-  <!-- Signal type + Tamper-Proof row -->
-  <div class="call-type-verification-row">
-    <div class="call-type-section section"><h2>By Call Type</h2>
-      <table><thead><tr><th>Type</th><th>Trade Calls</th><th>Evaluated</th><th>PFE Win Rate</th></tr></thead>
-      <tbody id="by-type"></tbody></table>
-    </div>
-    <div class="tamper-proof-card" style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:20px;margin-top:28px">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="color:#60a5fa;font-size:16px;margin-top:2px">&#x1f517;</span>
-        <div>
-          <span style="color:#fff;font-size:14px;font-weight:600">Tamper-Proof Track Record</span>
-          <p style="color:#9ca3af;font-size:13px;margin:6px 0 0">Every call hashed on-chain (Base L2). Daily Merkle batches. Inspect the contract on Basescan &mdash; we can&rsquo;t edit history.</p>
-          <div style="margin-top:12px;display:flex;gap:16px;font-size:12px">
-            <a href="/verify" style="color:#5BEEB3;text-decoration:none">Verify a Call &rarr;</a>
-            <a href="https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81" target="_blank" style="color:#5BEEB3;text-decoration:none">View Contract &rarr;</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Timeframe tabs + table -->
-  <div class="section">
-    <h2>Performance by Timeframe</h2>
-    <div class="tabs" id="tf-tabs"></div>
-    <table><thead><tr><th>Timeframe</th><th>Trade Calls</th><th>Evaluated</th><th>PFE Win Rate</th><th>Avg PFE %</th><th>BUY / SELL</th></tr></thead>
-    <tbody id="by-timeframe"></tbody></table>
-  </div>
-
-  <!-- Confidence Band Analysis -->
-  <div class="section" id="cb-section" style="display:none">
-    <h2>Performance by Confidence Band</h2>
-    <table><thead><tr><th>Band</th><th>Trade Calls</th><th>Evaluated</th><th>PFE Win Rate</th><th>Avg PFE %</th><th>BUY / SELL</th></tr></thead>
-    <tbody id="cb-body"></tbody></table>
-  </div>
-
-  <div class="grid-2">
-    <div class="section"><h2>Top Performing Assets</h2>
-      <table><thead><tr><th></th><th>Asset</th><th class="num">Trade Calls</th><th class="num">PFE WR</th></tr></thead>
-      <tbody id="top-assets"></tbody></table>
-    </div>
-    <div class="section"><h2>Worst Performing Assets</h2>
-      <table><thead><tr><th></th><th>Asset</th><th class="num">Trade Calls</th><th class="num">PFE WR</th></tr></thead>
-      <tbody id="worst-assets"></tbody></table>
-    </div>
-  </div>
-
-  <!-- Recent signals -->
-  <div class="section"><h2>Recent Trade Calls</h2>
-    <table class="recent-table"><thead><tr><th>ID</th><th>Time</th><th>Tier</th><th>Asset</th><th>Call</th><th class="num">Confidence</th><th class="num">Timeframe</th><th>Exchange</th></tr></thead>
-    <tbody id="recent"></tbody></table>
-  </div>
+  <!-- DESIGN-W8 / C3 (2026-05-11): 8 legacy sections REMOVED — content
+       superseded by W3 4-tier-stat-cards (above), W4 5-exchange-stat-cards
+       (above), W4 tf-bar-chart (above), W8 latest-calls 8-col panel
+       (above), W8 verify teaser card (above). Architect-ratified per
+       audits/DESIGN-W8-mapping.md ratification path B/canonical. Deleted:
+       legacy tier-grid · call-type table · tamper-proof-record badge
+       (integrated into Verify card) · legacy timeframe table · confidence-
+       band table · top-performing assets · worst-performing assets ·
+       legacy recent-calls table (rendering pattern repurposed as
+       tr-recent-calls-tbody 8-col renderer in renderAll()). -->
 
   <!-- Methodology -->
   <div class="section"><h2>Methodology</h2>
@@ -1732,11 +1755,9 @@ function setExchangeFilter(ex) {
   renderAll();
 }
 
-function setTfFilter(tf) {
-  activeTfFilter = tf;
-  document.querySelectorAll('#tf-tabs .tab').forEach(function(t){t.classList.toggle('active',t.dataset.tf===tf);});
-  renderAll();
-}
+// DESIGN-W8 / C4 (2026-05-11): setTfFilter REMOVED — #tf-tabs DOM deleted
+// with legacy "Performance by Timeframe" table block per Q-W8-4. activeTfFilter
+// pinned at 'all' (KPI cards now always show overall, no TF-filter UI).
 
 function setTierFilter(mode) {
   activeTierFilter = mode;
@@ -1778,44 +1799,10 @@ function renderAll() {
     evalEl.textContent = 'Trade Calls: ' + (s.overall.totalCalls||0).toLocaleString() + ' · Evaluated: ' + (s.overall.totalEvaluated||0).toLocaleString() + ' · PFE Win Rate: ' + pct(s.overall.pfeWinRate) + ' · HOLD Rate: ' + holdRate;
   }
 
-  // Tier cards — from server-side byTier (or byExchange[ex].byTier)
-  var tcEl = document.getElementById('tier-cards');
+  // DESIGN-W8 / C4 (2026-05-11): legacy #tier-cards JS-hydrated grid rendering
+  // REMOVED — superseded by W3 4-tier-stat-card grid hydrated below.
   var bt = d.byTier || {};
   var exTier = s.byTier || {};
-  function tierAssetLabel(tier, assets) {
-    if (tier === 1) return (assets||[]).join(', ') || 'BTC, ETH';
-    if (tier === 2) {
-      var s2 = (assets||[]).slice(0,5).join(', ');
-      return '<span style="color:#58a6ff">Top 20 by Open Interest</span><br>' + s2 + (assets && assets.length > 5 ? ' +' + (assets.length-5) + ' more' : '');
-    }
-    if (tier === 3) {
-      var s3 = (assets||[]).slice(0,4).join(', ');
-      return '<span style="color:#8b949e">Stocks · Indices · Commodities · FX</span>' + (s3 ? '<br>' + s3 + (assets.length > 4 ? ' +' + (assets.length-4) + ' more' : '') : '');
-    }
-    if (tier === 4) {
-      return '<span style="color:#8b949e">Liquidity Filtered (Top 50 OI)</span><br>' + (assets ? assets.length : 0) + ' assets tracked';
-    }
-    return (assets||[]).join(', ');
-  }
-  var hbt = d.holdsByTier || {};
-  tcEl.innerHTML = ['tier1','tier2','tier3','tier4'].map(function(k){
-    var t = bt[k]; if (!t) return '';
-    var tc = exTier[k] || { count: 0, evaluated: 0, pfeWinRate: null };
-    var isTF = t.tier === 3;
-    var tierHolds = hbt[String(t.tier)] || 0;
-    var holdLine = tierHolds > 0 ? '<div style="color:#8b949e;font-size:12px;margin-top:6px">' + tierHolds.toLocaleString() + ' HOLD calls — engine is selective</div>' : '';
-    return '<div class="tier-card" style="border-color:'+t.color+'40">' +
-      '<div class="tc-header">' + tierBadge(t.tier) + ' <span class="tc-name" style="color:'+t.color+'">' + t.name + '</span>' +
-      (isTF ? ' <span class="tradfi-badge">Only on AlgoVault ✦</span>' : '') + '</div>' +
-      '<div class="tc-assets">' + tierAssetLabel(t.tier, t.assets) + '</div>' +
-      (tc.count > 0 ? '<div class="tc-stats">' +
-        '<div class="tc-stat"><span class="tc-label">Trade Calls</span><span class="tc-val muted">' + (tc.count||0).toLocaleString() + '</span></div>' +
-        '<div class="tc-stat"><span class="tc-label">Evaluated</span><span class="tc-val muted">' + (tc.evaluated||0).toLocaleString() + '</span></div>' +
-        '<div class="tc-stat"><span class="tc-label">PFE Win Rate</span><span class="tc-val pfe-hero ' + pfeClass(tc.pfeWinRate) + '">' + pct(tc.pfeWinRate) + '</span></div>' +
-      '</div>' : '<div style="color:#6e7681;font-size:12px">No trade calls yet</div>') +
-      holdLine +
-    '</div>';
-  }).join('');
 
   // DESIGN-W3 / C4: hydrate canonical .tier-stat-card[data-tr-field] spans from
   // /api/performance-public.byTier. Page-load only (no polling — tier breakdown
@@ -1879,45 +1866,22 @@ function renderAll() {
     }
   });
 
-  // Trade call types — from server-side byCallType
-  var typeEl = document.getElementById('by-type');
-  var typeSrc = s.byType || {};
-  var th2 = d.totalHolds || 0;
-  var types = ['BUY','SELL','HOLD'].map(function(type){
-    var v = typeSrc[type] || { count: 0, evaluated: 0, pfeWinRate: null };
-    if (type === 'HOLD') v = { count: th2, evaluated: 0, pfeWinRate: null };
-    return [type, v];
-  });
-  typeEl.innerHTML = types.map(function(e){var tp=e[0],v=e[1];return '<tr><td>'+badge(tp)+'</td><td>'+(v.count||0)+'</td><td>'+(v.evaluated||0)+'</td><td class="'+pfeClass(v.pfeWinRate)+'">'+pct(v.pfeWinRate)+'</td></tr>';}).join('');
+  // DESIGN-W8 / C4 (2026-05-11): legacy #by-type, #by-timeframe, #top-assets,
+  // #worst-assets, #cb-body renderers REMOVED — DOM elements deleted per Q-W8-4
+  // (8-section canonical cleanup). Data still hydrates W3 4-tier-stat-card grid
+  // + W4 5-exchange-stat-card grid + W4 tf-bar-chart (above).
 
-  // TF table — from server-side byTimeframe
-  var tfEl = document.getElementById('by-timeframe');
-  var tfSrc = s.byTF || {};
-  var tfe = Object.entries(tfSrc);
-  var filtered = activeTfFilter === 'all' ? tfe : tfe.filter(function(e){return e[0]===activeTfFilter;});
-  if (filtered.length) {
-    filtered.sort(function(a,b){return TF_ORDER.indexOf(a[0])-TF_ORDER.indexOf(b[0]);});
-    tfEl.innerHTML = filtered.map(function(e){var tf=e[0],v=e[1];return '<tr><td><strong>'+tf+'</strong></td><td>'+(v.count||0)+'</td><td>'+(v.evaluated||0)+'</td><td class="'+pfeClass(v.pfeWinRate)+'">'+pct(v.pfeWinRate)+'</td><td>—</td><td>—</td></tr>';}).join('');
-  } else { tfEl.innerHTML = '<tr><td colspan="6" class="empty">No data for this timeframe</td></tr>'; }
-
-  // Asset tables — from server-side byAsset
-  var assetSrc = s.byAsset || {};
-  var assets = Object.entries(assetSrc).filter(function(e){ return e[1].count >= 5 && (activeTierFilter === 'all' || e[1].tier === parseInt(activeTierFilter)); }).map(function(e){ return { coin: e[0], tier: e[1].tier, count: e[1].count, pfeWinRate: e[1].pfeWinRate }; });
-  var topA = assets.slice().sort(function(a,b){return (b.pfeWinRate||0)-(a.pfeWinRate||0);}).slice(0,15);
-  var worstA = assets.slice().sort(function(a,b){return (a.pfeWinRate||0)-(b.pfeWinRate||0);}).slice(0,15);
-  function renderAT(id,list){
-    var el=document.getElementById(id);
-    if(!list.length){el.innerHTML='<tr><td colspan="4" class="empty">Waiting for outcome data (min 5 trade calls)...</td></tr>';return;}
-    el.innerHTML=list.map(function(a){return '<tr><td>'+tierBadge(a.tier)+'</td><td><strong>'+a.coin+'</strong></td><td class="num">'+a.count+'</td><td class="num '+pfeClass(a.pfeWinRate)+'">'+pct(a.pfeWinRate)+'</td></tr>';}).join('');
+  // DESIGN-W8 / C4 (2026-05-11): LATEST TRADE CALLS 8-col table hydration
+  // (per Q-W8-1=B). Sources from cachedData.recentSignals (real .id enables
+  // per-row deep-link to /verify?signalId=<id>; real .tier from server).
+  // 30s page-level refresh; 2.5s polling IIFE DELETED per Q-W8-3=A.
+  var recentEl = document.getElementById('tr-recent-calls-tbody');
+  if (recentEl) {
+    var recent = getFilteredRecent().slice(0,20);
+    if (recent.length) {
+      recentEl.innerHTML = recent.map(function(s){return '<tr><td><a href="/verify?signalId='+s.id+'" class="id-link">#'+s.id+'</a></td><td class="muted">'+timeAgo(s.created_at)+'</td><td>'+tierBadge(s.tier)+'</td><td><strong>'+s.coin+'</strong></td><td>'+badge(s.call)+'</td><td class="num">'+s.confidence+'%</td><td class="num">'+s.timeframe+'</td><td class="muted">'+(s.exchange||'HL')+'</td></tr>';}).join('');
+    } else { recentEl.innerHTML='<tr><td colspan="8" class="empty">No trade calls'+(activeTfFilter!=='all'?' for '+activeTfFilter:'')+' yet.</td></tr>'; }
   }
-  renderAT('top-assets',topA); renderAT('worst-assets',worstA);
-
-  // Recent signals — still from recentSignals (the 20-item capped array, correctly stripped)
-  var recentEl = document.getElementById('recent');
-  var recent = getFilteredRecent().slice(0,20);
-  if (recent.length) {
-    recentEl.innerHTML = recent.map(function(s){return '<tr><td><a href="/verify?signalId='+s.id+'" class="id-link">#'+s.id+'</a></td><td class="muted">'+timeAgo(s.created_at)+'</td><td>'+tierBadge(s.tier)+'</td><td><strong>'+s.coin+'</strong></td><td>'+badge(s.call)+'</td><td class="num">'+s.confidence+'%</td><td class="num">'+s.timeframe+'</td><td class="muted">'+(s.exchange||'HL')+'</td></tr>';}).join('');
-  } else { recentEl.innerHTML='<tr><td colspan="8" class="empty">No trade calls'+(activeTfFilter!=='all'?' for '+activeTfFilter:'')+' yet.</td></tr>'; }
 }
 
 async function load() {
@@ -1948,35 +1912,13 @@ async function load() {
       return '<div class="tab'+(isActive?' active':'')+'" data-ex="'+ex.id+'" style="cursor:pointer;padding:6px 14px;border-radius:8px;font-size:13px;border:1px solid '+(isActive?'#58a6ff':'#30363d')+';color:'+(isActive?'#58a6ff':'#8b949e')+';background:'+(isActive?'#58a6ff20':'#161b22')+'" onclick="setExchangeFilter(\\''+ex.id+'\\')">'+ex.label+'</div>';
     }).join('');
 
-    // TF tabs — from server-side byTimeframe (respects exchange filter via src())
-    var tabsEl = document.getElementById('tf-tabs');
-    var tfSrc = (src() || {}).byTF || {};
-    var availTfs = Object.keys(tfSrc).sort(function(a,b){return TF_ORDER.indexOf(a)-TF_ORDER.indexOf(b);});
-    tabsEl.innerHTML = '<div class="tab'+(activeTfFilter==='all'?' active':'')+'" data-tf="all" onclick="setTfFilter(\\'all\\')">All</div>' +
-      availTfs.map(function(tf){return '<div class="tab'+(activeTfFilter===tf?' active':'')+'" data-tf="'+tf+'" onclick="setTfFilter(\\''+tf+'\\')">'+tf+'</div>';}).join('');
+    // DESIGN-W8 / C4 (2026-05-11): #tf-tabs population REMOVED — DOM target
+    // deleted with legacy "Performance by Timeframe" table block per Q-W8-4.
+    // Confidence-bands fetch REMOVED — #cb-section + #cb-body DOM deleted.
 
     renderAll();
 
-    // Confidence bands (separate fetch — Postgres only)
-    try {
-      var cbRes = await fetch(CB_URL, { credentials: 'same-origin' });
-      if (cbRes.ok) {
-        var cbData = await cbRes.json();
-        var bands = cbData.bands || [];
-        if (bands.length > 0) {
-          var cbEl = document.getElementById('cb-body');
-          cbEl.innerHTML = bands.map(function(b) {
-            var wr = b.pfeWinRate != null ? (b.pfeWinRate * 100).toFixed(1) + '%' : '—';
-            var wrC = b.pfeWinRate != null ? (b.pfeWinRate >= 0.6 ? 'green' : b.pfeWinRate >= 0.45 ? 'gold' : 'red') : 'muted';
-            var avgP = b.avgPfePct != null ? b.avgPfePct.toFixed(2) + '%' : '—';
-            return '<tr><td><strong>' + b.band + '%</strong></td><td>' + b.total + '</td><td>' + b.evaluated + '</td><td class="' + wrC + '">' + wr + '</td><td>' + avgP + '</td><td>' + b.buyCount + ' / ' + b.sellCount + '</td></tr>';
-          }).join('');
-          document.getElementById('cb-section').style.display = 'block';
-        }
-      }
-    } catch(e) { /* confidence bands are best-effort */ }
-
-    // Merkle on-chain badge
+    // Merkle on-chain badge + DESIGN-W8 latest_batch_at hydration for Verify card
     try {
       var mr = await fetch(MERKLE_URL);
       var md = await mr.json();
@@ -1985,6 +1927,14 @@ async function load() {
         var totalVerified = md.batches.reduce(function(a,b){return a+(parseInt(b.signal_count)||0);},0);
         var latest = md.batches[0];
         document.getElementById('merkle-stats').innerHTML = 'On-Chain Proof: ' + md.batches.length + ' batch' + (md.batches.length>1?'es':'') + ' published · ' + totalVerified.toLocaleString() + ' calls verified · <a href="https://basescan.org/address/' + md.contractAddress + '" target="_blank" style="color:#58a6ff">View on Basescan →</a>';
+        // DESIGN-W8 / C4: hydrate Verify card's latest batch timestamp.
+        // Format: "YYYY-MM-DD HH:MM UTC" (matches canonical track-record-2.jsx).
+        if (latest.published_at) {
+          var dt = new Date(latest.published_at);
+          var pad = function(n){return String(n).padStart(2,'0');};
+          var batchAtStr = dt.getUTCFullYear() + '-' + pad(dt.getUTCMonth()+1) + '-' + pad(dt.getUTCDate()) + ' ' + pad(dt.getUTCHours()) + ':' + pad(dt.getUTCMinutes()) + ' UTC';
+          document.querySelectorAll('[data-tr-field="latest_batch_at"]').forEach(function(el){ el.textContent = batchAtStr; });
+        }
       }
     } catch(e) { /* merkle stats are best-effort */ }
 
@@ -1996,58 +1946,28 @@ async function load() {
 load();
 setInterval(load, 30000);
 
-// DESIGN-W4 / C3: tr-recent-calls panel poller. Vanilla JS, no React.
-// Hydrates #tr-recent-calls-rows from /api/recent-calls?limit=10 every 2500ms
-// (matches landing's LAST_CALLS feed cadence). Coin · TF · exchange · call
-// (BUY/SELL/HOLD modifier) · confidence · time. Separate poller — different
-// rendering target from landing's LAST_CALLS (5-row vs 10-row, /track-record
-// vs /).
-(function() {
-  var FEED_LIMIT = 10;
-  var rowsEl = document.getElementById('tr-recent-calls-rows');
-  if (!rowsEl) return;
-  function fmtTimeAgo(s) {
-    if (s == null || !isFinite(s) || s < 0) return '—';
-    if (s < 60) return s.toFixed(1) + 's ago';
-    if (s < 3600) return Math.round(s / 60) + 'm ago';
-    return Math.round(s / 3600) + 'h ago';
-  }
-  function callClass(call) {
-    var c = (call || '').toUpperCase();
-    if (c === 'BUY') return 'recent-calls-call recent-calls-call-buy';
-    if (c === 'SELL') return 'recent-calls-call recent-calls-call-sell';
-    return 'recent-calls-call recent-calls-call-hold';
-  }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
-      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c;
-    });
-  }
-  function render(rows) {
-    if (!Array.isArray(rows) || rows.length === 0) {
-      rowsEl.innerHTML = '<div class="recent-calls-empty">No recent calls.</div>';
-      return;
+// DESIGN-W8 / C4 (2026-05-11): DESIGN-W4 2.5s /api/recent-calls polling IIFE
+// REMOVED — LATEST TRADE CALLS panel now hydrates from cachedData.recentSignals
+// via renderAll() (30s page refresh) per Q-W8-1=B. Drops 2.5s dependency on
+// /api/recent-calls (sanitized public endpoint lacks .id + .tier needed for
+// 8-col table). Canonical track-record-2.jsx FeedSection has no polling.
+
+// DESIGN-W8 / C2: Verify Any Call form submit handler.
+// Form action="/verify" already provides graceful no-JS fallback; this handler
+// trims whitespace and constructs the canonical query-string URL.
+function verifyAnyCallSubmit(ev) {
+  try {
+    var input = document.getElementById('verify-any-call-input');
+    var v = (input && input.value || '').trim();
+    if (v) {
+      ev.preventDefault();
+      window.location.href = '/verify?id=' + encodeURIComponent(v);
+      return false;
     }
-    rowsEl.innerHTML = rows.slice(0, FEED_LIMIT).map(function(r){
-      return '<div class="tr-recent-calls-row">' +
-        '<span class="recent-calls-coin">' + esc(r.slug) + '</span>' +
-        '<span class="recent-calls-tf">' + esc(r.timeframe) + '</span>' +
-        '<span class="recent-calls-tf">' + esc(r.exchange) + '</span>' +
-        '<span class="' + callClass(r.call) + '">' + esc((r.call||'').toUpperCase()) + '</span>' +
-        '<span class="recent-calls-time">conf ' + esc(r.confidence) + '</span>' +
-        '<span class="recent-calls-time">' + esc(fmtTimeAgo(r.seconds_ago)) + '</span>' +
-      '</div>';
-    }).join('');
-  }
-  function fetchTrRecent() {
-    fetch('/api/recent-calls?limit=' + FEED_LIMIT)
-      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(render)
-      .catch(function(err){ console.warn('[tr-recent-calls] refresh failed', err); });
-  }
-  fetchTrRecent();
-  setInterval(fetchTrRecent, 2500); // POLL_MS — keep literal so verification gate matches
-})();
+    // Empty input → fall through to native form GET → /verify
+    return true;
+  } catch (e) { return true; }
+}
 </script>
 </body>
 </html>`;
