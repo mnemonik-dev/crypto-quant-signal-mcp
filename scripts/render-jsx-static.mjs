@@ -111,16 +111,18 @@ function patchLandingRest(src) {
 
   // 3) UseCases subtitle: drop the "call, confidence, regime, factors, every call Merkle-anchored
   // on Base L2" middle phrase per Mr.1 directive. New shorter form.
+  // ROUND 9 (2026-05-11): line-break between the two sentences per Mr.1 visual review.
   s = s.replace(
     'AlgoVault MCP gives your agent a composite verdict in one call — call, confidence, regime, factors, every call Merkle-anchored on Base L2. Pair it with any of these official Agent Trade Kits to ship a complete trading agent.',
-    'AlgoVault MCP gives your agent a composite verdict in one call. Pair it with any of these official Agent Trade Kits to ship a complete trading agent.'
+    'AlgoVault MCP gives your agent a composite verdict in one call.<br/>Pair it with any of these official Agent Trade Kits to ship a complete trading agent.'
   );
 
   // 4) UseCases trademark notice: drop the "All demos run testnet/demo only — zero real-money
   // risk in any code path." prefix per Mr.1 directive.
+  // ROUND 9 (2026-05-11): arrange the 4 sentences across 3 lines per Mr.1 visual review.
   s = s.replace(
     'All demos run testnet/demo only — zero real-money risk in any code path. AlgoVault returns analytics; your agent and risk policy decide what to execute. Exchange logos and names are trademarks of their respective owners. Used for nominative reference to integration tutorials. No partnership or endorsement implied.',
-    'AlgoVault returns analytics; your agent and risk policy decide what to execute. Exchange logos and names are trademarks of their respective owners. Used for nominative reference to integration tutorials. No partnership or endorsement implied.'
+    'AlgoVault returns analytics; your agent and risk policy decide what to execute.<br/>Exchange logos and names are trademarks of their respective owners.<br/>Used for nominative reference to integration tutorials. No partnership or endorsement implied.'
   );
 
   // 5) LiveTrackRecord subtitle per Mr.1: "Every qualifying trade call (confidence ≥ 60%) is
