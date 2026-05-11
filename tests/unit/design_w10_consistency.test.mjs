@@ -182,14 +182,22 @@ for (const ex of INTEGRATIONS) {
       `VEyebrow "· ${ex} integration" missing`);
   });
 
-  test(`/integrations/${ex}: Q-W10-6 (DESIGN-W10-FF reversal) — tier-stat-card per-section wrapping REMOVED per Mr.1 visual review`, async () => {
+  test(`/integrations/${ex}: Q-W10-6 (DESIGN-W10-FF-2 RESTORED) — tier-stat-card per-section wrapping intact`, async () => {
     const html = await read(`landing/integrations/${ex}.html`);
-    // DESIGN-W10-FF (2026-05-12): Mr.1 dispatched "Remove cards in Image 1 on 4 pages above"
-    // post-W10 visual review. wrapH2InTierStatCard() call removed from htmlShell();
-    // markdown body renders as flowing prose inside canonical artboard scaffolding.
-    // /account still uses tier-stat-card to wrap forms+tabs (separate page-render context).
+    // DESIGN-W10-FF-1 (2026-05-12) misread Mr.1's "Remove cards in Image 1" directive
+    // and removed all section cards. DESIGN-W10-FF-2 (2026-05-12) corrected per Mr.1
+    // clarification ("I means remove this section, not the section cards"): cards
+    // RESTORED; instead the redundant TL;DR section content is stripped.
     const cards = countOcc(html, 'class="tier-stat-card"');
-    assert.strictEqual(cards, 0, `tier-stat-card per-section wrapping removed from /integrations; expected 0 instances, got ${cards}`);
+    assert.ok(cards >= 5, `expected ≥5 tier-stat-card wrappers (intro + per-h2 sections), got ${cards}`);
+  });
+
+  test(`/integrations/${ex}: DESIGN-W10-FF-2 — TL;DR section stripped (h2 + bullets gone; redundant with quotable-fact above)`, async () => {
+    const html = await read(`landing/integrations/${ex}.html`);
+    assert.strictEqual(countOcc(html, /<h2>TL;DR/g), 0, 'TL;DR h2 must be stripped');
+    assert.strictEqual(countOcc(html, 'Not 26 raw indicators'), 0, 'TL;DR bullet 1 text must be stripped');
+    assert.strictEqual(countOcc(html, 'Funding spreads, regime alignment'), 0, 'TL;DR bullet 2 text must be stripped');
+    assert.strictEqual(countOcc(html, 'Verifiable accuracy, not a marketing claim'), 0, 'TL;DR bullet 3 text must be stripped');
   });
 
   test(`/integrations/${ex}: Q-W10-7 — utm-injected canonical Nav (preserves Plausible attribution)`, async () => {

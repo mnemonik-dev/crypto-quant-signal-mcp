@@ -97,6 +97,19 @@ const CANONICAL_FOOTER_HTML = `<footer style="padding:44px 80px 56px;border-top:
   </div>
 </footer>`;
 
+// DESIGN-W10-FF-2 (2026-05-12): strip the "TL;DR (3-line hook — MOAT-led)" h2 + bullet
+// list from rendered tutorial HTML per Mr.1 directive ("I means remove this section,
+// not the section cards"). Section is redundant with the quotable-fact callout above
+// the article (both make the MOAT pitch — composite verdict, cross-venue, Merkle-
+// anchored). Upstream markdown source PRESERVED at algovault-skills/docs/integrations/
+// <x>.md for GitHub readers + Skills Hub PR consumers; strip is signal-MCP-side only.
+function stripTLDRSection(bodyHtml) {
+  return bodyHtml.replace(
+    /<h2>TL;DR[^<]*<\/h2>\s*<ul>[\s\S]*?<\/ul>\s*/,
+    ''
+  );
+}
+
 // DESIGN-W10 / C3 / Q-W10-4 + Q-W10-6: wrap each top-level h2 section of markdown-
 // rendered HTML in a tier-stat-card VCard. Splits bodyHtml on `<h2>` boundaries.
 // First chunk (pre-first-h2) — the markdown H1 + intro paragraph + quotable-fact +
@@ -267,14 +280,14 @@ ${canonicalNavHtml(exchange)}
       <p class="quotable-fact" style="background: rgba(16,185,129,0.05); border-left: 3px solid #10b981; padding: 12px 16px; margin: 0 0 24px; border-radius: 0 4px 4px 0; color: #6ee7b7; font-size: 0.95em;" itemscope itemtype="https://schema.org/Claim">
         <span itemprop="claimReviewed">AlgoVault has <strong style="color:#a7f3d0"><span data-tr-field="pfe_wr">${SNAPSHOT_PFE_WR}</span></strong>+ PFE Win Rate across <strong style="color:#a7f3d0"><span data-tr-field="signal_count">${SNAPSHOT_SIGNAL_COUNT}</span></strong>+ signal calls, each Merkle-anchored on Base L2 (verifiable at <a href="/track-record" itemprop="url" style="color:#d4b255">algovault.com/track-record</a>).</span>
       </p>
-      <!-- DESIGN-W10-FF (2026-05-12): tier-stat-card per-section wrapping REMOVED per Mr.1
-           visual review directive ("Remove cards in Image 1 on 4 pages above"). Markdown
-           body renders as flowing prose inside the canonical artboard scaffolding;
-           quotable-fact callout (above) keeps its own visual treatment. The
-           wrapH2InTierStatCard() helper retained for potential future use but no longer
-           called from htmlShell(). -->
+      <!-- DESIGN-W10-FF-2 (2026-05-12): tier-stat-card per-section wrapping RESTORED
+           (W10-FF-1 removal was based on misread of Mr.1 directive). Mr.1 clarified:
+           "I means remove this section, not the section cards" — referring to the
+           TL;DR section content, not the visual card structure. wrapH2InTierStatCard()
+           wraps each h2 section + intro in a card; stripTLDRSection() removes the
+           redundant TL;DR section before wrapping (so it doesn't become an empty card). -->
       <article>
-${bodyHtml}
+${wrapH2InTierStatCard(stripTLDRSection(bodyHtml))}
       </article>
     </div>
   </div>
