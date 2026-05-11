@@ -884,8 +884,12 @@ async function verifySignal() {
   var id = inputEl ? inputEl.value : '';
   var el = document.getElementById('result');
   var btn = document.getElementById('verify-btn');
+  // W9-FIX-FORWARD Fix 6 (2026-05-11): reveal wrapper on user-initiated verifySignal call so the
+  // result panel becomes visible. wrapper starts hidden by default to prevent auto-display.
+  var wrapper = document.getElementById('verify-result-wrapper');
+  if (wrapper) wrapper.style.display = 'block';
   if (!el) return;
-  if (!id) { el.className = 'verify-result-panel hidden'; el.style.display = 'none'; return; }
+  if (!id) { el.className = 'verify-result-panel hidden'; el.style.display = 'none'; if (wrapper) wrapper.style.display = 'none'; return; }
 
   if (btn) { btn.textContent = 'Checking...'; btn.disabled = true; }
 
@@ -967,28 +971,61 @@ document.querySelectorAll('.signal-id-input').forEach(function(el) {
   });
 });
 
-// URL param auto-lookup or auto-load most recent signal — preserved byte-identical from W4.
+// W9-FIX-FORWARD Fix 6 (2026-05-11): URL param auto-lookup ONLY when ?id= or ?signalId= explicitly
+// present. The W4 auto-load-most-recent fallback (fetch /api/performance-public → recentSignals[0].id
+// → verifySignal()) REMOVED — Mr.1 observed the result panel showing PENDING content on page load
+// without user interaction; root cause was that fallback. Wrapper stays hidden until user clicks
+// Verify on-chain → button OR navigates with ?id=<hex> deep-link.
 (function() {
   var params = new URLSearchParams(window.location.search);
   var id = params.get('signalId') || params.get('id');
   if (id) {
     document.querySelectorAll('.signal-id-input').forEach(function(el) { el.value = id; });
     verifySignal();
-  } else {
-    fetch('/api/performance-public')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.recentSignals && data.recentSignals.length > 0) {
-          var recentId = data.recentSignals[0].id;
-          if (recentId) {
-            document.querySelectorAll('.signal-id-input').forEach(function(el) { el.value = recentId; });
-            verifySignal();
-          }
-        }
-      })
-      .catch(function() {});
   }
+  // else: do nothing on page load. User must click button or arrive with deep-link.
 })();
+
+// W9-FIX-FORWARD Fix 4a (2026-05-11): Recent ID pills loader — fetches /api/verify-sample-ids and
+// populates ALL .sample-ids-row mount points (dual-render: desktop + mobile artboards each have one;
+// HTML id-uniqueness preserved by giving desktop the sample-ids id + class, mobile class-only).
+// Click handler propagates the chosen id to both desktop + mobile inputs via .signal-id-input class.
+(async function() {
+  var containers = document.querySelectorAll('.sample-ids-row');
+  if (!containers.length) return; // mount-points absent — skip (pre-Fix-4a state)
+  try {
+    var res = await fetch('/api/verify-sample-ids');
+    var data = await res.json();
+    if (!data.signals || data.signals.length === 0) return;
+    containers.forEach(function(container) {
+      data.signals.forEach(function(s) {
+        var btn = document.createElement('button');
+        btn.className = 'pill';
+        btn.dataset.id = s.id;
+        btn.textContent = '#' + s.id;
+        btn.title = s.coin + ' ' + s.signal + ' \\u2022 ' + s.timeframe + ' \\u2022 ' + s.confidence + '%';
+        btn.style.cssText = 'background:oklch(0.18 0.014 265 / 0.55);border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--accent, var(--mint));cursor:pointer;font-family:var(--font-mono);font-size:11px;font-weight:500;transition:background 0.2s';
+        btn.onmouseenter = function() { this.style.background = 'oklch(0.32 0.08 170 / 0.32)'; };
+        btn.onmouseleave = function() { this.style.background = 'oklch(0.18 0.014 265 / 0.55)'; };
+        btn.onclick = function() {
+          document.querySelectorAll('.signal-id-input').forEach(function(el) { el.value = btn.dataset.id; });
+          verifySignal();
+        };
+        container.appendChild(btn);
+      });
+    });
+  } catch (e) {}
+})();
+
+// W9-FIX-FORWARD Fix 6 (2026-05-11): DOMContentLoaded reveal-on-?id JS (defense-in-depth for the
+// wrapper toggle — verifySignal() also reveals on user call, this handles the case where the page
+// loads with ?id= present but verifySignal hasn't yet completed).
+document.addEventListener('DOMContentLoaded', function() {
+  if (new URLSearchParams(location.search).has('id') || new URLSearchParams(location.search).has('signalId')) {
+    var r = document.getElementById('verify-result-wrapper');
+    if (r) r.style.display = 'block';
+  }
+});
 </script>`;
 
 // Pre-Babel patches for verify.jsx (none required for C2 — JSX is canonical SoT; all overrides
@@ -1036,13 +1073,19 @@ function preserveVerifyW4Form(html, isDesktop) {
 
 // Wrap desktop + mobile artboards in lp-verify-{desktop,mobile} divs. @media swap CSS is in the
 // VERIFY_HEAD_AND_NAV <style> block.
+// DESIGN-W9-FIX-FORWARD Fix 6 (2026-05-11): #result div wrapped in verify-result-wrapper —
+// hidden by default; revealed only on ?id= URL param OR on user-initiated verifySignal() call.
+// Removes the auto-PENDING-display Mr.1 observed on page load (root cause: W4 URL-param IIFE
+// fell through to /api/performance-public.recentSignals[0].id auto-load; fix removes that
+// fallback + adds the wrapper for visual layered defense).
 function wrapVerifyDualRender(desktopHtml, mobileHtml) {
   return `<main class="verify-main">\n` +
     `<div class="lp-verify-desktop">${desktopHtml}</div>\n` +
     `<div class="lp-verify-mobile">${mobileHtml}</div>\n` +
-    // verifySignal()'s mount-point — hidden by default; populated on form submit.
-    // Sits AFTER both artboards (not dual-rendered — single instance in DOM).
+    // Fix 6 wrapper — hidden by default; visibility toggled by DOMContentLoaded JS + verifySignal call.
+    `<div id="verify-result-wrapper" style="display:none">\n` +
     `<div id="result" class="verify-result-panel hidden" aria-live="polite" style="display:none;max-width:48rem;margin:1.25rem auto 0;padding:0 1.5rem"></div>\n` +
+    `</div>\n` +
     `</main>\n`;
 }
 
@@ -1179,13 +1222,55 @@ const VERIFY_W9_LIVEBIND_JS = `<!-- DESIGN-W9 hydration: proxy.js FIRST (Q-W9-11
 })();
 </script>`;
 
+// ── DESIGN-W9-FIX-FORWARD overrides (2026-05-11 post-deploy Mr.1 visual review) ──
+
+// Fix 1: strip JSX-rendered <nav class="nav">…</nav> (VerifyNav) — duplicates the global W7 nav.
+// Modeled on existing w7HeroStripNav. Cross-page consistency wins: global AlgoVault Labs nav stays.
+function applyVerifyFixForward1StripNav(html) {
+  return html.replace(/<nav class="nav"[^>]*>[\s\S]*?<\/nav>/g, '');
+}
+
+// Fix 4a: replace JSX literal `· tries: leaf hash → merkle proof → batch root → tx · all client-side`
+// (rendered as `<span>· tries: leaf hash …</span>`) with `<div id="sample-ids">Recent ID:</div>`
+// so the W4 pills loader (restored in VERIFY_W4_PRESERVED_JS) can populate 5 clickable signal-id pills.
+// isDesktop param dedupes id="sample-ids" across dual-render (desktop gets id; mobile gets class only).
+// Pills loader uses querySelectorAll('.sample-ids-row') to populate BOTH artboards.
+function applyVerifyFixForward4aPillsMarkup(html, isDesktop) {
+  const idAttr = isDesktop ? 'id="sample-ids" ' : '';
+  return html.replace(
+    /<span>· tries: leaf hash → merkle proof → batch root → tx · all client-side<\/span>/g,
+    `<div ${idAttr}class="sample-ids-row" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11.5px;color:var(--fg-4)">Recent ID:</div>`
+  );
+}
+
+// Fix 4b: replace JSX literal `tip: use the share button on any /track-record row to get a deep-link`
+// with new copy `Tips: Click Signal ID on /track-record > Latest Trade Calls to Verify`.
+// JSX renders the tip with React `<!-- -->` separator between adjacent text nodes and JSX children
+// (React's classic-runtime renderToString inserts a comment marker to split text-children regions
+// for hydration boundary tracking). Regex accounts for the `<!-- --> ` between "any" and the anchor.
+function applyVerifyFixForward4bTipsCopy(html) {
+  return html.replace(
+    /<span style="color:var\(--fg-3\)">tip: use the share button on any<!-- --> (<a href="\/track-record"[^>]*>\/track-record<\/a>) row to get a deep-link<\/span>/g,
+    '<span style="color:var(--fg-3)">Tips: Click Signal ID on $1 &gt; Latest Trade Calls to Verify</span>'
+  );
+}
+
 // Aggregate C3 overrides for a single artboard.
-function applyVerifyC3Overrides(html) {
+// DESIGN-W9-FIX-FORWARD (2026-05-11): Q-W9-4 REVERSED by architect — applyVerifyOverride2VRecentEmpty
+// REMOVED from chain (ship JSX VRecent 10 rows verbatim per Mr.1's "we publish Merkle batches
+// proactively, demo rows showing past published verifications are factually accurate"
+// reversal). Q-W9-4 ratification preserved in audits/DESIGN-W9-mapping.md for historical record.
+// isDesktop param dedupes id="sample-ids" across dual-render (Fix 4a HTML id-uniqueness).
+function applyVerifyC3Overrides(html, isDesktop) {
   html = applyVerifyOverride1Eyebrow(html);
-  html = applyVerifyOverride2VRecentEmpty(html);
+  // applyVerifyOverride2VRecentEmpty — REMOVED per Fix-Forward Fix 5 (architect override Q-W9-4 reversal)
   html = applyVerifyOverride3Contract(html);
   html = applyVerifyOverride45Links(html);
   html = applyVerifyOverride6PreOutcomeStrip(html);
+  // Fix-Forward additions (post-deploy 2026-05-11):
+  html = applyVerifyFixForward1StripNav(html);                  // Fix 1: strip JSX VerifyNav (duplicate nav)
+  html = applyVerifyFixForward4aPillsMarkup(html, isDesktop);   // Fix 4a: replace JSX helper text with #sample-ids div (desktop) / class-only (mobile)
+  html = applyVerifyFixForward4bTipsCopy(html);                 // Fix 4b: replace JSX tip copy
   return html;
 }
 
@@ -1296,8 +1381,9 @@ async function main() {
       desktopRaw = preserveVerifyW4Form(desktopRaw, true);
       mobileRaw = preserveVerifyW4Form(mobileRaw, false);
       // DESIGN-W9 C3: 5 wave-level overrides per architect ratification 2026-05-11.
-      desktopRaw = applyVerifyC3Overrides(desktopRaw);
-      mobileRaw = applyVerifyC3Overrides(mobileRaw);
+      // Fix-forward 2026-05-11: isDesktop flag dedupes id="sample-ids" across dual-render.
+      desktopRaw = applyVerifyC3Overrides(desktopRaw, true);
+      mobileRaw = applyVerifyC3Overrides(mobileRaw, false);
       // Dual-render @media swap wrap.
       const wrapped = wrapVerifyDualRender(desktopRaw, mobileRaw);
       // Full HTML document with head + nav + body + W4 JS preserved + W9 live-bind hydration.

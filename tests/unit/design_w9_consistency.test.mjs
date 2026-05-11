@@ -109,13 +109,17 @@ test('landing/verify.html: C3 Override 1 — VRecent eyebrow rename · social pr
   assert.strictEqual(countOcc(html, 'social proof'), 0, 'old eyebrow text must be 0 after rename');
 });
 
-test('landing/verify.html: C3 Override 2 — VRecent 10 fictional rows REMOVED, replaced with recent-verifications-empty shell (Q-W9-4)', async () => {
+test('landing/verify.html: C3 Override 2 — Q-W9-4 REVERSED by Fix-Forward Fix 5 (ship JSX VRecent 10 rows verbatim per Mr.1 positioning override)', async () => {
   const html = await read('landing/verify.html');
-  assert.ok(countOcc(html, 'recent-verifications-empty') >= 1, 'empty-state shell class missing');
-  assert.ok(html.includes('Verifications will appear here once requesters opt in'), 'empty-state copy missing');
-  // Fictional row anchors should be GONE
-  for (const fic of ['12s ago', '38s ago', '14m ago', '0x4a2…f8c', 'ETH 15m HOLD']) {
-    assert.strictEqual(countOcc(html, fic), 0, `fictional row anchor "${fic}" must be 0 after VRecent rows removal`);
+  // DESIGN-W9-FIX-FORWARD Fix 5 (2026-05-11): Mr.1 reversed Q-W9-4 ratification with positioning
+  // argument "we publish Merkle batches proactively, demo rows showing past published verifications
+  // are factually accurate, not fictional". applyVerifyOverride2VRecentEmpty removed from C3 chain;
+  // JSX VRecent 10 rows ship verbatim. Empty-state shell class no longer present.
+  assert.strictEqual(countOcc(html, 'recent-verifications-empty'), 0, 'empty-state shell class must be 0 after Q-W9-4 reversal');
+  assert.ok(!html.includes('Verifications will appear here once requesters opt in'), 'empty-state copy must be 0');
+  // JSX-default row anchors must be PRESENT (dual-render: 2 instances each)
+  for (const anchor of ['12s ago', '38s ago', '14m ago']) {
+    assert.ok(countOcc(html, anchor) >= 1, `JSX row anchor "${anchor}" must be present (Fix 5)`);
   }
 });
 
@@ -126,12 +130,17 @@ test('landing/verify.html: C3 Override 3 — VFooter contract full EIP-55 + Base
   assert.match(html, /href="https:\/\/basescan\.org\/address\/0x6485396ac981Fe0A58540dfBF3E730f6F7BcbF81"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/, 'Basescan external-link discipline missing');
 });
 
-test('landing/verify.html: C3 Override 4 — VerifyNav rewrites (Verdicts REMOVED, Docs → /docs.html, Open in Claude → /docs.html#mcp-install)', async () => {
+test('landing/verify.html: C3 Override 4 — VerifyNav SUPERSEDED by Fix-Forward Fix 1 (entire JSX VerifyNav stripped; global W7 nav remains for cross-page consistency)', async () => {
   const html = await read('landing/verify.html');
-  assert.ok(!html.includes('<a href="#">Verdicts</a>'), 'Verdicts placeholder link must be removed (Q-W9-3)');
-  assert.ok(!html.includes('<a href="#">Docs</a>'), 'Docs placeholder link must be rewritten');
-  assert.ok(!html.includes('<a href="#" class="nav-cta">'), 'nav-cta Open in Claude placeholder must be rewritten (Q-W9-2)');
-  assert.match(html, /<a href="\/docs\.html#mcp-install" class="nav-cta">Open in Claude/, 'Open in Claude target rewritten');
+  // DESIGN-W9-FIX-FORWARD Fix 1 (2026-05-11): the entire JSX <nav class="nav">...</nav> block is now
+  // stripped post-render to prevent duplicate-nav (the global W7 AlgoVault Labs sticky nav already
+  // sits above /verify content per cross-page consistency). Q-W9-2 and Q-W9-3 link-target rewrites
+  // are therefore moot — no Verdicts/Docs/Open-in-Claude links exist on /verify.
+  assert.strictEqual(countOcc(html, '<nav class="nav">'), 0, 'JSX VerifyNav must be stripped (Fix 1)');
+  // Global W7 nav remains (1 instance — cross-page sticky AlgoVault Labs nav)
+  assert.ok(countOcc(html, '<nav class="fixed top-0') >= 1, 'global W7 sticky nav remains');
+  // Verdicts placeholder removed (Q-W9-3 + Fix 1 — double-stripped now)
+  assert.ok(!html.includes('<a href="#">Verdicts</a>'), 'Verdicts placeholder removed');
 });
 
 test('landing/verify.html: C3 Override 6 — VFooter <pre> outcome line STRIPPED per Q-W9-9 spec-cross-section-contradiction-probe', async () => {
