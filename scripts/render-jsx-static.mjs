@@ -207,7 +207,14 @@ function applyFooterUrls(html) {
     .replace(/href="#Signup"/g, 'href="/signup"')
     .replace(/href="#Privacy"/g, 'href="/privacy"')
     .replace(/href="#npm"/g, 'href="https://www.npmjs.com/package/crypto-quant-signal-mcp" target="_blank" rel="noopener"')
-    .replace(/href="#MCP Registry"/g, 'href="https://registry.modelcontextprotocol.io/v0/servers?search=algovault" target="_blank" rel="noopener"');
+    .replace(/href="#MCP Registry"/g, 'href="https://registry.modelcontextprotocol.io/v0/servers?search=algovault" target="_blank" rel="noopener"')
+    // DESIGN-W7 fix-forward ROUND 8 (Mr.1 visual review 2026-05-11): wire the 3 placeholder
+    // hrefs in LiveTrackRecord (View Live Track Record) + TamperProof callout (Verify a Call,
+    // View Contract) to their real URLs so click-throughs work post-render. View Contract
+    // links to the deployed Merkle-anchor contract on Basescan (external = target=_blank).
+    .replace(/href="#track"/g, 'href="/track-record"')
+    .replace(/href="#verify-call"/g, 'href="/verify"')
+    .replace(/href="#contract"/g, 'href="https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81" target="_blank" rel="noopener noreferrer"');
 }
 
 function stripUseCasesDate(html) {
