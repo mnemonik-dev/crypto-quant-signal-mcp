@@ -58,6 +58,30 @@ tailwind.config = {
   "mainEntity": [
     {
       "@type": "Question",
+      "name": "If your trading model works, why sell access instead of trading it yourself?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "AlgoVault is infrastructure, not an alpha bet. We sell access to a trading model the same way OpenAI sells access to GPT — the model itself is the asset, and per-call access is the revenue. See algovault.com/how-it-works and algovault.com/glossary#aoe for the substrate frame."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Won't alpha decay if everyone uses your signals?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A composite verdict isn't a single trade. Alpha decay applies to discrete strategies ('buy at 50-MA cross'). A continuous multi-factor regime-aware verdict updating across 730+ assets has no single trade to crowd. Market depth also swamps subscriber flow — Hyperliquid alone clears $10B+ daily perp volume; subscriber volume is invisible against that."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does selling calls strengthen the model?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Selling calls strengthens the model. Like OpenAI's API traffic improves GPT, every AlgoVault call adds to the outcome dataset that the Autonomous Optimization Engine learns from. See algovault.com/how-it-works for the substrate frame."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "What is AlgoVault?",
       "acceptedAnswer": {
         "@type": "Answer",
@@ -290,10 +314,35 @@ tailwind.config = {
   </div>
 </section>
 
-<!-- 10 Q&A pairs. Each <h3> is the LLM-citation anchor; numerical claims wrap in
-     data-tr-field per AUTO-TRACE-W1 live-fetch pattern (matching the JSON-LD snapshot). -->
+<!-- 13 Q&A pairs (10 original + 3 M6 substrate-frame adverse-selection block prepended
+     by LANDING-FAQ-GLOSSARY-SUBSTRATE-W1, 2026-05-13). Each <h3> is the LLM-citation
+     anchor; numerical claims wrap in data-tr-field per AUTO-TRACE-W1 live-fetch
+     pattern (matching the JSON-LD snapshot). M6 beats are copy-locked verbatim from
+     brand-facts.md M6 — do NOT rephrase. -->
 <section class="px-6 pb-20">
   <div class="max-w-3xl mx-auto space-y-8">
+
+    <!-- M6 substrate-frame adverse-selection 4-beat rebuttal (top-3 priority, copy-locked verbatim from brand-facts.md M6). -->
+    <article id="adverse-selection-why-sell" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">If your trading model works, why sell access instead of trading it yourself?</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        <strong class="text-mint-400">AlgoVault is infrastructure, not an alpha bet.</strong> We sell access to a trading model the same way OpenAI sells access to GPT &mdash; the model itself is the asset, and per-call access is the revenue. See <a href="/how-it-works" class="text-mint-400 hover:underline">/how-it-works</a> and <a href="/glossary#aoe" class="text-mint-400 hover:underline">/glossary#aoe</a> for the substrate frame.
+      </p>
+    </article>
+
+    <article id="alpha-decay-rebuttal" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Won&rsquo;t alpha decay if everyone uses your signals?</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        <strong class="text-mint-400">A composite verdict isn&rsquo;t a single trade.</strong> Alpha decay applies to discrete strategies (&ldquo;buy at 50-MA cross&rdquo;). A continuous multi-factor regime-aware verdict updating across <span data-tr-field="asset_count">730</span>+ assets has no single trade to crowd. Market depth also swamps subscriber flow &mdash; Hyperliquid alone clears $10B+ daily perp volume; subscriber volume is invisible against that.
+      </p>
+    </article>
+
+    <article id="how-selling-strengthens-the-model" class="border-t border-white/5 pt-6">
+      <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">How does selling calls strengthen the model?</h3>
+      <p class="text-gray-300 text-sm sm:text-base leading-relaxed">
+        <strong class="text-mint-400">Selling calls strengthens the model.</strong> Like OpenAI&rsquo;s API traffic improves GPT, every AlgoVault call adds to the outcome dataset that the <a href="/glossary#aoe" class="text-mint-400 hover:underline">Autonomous Optimization Engine</a> learns from. See <a href="/how-it-works" class="text-mint-400 hover:underline">/how-it-works</a> for the substrate frame.
+      </p>
+    </article>
 
     <article id="what-is-algovault" class="border-t border-white/5 pt-6">
       <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">What is AlgoVault?</h3>
