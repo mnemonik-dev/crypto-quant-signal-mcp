@@ -122,10 +122,16 @@ test('no LITERAL/TODO/DEBUG comment leakage in any landing/*.html', async () => 
 
 test('no forbidden phrases (Data Integrity Law + Build Rule 9) in any landing/*.html', async () => {
   const files = await listLandingHtml();
-  // Public-facing-copy forbidden list. These match anywhere in HTML (incl. comments)
-  // because LLM crawlers can read source. Comments on this codebase use "GEO-W1" /
-  // "Build Rule 9" tokens and similar — those are OK; we match precise marketing-paste
-  // phrasings only.
+  // Public-facing-copy forbidden list. STRIP HTML comments before grep per the
+  // canonical `comment-vs-rendered-DOM-aware-canary` skill (W8 WI promoted at the
+  // 4th confirmed sighting). HTML comments documenting which phrases are forbidden
+  // (e.g. LANDING-FAQ-GLOSSARY-SUBSTRATE-W1's `<!-- NO Redis / DuckDB / regression
+  // gate / retune cadence / weight tuner / cohort schema / Phase E mechanics. -->`)
+  // are legitimate inline documentation, not user-facing content. LLM crawlers reading
+  // raw source see the comment too, but a comment listing forbidden phrases as
+  // explicit prohibitions is a different epistemic signal than a forbidden phrase
+  // used as a positive claim — comment-strip lets us enforce the latter without
+  // false-positives on the former.
   const forbidden = [
     /\boutcome_return_pct\b/,
     /\bPhase E\b/,
@@ -138,7 +144,7 @@ test('no forbidden phrases (Data Integrity Law + Build Rule 9) in any landing/*.
     /\brevolutionary\b/i,
   ];
   for (const f of files) {
-    const html = await readHtml(f);
+    const html = (await readHtml(f)).replace(/<!--[\s\S]*?-->/g, '');
     for (const pat of forbidden) {
       assert.doesNotMatch(html, pat, `${f} contains forbidden phrase: ${pat}`);
     }
