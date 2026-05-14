@@ -1601,6 +1601,208 @@ function applyHowItWorksExternalLinkRel(html) {
   );
 }
 
+// DESIGN-HOW-IT-WORKS-FF-1 (2026-05-14): FlywheelSection client-side hydration.
+// JSX uses `useState` + `React.useEffect` + `setInterval` to cycle the active step every
+// 1600ms (lines 541-545 in v1-howitworks.jsx). SSR renders `active=0` permanently;
+// useEffect never fires without React hydration. Mr.1 directive: make the looping
+// flywheel animation actually play on the deployed page.
+//
+// Strategy: rewrite the 4 SSR-rendered cards per artboard with class-based markup
+// (`.fw-card`, `.fw-active`) + inject CSS that styles each state + inject a JS
+// controller that runs setInterval(1600ms) toggling `.fw-active` on the matching
+// `[data-fw-step="N"]` card. Keyframes (fw-pulse, fw-shimmer, fw-dot-pulse,
+// fw-progress, fw-orbit) are already in the JSX-emitted `<style>` block — we just
+// reference them from the new CSS class rules.
+//
+// cwOrder = [0, 1, 3, 2] per JSX line 549: DOM positions 0/1/2/3 map to steps 01/02/04/03.
+// data-fw-step is the 0-indexed step number (0..3), NOT the DOM position. JS cycles
+// activeStep 0→1→2→3→0; CSS targets [data-fw-step="N"].fw-active.
+const FW_STEP_LABELS = {
+  '01': 'Agent calls get_trade_call',
+  '02': 'Outcome lands in the dataset',
+  '03': 'AOE updates model weights',
+  '04': 'Next call uses the sharper model',
+};
+
+function buildFlywheelCard(stepN, mobile) {
+  const stepIdx = parseInt(stepN, 10) - 1; // 0..3
+  const label = FW_STEP_LABELS[stepN];
+  const padding = mobile ? '20px 18px' : '24px 22px';
+  const minHeight = mobile ? 120 : 140;
+  const titleSize = mobile ? 16 : 18;
+  // Card markup — all 4 cards uniform; active state via .fw-active class (JS-toggled).
+  return `<div class="fw-card" data-fw-step="${stepIdx}" style="padding:${padding};border:1px solid oklch(0.28 0.012 265);border-radius:14px;background:oklch(0.18 0.014 265 / 0.5);position:relative;min-height:${minHeight}px;transition:border-color .35s ease, background .45s ease, transform .5s cubic-bezier(.2,.8,.2,1), opacity .35s ease, filter .35s ease;overflow:hidden;z-index:1;opacity:0.42;filter:saturate(0.6)">` +
+    `<div class="fw-badge" style="position:absolute;top:0;right:0;width:38px;height:26px;border-left:1px solid oklch(0.28 0.012 265);border-bottom:1px solid oklch(0.28 0.012 265);border-radius:0 14px 0 10px;background:transparent;color:oklch(0.44 0.012 265);font-family:'JetBrains Mono', ui-monospace, monospace;font-size:11px;font-weight:700;display:grid;place-items:center;transition:background .35s, color .35s, border-color .35s">${stepN}</div>` +
+    `<div class="fw-step-label" style="display:inline-flex;align-items:center;gap:10px;font-family:'JetBrains Mono', ui-monospace, monospace;font-size:11px;color:oklch(0.44 0.012 265);letter-spacing:0.1em">` +
+      `<span class="fw-step-dot" style="width:8px;height:8px;border-radius:50%;background:oklch(0.34 0.012 265);display:inline-block"></span>` +
+      `STEP ${stepN}` +
+    `</div>` +
+    `<div class="fw-title" style="margin-top:14px;font-family:'Inter Tight', 'Inter', system-ui, sans-serif;font-size:${titleSize}px;color:oklch(0.78 0.008 265);line-height:1.3;letter-spacing:-0.012em;font-weight:500;transition:color .3s">${label}</div>` +
+    `<div class="fw-progress-bar" style="position:absolute;left:0;right:0;bottom:0;height:3px;background:oklch(0.24 0.012 265 / 0.6);overflow:hidden">` +
+      `<div class="fw-progress-fill" style="height:100%;background:linear-gradient(90deg, #5BEEB3, oklch(0.92 0.12 170));box-shadow:0 0 12px #5BEEB3;width:0%"></div>` +
+    `</div>` +
+    `<div class="fw-shimmer" style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(120deg, transparent 30%, oklch(1 0 0 / 0.12) 50%, transparent 70%);opacity:0;transform:translateX(-110%)"></div>` +
+  `</div>`;
+}
+
+// CSS additions to layer on top of the existing JSX-emitted keyframes block
+// (fw-pulse / fw-shimmer / fw-dot-pulse / fw-progress / fw-orbit are already defined).
+const FLYWHEEL_CSS = `<style>
+.fw-card.fw-active {
+  border-color: #5BEEB3 !important;
+  background: linear-gradient(180deg, oklch(0.26 0.08 170 / 0.55), oklch(0.2 0.05 170 / 0.4)) !important;
+  transform: translateY(-4px) scale(1.035);
+  opacity: 1 !important;
+  filter: none !important;
+  z-index: 2 !important;
+  animation: fw-pulse 1.6s ease-out 1;
+}
+.fw-card.fw-active .fw-badge {
+  background: #5BEEB3 !important;
+  color: #0a1813 !important;
+  border-left-color: #5BEEB3 !important;
+  border-bottom-color: #5BEEB3 !important;
+}
+.fw-card.fw-active .fw-step-label { color: #5BEEB3 !important; }
+.fw-card.fw-active .fw-step-dot {
+  background: #5BEEB3 !important;
+  box-shadow: 0 0 12px #5BEEB3, 0 0 0 4px oklch(0.32 0.08 170 / 0.35) !important;
+  animation: fw-dot-pulse 1.2s ease-in-out infinite;
+}
+.fw-card.fw-active .fw-title {
+  color: oklch(0.97 0.005 265) !important;
+  font-weight: 600 !important;
+}
+.fw-card.fw-active .fw-progress-fill { animation: fw-progress 1.6s linear forwards; }
+.fw-card.fw-active .fw-shimmer {
+  opacity: 1 !important;
+  animation: fw-shimmer 1.2s ease-out 1 forwards;
+}
+</style>`;
+
+// JS controller — DOMContentLoaded, finds each flywheel grid, cycles activeStep 0→3 every 1600ms.
+// Each grid is identified by data-fw-grid attribute on the parent <div> (post-render injected).
+const FLYWHEEL_JS = `<script>
+(function fwInit(){
+  function setup() {
+    var grids = document.querySelectorAll('[data-fw-grid]');
+    if (!grids.length) return;
+    grids.forEach(function(grid){
+      var cards = grid.querySelectorAll('[data-fw-step]');
+      if (cards.length !== 4) return;
+      var activeStep = 0;
+      function refresh() {
+        cards.forEach(function(card){
+          var step = parseInt(card.getAttribute('data-fw-step'), 10);
+          var isActive = step === activeStep;
+          if (isActive) {
+            card.classList.add('fw-active');
+            // Re-trigger one-shot animations (shimmer + pulse + progress) by clone-swap
+            // of the elements bearing the animation.
+            ['fw-shimmer', 'fw-progress-fill'].forEach(function(cls){
+              var el = card.querySelector('.' + cls);
+              if (el) {
+                var twin = el.cloneNode(true);
+                el.parentNode.replaceChild(twin, el);
+              }
+            });
+            // Re-trigger card-level fw-pulse animation
+            card.style.animation = 'none';
+            void card.offsetWidth;
+            card.style.animation = '';
+          } else {
+            card.classList.remove('fw-active');
+          }
+        });
+      }
+      refresh();
+      setInterval(function(){
+        activeStep = (activeStep + 1) % 4;
+        refresh();
+      }, 1600);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
+})();
+</script>`;
+
+// Rewrite all 4 cards in EACH artboard's flywheel grid + tag parent grid with data-fw-grid.
+// Anchor: the 4 cards in DOM order (cwOrder = [0,1,3,2] → steps 01,02,04,03). Each card is a
+// <div> with a specific padding signature (24px 22px desktop / 20px 18px mobile) containing
+// "STEP <!-- -->NN". The parent grid is the <div style="display:grid;grid-template-columns:1fr 1fr;..."
+// that contains these 4 cards + the optional LOOP marker (desktop only).
+function applyHowItWorksFlywheelHydration(html, isDesktop) {
+  // Tag the parent grid wrapper by anchoring on the first card's STEP 01.
+  // The grid wrapper is at JSX line 583: <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;position:relative">
+  // (mobile sets gap differently — but JSX gap:18 either way per the JSX. Let me anchor on the literal style.)
+  const gridStyleDesktop = 'display:grid;grid-template-columns:1fr 1fr;gap:18px;position:relative';
+  const gridStyleMobile = gridStyleDesktop; // same — JSX uses gap:18 in both modes for the flywheel grid
+  const gridStyle = isDesktop ? gridStyleDesktop : gridStyleMobile;
+
+  // Find the parent grid by searching for the literal opening
+  const gridOpenMarker = `<div style="${gridStyle}">`;
+  const gridStartIdx = html.indexOf(gridOpenMarker);
+  if (gridStartIdx < 0) return html; // grid not found (silent skip — fallback to SSR cards)
+
+  // Walk forward to find balanced </div> for this grid
+  let depth = 1;
+  let pos = gridStartIdx + gridOpenMarker.length;
+  while (pos < html.length && depth > 0) {
+    if (html.slice(pos, pos + 5) === '<div ' || html.slice(pos, pos + 5) === '<div>') {
+      depth++;
+      pos += 5;
+    } else if (html.slice(pos, pos + 6) === '</div>') {
+      depth--;
+      pos += 6;
+    } else {
+      pos++;
+    }
+  }
+  const gridEnd = pos;
+  const gridInner = html.slice(gridStartIdx + gridOpenMarker.length, gridEnd - 6);
+
+  // Determine if this grid contains a LOOP center marker (desktop only)
+  const hasLoopMarker = gridInner.includes('LOOP</div>');
+  // Capture the LOOP marker block if present (anchor on the unique outermost LOOP wrapper)
+  let loopBlock = '';
+  if (hasLoopMarker) {
+    // The LOOP marker is the LAST child div inside the grid (a position:absolute centered overlay).
+    // Find it by walking back from the LOOP text to its enclosing div.
+    const loopIdx = gridInner.indexOf('LOOP</div>');
+    // Walk back to find <div style="position:absolute;left:50%;top:50%;
+    let lp = loopIdx;
+    while (lp > 0) {
+      if (gridInner.slice(lp, lp + 5) === '<div ') {
+        const snip = gridInner.slice(lp, lp + 200);
+        if (snip.includes('position:absolute;left:50%;top:50%')) break;
+      }
+      lp--;
+    }
+    if (lp > 0) {
+      // Walk forward to balanced </div> for the LOOP wrapper
+      let d = 1, q = lp + 5;
+      while (q < gridInner.length && d > 0) {
+        if (gridInner.slice(q, q + 5) === '<div ' || gridInner.slice(q, q + 5) === '<div>') { d++; q += 5; }
+        else if (gridInner.slice(q, q + 6) === '</div>') { d--; q += 6; }
+        else q++;
+      }
+      loopBlock = gridInner.slice(lp, q);
+    }
+  }
+
+  // Build the new grid content: 4 cards (in cwOrder DOM positions: 01, 02, 04, 03) + LOOP if applicable
+  const newCards = ['01', '02', '04', '03'].map(n => buildFlywheelCard(n, !isDesktop)).join('');
+  const newGridInner = newCards + loopBlock;
+
+  // Splice in: wrap with data-fw-grid attribute on the grid div
+  const newGridOpen = `<div data-fw-grid="${isDesktop ? 'desktop' : 'mobile'}" style="${gridStyle}">`;
+  return html.slice(0, gridStartIdx) + newGridOpen + newGridInner + '</div>' + html.slice(gridEnd);
+}
+
 // FF-1 (2026-05-13) carry-forward: Mr.1 mandate — public-facing prose uses "call"/"calls",
 // never "signal"/"signals". EXCLUSIONS preserved: CSS class `signal-id-input` (DOM
 // querySelector seam), npm package literal `crypto-quant-signal-mcp` (package name).
@@ -1737,11 +1939,14 @@ tailwind.config = {
 `;
 
 // Assemble full HTML document.
+// FF-1 (2026-05-14): append FLYWHEEL_CSS to head + FLYWHEEL_JS at end of body for
+// client-side flywheel cycling animation (Mr.1 directive).
 function buildHowItWorksHtmlDocument(bodyContent) {
-  return HOW_IT_WORKS_HEAD_AND_NAV +
+  return HOW_IT_WORKS_HEAD_AND_NAV.replace('</head>', FLYWHEEL_CSS + '\n</head>') +
     bodyContent +
     '\n</div>\n' +
     HOW_IT_WORKS_FOOTER_HTML +
+    '\n' + FLYWHEEL_JS +
     '\n</body>\n</html>\n';
 }
 
@@ -1757,6 +1962,7 @@ function applyHowItWorksOverrides(html, isDesktop) {
   html = applyHowItWorksGroupEFaqA2(html);     // R2.E: FAQ A2 "across 720+ assets"
   html = applyHowItWorksCTAs(html);            // R3: CTA href rewrites
   html = applyHowItWorksSignalToCall(html);    // FF-1 carry-forward: public-facing prose signal→call
+  html = applyHowItWorksFlywheelHydration(html, isDesktop); // FF-1 (2026-05-14): client-side flywheel cycling
   html = applyHowItWorksExternalLinkRel(html); // R6: external-link rel discipline
   html = normalizeApostrophes(html);           // React-SSR &#x27; → ' for SEO + test-grep portability
   if (!isDesktop) {
