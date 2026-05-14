@@ -1301,9 +1301,26 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://algovault.com/_design/algovault-design.css">
 <!-- END: AlgoVault canonical design loader -->
+<link rel="icon" type="image/png" href="/logo.png">
+<!-- DESIGN-W11 / C2 / R-2 inline-fix: Tailwind CDN for canonical Nav utility classes (hidden sm:flex, text-gray-400, hover:text-white, text-mint-400, bg-mint-500/15) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: { 900: '#060a14', 800: '#0a0e1a', 700: '#0f1526', 600: '#161d30' },
+        mint: { 50: 'oklch(0.97 0.03 165)', 100: 'oklch(0.94 0.06 165)', 200: 'oklch(0.91 0.09 165)', 300: 'oklch(0.89 0.13 165)', 400: 'oklch(0.86 0.16 165)', 500: 'oklch(0.78 0.18 165)', 600: 'oklch(0.66 0.18 165)', 700: 'oklch(0.54 0.16 165)', 800: 'oklch(0.42 0.12 165)', 900: 'oklch(0.32 0.08 165)' },
+        steel: { 400: '#8b9bb5', 500: '#7b8ca0', 600: '#5e6d82' }
+      }
+    }
+  }
+}
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e1e4e8; padding: 24px; max-width: 1400px; margin: 0 auto; }
+  /* DESIGN-W11 / C2 / Q-W11-2: REPLACED body styles per architect ratification. background/color/font-family use canonical CSS vars; padding+max-width move to artboard wrapper. Pre-W11: body { padding:24px; max-width:1400px; margin:0 auto; background:#0f1117; color:#e1e4e8 } */
+  body { font-family: var(--font-text, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); background: var(--bg); color: var(--fg); margin: 0; padding: 0; }
   h1 { font-size: 24px; font-weight: 700; }
   .subtitle { color: #6e7681; font-size: 12px; margin-top: 6px; letter-spacing: 0.5px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 28px; }
@@ -1415,6 +1432,33 @@ function getPerformanceDashboardHtml(opts?: { isPublic?: boolean }): string {
 </style>
 </head>
 <body>
+<!-- DESIGN-W11 / C2 / Q-W11-1+Q-W11-4: canonical Nav VERBATIM from live algovault.com per audits/DESIGN-W11-canonical-chrome-extract.md §1. Track Record link uses active-link styling (text-mint-400 font-medium) replacing hover:text-white transition. Brand-mark wrap uses /account precedent (direct ahref + aria-label + cross-origin href). -->
+<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <a href="https://algovault.com/" class="flex items-center gap-2.5" aria-label="AlgoVault home">
+      <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
+      <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
+    </a>
+    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
+      <a href="/track-record" class="text-mint-400 font-medium">Track Record</a>
+      <a href="https://algovault.com/how-it-works" class="hover:text-white transition">How it works</a>
+      <a href="https://algovault.com/#pricing" class="hover:text-white transition">Pricing</a>
+      <a href="https://algovault.com/integrations" class="hover:text-white transition">Integrations</a>
+      <a href="https://algovault.com/skills" class="hover:text-white transition">Skills</a>
+      <a href="https://algovault.com/docs.html" class="hover:text-white transition">Docs</a>
+      <a href="https://algovault.com/verify" class="hover:text-white transition">Verify</a>
+      <a href="https://api.algovault.com/account" class="hover:text-white transition">Account</a>
+      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
+    </div>
+  </div>
+</nav>
+<!-- DESIGN-W11 / C2 / Q-W11-3: canonical artboard wrapper OPEN (max-width:1400px preserves dashboard layout; 80px top padding clears 56px fixed Nav + breathing). Foreground content stacks above 3 bg-* layers via position:relative;z-index:1. -->
+<main class="lp-track-record">
+  <div class="artboard" style="padding:80px 24px 64px;max-width:1400px;margin:0 auto;width:100%">
+    <div class="bg-grid"></div>
+    <div class="bg-radial-accent"></div>
+    <div class="bg-noise"></div>
+    <div style="position:relative;z-index:1">
 <div class="logo">
   <a href="https://algovault.com" style="display:flex;align-items:center;text-decoration:none"><img src="/logo.png" width="36" height="36" style="border-radius:8px;cursor:pointer" onerror="this.style.display='none'"></a>
   <div><h1>Live Track Record</h1><div class="subtitle">v${PKG_VERSION} &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges &middot; <span data-tr-field="asset_count">710</span>+ assets</div></div>
@@ -2081,6 +2125,22 @@ function updateNextBatchCountdown() {
 updateNextBatchCountdown();
 setInterval(updateNextBatchCountdown, 60000);
 </script>
+    </div>
+  </div>
+</main>
+<!-- DESIGN-W11 / C2 / Q-W11-4: canonical Footer VERBATIM (desktop variant) from live algovault.com per audits/DESIGN-W11-canonical-chrome-extract.md §2. Matches /account ACCOUNT_FOOTER_HTML byte-identical. -->
+<footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)">
+  <div style="display:flex;align-items:center;gap:10px">
+    <img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0">
+    <span style="color:var(--fg-2)">Built by AlgoVault Labs</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
+    <a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">GitHub</a>
+    <a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">X / Twitter</a>
+    <a href="/signup" style="color:var(--fg-3);text-decoration:none">Signup</a>
+    <a href="/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a>
+  </div>
+</footer>
 </body>
 </html>`;
 }
