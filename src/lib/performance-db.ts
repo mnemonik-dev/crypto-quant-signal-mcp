@@ -1364,16 +1364,77 @@ function computeStats(all: SignalRecord[], top20ByOI: Set<string> | null = null)
     byAsset,
     byExchange,
     byTier,
-    // v1.10.0: emit `call` (canonical) — DB column literally named `signal`
-    // is unchanged (deferred future wave). Output-shaping layer aliases.
-    recentSignals: all.slice(0, 20).map(s => ({
+    // PERFORMANCE-PUBLIC-SANITIZE-W1 (2026-05-15): Data Integrity LAW enforced
+    // at the generator. `.call` (BUY/SELL/HOLD direction) + `.confidence`
+    // (0-100 score) DROPPED from public response shape — they are the core
+    // paywalled MCP value. Fix-at-the-generator means every downstream
+    // consumer (/track-record dashboard, track-record-proxy.js, any future
+    // reader) inherits the sanitized shape with zero per-consumer migration.
+    // Closes DESIGN-W11-FF3 flagged follow-up. Sanitizer is a pure exported
+    // function `formatPublicRecentSignal()` below — directly unit-testable.
+    recentSignals: all.slice(0, 20).map(s => formatPublicRecentSignal({
       id: s.id!,
-      coin: s.coin, call: s.signal, confidence: s.confidence,
-      timeframe: s.timeframe, tier: classifyAsset(s.coin, top20ByOI),
+      coin: s.coin,
+      timeframe: s.timeframe,
+      tier: classifyAsset(s.coin, top20ByOI),
       created_at: s.created_at,
       exchange: s.exchange || 'HL',
     })),
     methodology: METHODOLOGY,
+  };
+}
+
+// ── Public recent signals (for /api/performance-public.recentSignals[] + /track-record dashboard) ──
+//
+// PERFORMANCE-PUBLIC-SANITIZE-W1 (2026-05-15): closes DESIGN-W11-FF3 flagged
+// follow-up. Pure formatter `formatPublicRecentSignal()` enforces the public-
+// shape contract at the data layer via an EXPLICIT allow-list (not a deny-
+// list) — new input fields cannot accidentally leak. Forbidden fields
+// (`.call`, `.confidence`, `.signal_hash`, `.merkle_*`, `.outcome_*`,
+// `.is_bot_internal`, `.session_id`) are NEVER emitted regardless of what
+// the input row contains. Per CLAUDE.md "Fix at the generator, not the
+// lane" — every downstream consumer inherits the sanitized shape.
+//
+// Snapshot artifact: audits/performance-public-shape-snapshot-2026-05-14.json
+// pins the contract; tests/unit/performance-public-shape.test.ts asserts it.
+// Any future additive change requires a NEW dated snapshot file + matching
+// unit test (per Q-PSAN-6 version-bump policy in mapping.md §6).
+
+export interface PublicRecentSignal {
+  id: number;
+  coin: string;
+  tier: number;
+  timeframe: string;
+  exchange: string;
+  created_at: number;
+}
+
+export interface PublicRecentSignalInput {
+  id: number;
+  coin: string;
+  tier: number;
+  timeframe: string;
+  exchange: string;
+  created_at: number;
+}
+
+// Pure formatter — extracted so unit tests assert the public shape contract
+// without ESM-mock gymnastics. Matches LANDING-LIVE-CALL-TICKER-W1's
+// formatRecentCallRow pattern (canonical pure-formatter-extract-for-shape-test).
+//
+// SECURITY-CRITICAL: this function is the ONLY place that determines what
+// keys appear in /api/performance-public.recentSignals[]. Allow-list pattern:
+// only the 6 enumerated keys ship to clients. Any future caller passing a
+// row with `.call` / `.confidence` / `.outcome_*` / etc. — those fields are
+// IGNORED by this formatter regardless of input shape.
+export function formatPublicRecentSignal(row: PublicRecentSignalInput): PublicRecentSignal {
+  return {
+    id: row.id,
+    coin: row.coin,
+    tier: row.tier,
+    timeframe: row.timeframe,
+    exchange: row.exchange,
+    created_at: row.created_at,
   };
 }
 

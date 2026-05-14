@@ -355,13 +355,21 @@ export interface PerformanceStats {
     pfeWinRate: number | null;
     assets: string[];
   }>;
+  /**
+   * PERFORMANCE-PUBLIC-SANITIZE-W1 (2026-05-15): public-shape contract per
+   * `audits/performance-public-shape-snapshot-2026-05-14.json`. `.call`
+   * (BUY/SELL/HOLD direction) and `.confidence` (0-100 score) DROPPED — they
+   * are the paywalled MCP value. Sanitization happens at the data layer via
+   * `formatPublicRecentSignal()` in src/lib/performance-db.ts; this interface
+   * pins the output shape so consumers cannot rely on the legacy leakage.
+   * For verifying a specific signal's direction + confidence, use the paid
+   * /api/verify-signal endpoint (requires API key).
+   */
   recentSignals: Array<{
     id: number;
     coin: string;
-    /** v1.10.0 canonical key (was `signal` pre-1.10). */
-    call: string;
-    confidence: number;
-    timeframe: string; tier: number;
+    timeframe: string;
+    tier: number;
     created_at: number;
     exchange: string;
   }>;
