@@ -1459,9 +1459,22 @@ tailwind.config = {
     <div class="bg-radial-accent"></div>
     <div class="bg-noise"></div>
     <div style="position:relative;z-index:1">
-<div class="logo">
-  <a href="https://algovault.com" style="display:flex;align-items:center;text-decoration:none"><img src="/logo.png" width="36" height="36" style="border-radius:8px;cursor:pointer" onerror="this.style.display='none'"></a>
-  <div><h1>Live Track Record</h1><div class="subtitle">v${PKG_VERSION} &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges &middot; <span data-tr-field="asset_count">710</span>+ assets</div></div>
+<!-- DESIGN-W11-FF (2026-05-14): brand block restyle per Mr.1 visual review.
+     (1) Logo icon REMOVED (redundant with canonical Nav brand-mark above).
+     (2) H1 enlarged to canonical content-H1 hierarchy (text-5xl sm:text-6xl
+         font-semibold tracking-tight; matches /verify + /account treatment).
+     (3) Partial Plasma Mint accent on "Track Record" noun phrase via
+         <span class="text-mint-400"> — matches canonical mint-on-page-name
+         pattern across the site.
+     (4) Left-alignment intact (no text-center / mx-auto / justify-center).
+     FF-REL-1 inline-fix: spec proposed class="text-fg" / class="text-fg-muted"
+     but canonical CSS + Tailwind config define neither — using inline
+     style="color:var(--fg)" / style="color:var(--fg-3)" per /account +
+     landing precedent. Subtitle data-tr-field spans preserved byte-identical;
+     pkg_version added as 45th unique data-tr-field key (additive; baseline 44 still satisfied via ≥). -->
+<div class="space-y-2">
+  <h1 class="text-5xl sm:text-6xl font-semibold tracking-tight" style="color:var(--fg)">Live <span class="text-mint-400">Track Record</span></h1>
+  <p class="text-sm" style="color:var(--fg-3)">v<span data-tr-field="pkg_version">${PKG_VERSION}</span> &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges &middot; <span data-tr-field="asset_count">710</span>+ assets</p>
 </div>
 <div id="loading">Loading performance data...</div>
 <div id="content" style="display:none">

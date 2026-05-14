@@ -162,10 +162,58 @@ test('/track-record preservation: 3× verify-any-call-card byte-identical', asyn
   assert.ok(n >= 3, `Expected ≥3 verify-any-call-card refs; got ${n}`);
 });
 
-test('/track-record preservation: "Live Track Record" brand block (Q-W11-5 preserve-current-position)', async () => {
+test('/track-record preservation: "Live Track Record" brand block (Q-W11-5 + W11-FF restyle)', async () => {
   const src = await read('src/index.ts');
-  const n = countOcc(src, 'Live Track Record');
-  assert.ok(n >= 2, `Expected ≥2 "Live Track Record" hits (title + H1); got ${n}`);
+  // Title <title>Live Track Record — AlgoVault Labs</title> still has the contiguous substring.
+  // Post-W11-FF, the H1 splits on span boundary (Live + <span>Track Record</span>) per
+  // canonical mint-on-page-name-noun pattern — the source no longer has the contiguous
+  // string in the H1, but rendered text content remains "Live Track Record". Assert both:
+  // (a) title still has the substring; (b) H1 uses the canonical mint-accent shape.
+  assert.ok(/Live Track Record/.test(src), 'title or rendered H1 must contain "Live Track Record"');
+  assert.ok(/Live <span class="text-mint-400">Track Record<\/span>/.test(src),
+    'H1 must use canonical mint-on-page-name pattern post-W11-FF (Live <span class="text-mint-400">Track Record</span>)');
+});
+
+test('/track-record W11-FF: H1 uses canonical enlarged content-H1 hierarchy', async () => {
+  const src = await read('src/index.ts');
+  const func = scopeToPerfFunc(src);
+  assert.ok(/<h1 class="text-5xl sm:text-6xl font-semibold tracking-tight"/.test(func),
+    'H1 must carry canonical hierarchy classes (text-5xl sm:text-6xl font-semibold tracking-tight)');
+  assert.ok(/style="color:var\(--fg\)"/.test(func),
+    'H1 must use inline style="color:var(--fg)" (FF-REL-1 inline-fix: text-fg not in Tailwind config)');
+});
+
+test('/track-record W11-FF: brand-block wrapper is space-y-2 (canonical vertical rhythm)', async () => {
+  const src = await read('src/index.ts');
+  const func = scopeToPerfFunc(src);
+  assert.ok(/<div class="space-y-2">\s*<h1/.test(func),
+    'Brand block must be wrapped in <div class="space-y-2"> for canonical vertical rhythm');
+});
+
+test('/track-record W11-FF: logo icon REMOVED from brand block context', async () => {
+  const src = await read('src/index.ts');
+  const func = scopeToPerfFunc(src);
+  // The old brand block had <div class="logo"><a><img src="/logo.png" width="36" height="36" .../></a>...</div>
+  // post-W11-FF that logo + wrapping anchor should be GONE from this function body.
+  // Logo references in canonical Nav (img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 ...")
+  // and canonical Footer (img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;...")
+  // are PRESERVED. Asserting absence of the specific old brand-block markup.
+  assert.ok(!/<div class="logo">/.test(func), 'Old <div class="logo"> wrapper must be removed');
+  assert.ok(!/width="36" height="36"/.test(func), 'Old 36x36 brand-block logo image must be removed');
+});
+
+test('/track-record W11-FF: subtitle uses canonical text-sm + inline style color:var(--fg-3)', async () => {
+  const src = await read('src/index.ts');
+  const func = scopeToPerfFunc(src);
+  assert.ok(/<p class="text-sm" style="color:var\(--fg-3\)">/.test(func),
+    'Subtitle must use canonical class="text-sm" + inline style="color:var(--fg-3)" (FF-REL-1 inline-fix: text-fg-muted not in Tailwind config)');
+});
+
+test('/track-record W11-FF: pkg_version live-bind span added (additive — 45th unique data-tr-field key)', async () => {
+  const src = await read('src/index.ts');
+  const func = scopeToPerfFunc(src);
+  assert.ok(/data-tr-field="pkg_version">\$\{PKG_VERSION\}<\/span>/.test(func),
+    'pkg_version live-bind span must wrap ${PKG_VERSION} template literal (build-time fallback + future proxy hydration target)');
 });
 
 test('/track-record preservation: 44 unique data-tr-field keys', async () => {
@@ -218,7 +266,9 @@ test('/track-record: brand block live-bind spans intact (exchange_count + asset_
   const func = scopeToPerfFunc(src);
   assert.ok(/data-tr-field="exchange_count"/.test(func), 'data-tr-field="exchange_count" must persist');
   assert.ok(/data-tr-field="asset_count"/.test(func), 'data-tr-field="asset_count" must persist');
-  assert.ok(/v\$\{PKG_VERSION\}/.test(func), 'pkg_version template literal must persist');
+  // Post-W11-FF: ${PKG_VERSION} template literal is wrapped in a data-tr-field="pkg_version" span
+  // (additive change — was bare `v${PKG_VERSION}` pre-W11-FF). Both shapes preserve build-time fallback.
+  assert.ok(/\$\{PKG_VERSION\}/.test(func), 'pkg_version template literal must persist (now inside data-tr-field span)');
 });
 
 test('/track-record: KPI live-bind spans intact (4 tiers + 5 exchanges + 8 timeframes)', async () => {
