@@ -146,9 +146,13 @@ test('how-it-works.html: Read the integration docs → https://algovault.com/doc
     'Missing absolute docs.html CTA');
 });
 
-test('how-it-works.html: Verify any call → https://algovault.com/verify (≥1)', () => {
-  assert.ok(/href="https:\/\/algovault\.com\/verify"/.test(HIW),
-    'Missing absolute verify CTA');
+// FF-2 (2026-05-15): Mr.1 removed VerifySection demo form. The body-level absolute
+// `https://algovault.com/verify` PillCTA is gone with it. Canonical Nav's relative
+// `/verify` link (in HEAD_AND_NAV constant) covers the navigation requirement —
+// users still reach /verify via the top nav.
+test('how-it-works.html: /verify link present in canonical Nav', () => {
+  assert.ok(/<a href="\/verify"[^>]*>Verify<\/a>/.test(HIW),
+    'Missing /verify Nav link (canonical Nav from HEAD_AND_NAV)');
 });
 
 test('how-it-works.html: Try Free in Telegram → https://t.me/algovaultofficialbot (≥2)', () => {

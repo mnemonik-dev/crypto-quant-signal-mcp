@@ -1448,16 +1448,15 @@ function applyVerifyFixForwardR3SignalToCall(html) {
 // ── DESIGN-HOW-IT-WORKS-W1 (2026-05-14) — /how-it-works JSX-faithful render ─
 
 // Pre-Babel patches for v1-howitworks.jsx.
+// DESIGN-HOW-IT-WORKS-FF-2 (2026-05-15): Mr.1 directive — REMOVE the VerifySection demo
+// form (the "Don't trust. Verify." section with input + status + metadata grid). The
+// inject-VerifySection patch from FF-1 W1 (which injected `<VerifySection mobile={mobile} />`
+// between AgentsSection and BuildVsBuySection) is REVERTED — the JSX's default HowItWorksPage
+// composition is now respected verbatim (Hero → WhatIs → Flywheel → Agents → BuildVsBuy →
+// FAQ → BottomCTA → Footer; no Verify section in body). Canonical Nav's relative `/verify`
+// link (in HEAD_AND_NAV) covers the navigation requirement.
 function patchHowItWorks(src) {
-  // The JSX defines VerifySection (lines 838-943) but HowItWorksPage's default composition
-  // (lines 1275-1284) does NOT include it. Per spec R3 the "Verify any call" CTA must
-  // appear on the page (A4 gate). Inject <VerifySection mobile={mobile} /> between
-  // <AgentsSection> and <BuildVsBuySection> so the JSX-defined Verify form renders.
-  // Natural section order: Hero → What is → Flywheel → Agents → Verify → Build-vs-buy → FAQ.
-  return src.replace(
-    '<AgentsSection mobile={mobile} />\n        <BuildVsBuySection mobile={mobile} />',
-    '<AgentsSection mobile={mobile} />\n        <VerifySection mobile={mobile} />\n        <BuildVsBuySection mobile={mobile} />'
-  );
+  return src;
 }
 
 // Strip JSX-emitted Nav (<header style="position:relative;zIndex:5;...">...</header>)
