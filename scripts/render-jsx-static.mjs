@@ -389,15 +389,17 @@ function w7HeroNavVersion(html, version) {
 }
 
 function w7HeroCTAUrls(html) {
-  // Mr.1 fix-forward 2026-05-11 ROUND 3: V1Hero CTAs link to "#" placeholder. Wire real URLs.
-  // - "Try Free in Claude" → /#quickstart (the TryIn30 section on this page = in-page jump to
-  //   the 3-step quickstart guide for Claude Desktop integration). Default suggestion since
-  //   Mr.1 asked. Alternative: /docs.html, https://claude.ai/, or external Claude Desktop dl page.
-  // - "View Track Record" → /track-record per Mr.1 explicit directive.
+  // Mr.1 fix-forward 2026-05-11 ROUND 3 + LANDING-HERO-CTA-TG-W1 (2026-05-14): V1Hero CTAs wired to
+  // real URLs.
+  // - "Try Free in Telegram" → https://t.me/algovaultofficialbot (external, opens new tab; lower-
+  //   friction first-try path for non-Claude users per 2026 North Star acquisition focus).
+  //   Per external-link-target-blank-noopener-rel-discipline skill: target="_blank" + rel="noopener
+  //   noreferrer" on every t.me anchor.
+  // - "View Track Record" → /track-record per Mr.1 explicit directive (internal, in-page nav).
   return html
     .replace(
-      /<a href="#" class="btn btn-primary accent-cyan"([^>]*)>(\s*Try Free in Claude)/g,
-      '<a href="/#quickstart" class="btn btn-primary accent-cyan"$1>$2'
+      /<a href="#" class="btn btn-primary accent-cyan"([^>]*)>(\s*Try Free in Telegram)/g,
+      '<a href="https://t.me/algovaultofficialbot" target="_blank" rel="noopener noreferrer" class="btn btn-primary accent-cyan"$1>$2'
     )
     .replace(
       /<a href="#" class="btn btn-secondary"([^>]*)>(\s*View Track Record)/g,
@@ -1524,7 +1526,7 @@ async function main() {
       raw = w7HeroCallStreamLiveBind(raw);         // Mr.1 fix-forward: V1Feed FEED_BASE → live /api/recent-calls?limit=6 poller
       raw = w7HeroHideFlowDiagramLabel(raw);       // Mr.1 fix-forward 2026-05-11: hide "flow.diagram" placeholder-cap label
       raw = w7HeroArtboardWidth(raw);              // Mr.1 fix-forward 2026-05-11: strip fixed 1440px width, allow max-width centering + top-pad to clear W3 nav
-      raw = w7HeroCTAUrls(raw);                    // Mr.1 fix-forward 2026-05-11 R3: Try Free in Claude → /#quickstart, View Track Record → /track-record
+      raw = w7HeroCTAUrls(raw);                    // LANDING-HERO-CTA-TG-W1 2026-05-14: Try Free in Telegram → https://t.me/algovaultofficialbot (+target/rel); View Track Record → /track-record
       raw = w7HeroStripNav(raw);                   // strip V1Hero's nav (existing live W3 nav preserved for cross-page consistency)
       // Append vanilla-JS poller for MOST RECENT CALL (mounts to all [data-w7-recent-call] in the dual-render block)
       html = raw + W7_RECENT_CALL_POLLER_JS;
