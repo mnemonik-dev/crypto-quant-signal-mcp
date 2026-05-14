@@ -43,6 +43,8 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const VAULT_DESIGN = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault Landing Hero v1';
 // DESIGN-W9 (2026-05-11): verify.jsx canonical SoT lives in a sibling vault folder.
 const VAULT_TRACK_RECORD = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault Track Record v1';
+// DESIGN-HOW-IT-WORKS-W1 (2026-05-14): v1-howitworks.jsx canonical SoT lives in a sibling vault folder.
+const VAULT_HOW_IT_WORKS = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault How it Works V1';
 
 // JSDOM globals for JSX module-end Object.assign(window, {...}) hooks.
 // Node 25 has read-only navigator getter on globalThis; assign defensively via defineProperty.
@@ -1443,6 +1445,326 @@ function applyVerifyFixForwardR3SignalToCall(html) {
   return html;
 }
 
+// ── DESIGN-HOW-IT-WORKS-W1 (2026-05-14) — /how-it-works JSX-faithful render ─
+
+// Pre-Babel patches for v1-howitworks.jsx.
+function patchHowItWorks(src) {
+  // The JSX defines VerifySection (lines 838-943) but HowItWorksPage's default composition
+  // (lines 1275-1284) does NOT include it. Per spec R3 the "Verify any call" CTA must
+  // appear on the page (A4 gate). Inject <VerifySection mobile={mobile} /> between
+  // <AgentsSection> and <BuildVsBuySection> so the JSX-defined Verify form renders.
+  // Natural section order: Hero → What is → Flywheel → Agents → Verify → Build-vs-buy → FAQ.
+  return src.replace(
+    '<AgentsSection mobile={mobile} />\n        <BuildVsBuySection mobile={mobile} />',
+    '<AgentsSection mobile={mobile} />\n        <VerifySection mobile={mobile} />\n        <BuildVsBuySection mobile={mobile} />'
+  );
+}
+
+// Strip JSX-emitted Nav (<header style="position:relative;zIndex:5;...">...</header>)
+// — replaced by canonical Nav in the HEAD_AND_NAV constant per R5 + DESIGN-W10 chrome
+// contract. The JSX uses only ONE <header> tag (the Nav at line 156-214 of v1-howitworks.jsx),
+// so the broad pattern is safe.
+function stripHowItWorksJsxNav(html) {
+  return html.replace(/<header[^>]*>[\s\S]*?<\/header>/g, '');
+}
+
+// Strip JSX-emitted Footer (<footer style="padding:36px 22px...">...</footer> mobile +
+// <footer style="padding:40px 64px...">...</footer> desktop) — replaced by canonical
+// Footer block per R4. The JSX uses only ONE <footer> tag, so the broad pattern is safe.
+function stripHowItWorksJsxFooter(html) {
+  return html.replace(/<footer[^>]*>[\s\S]*?<\/footer>/g, '');
+}
+
+// R2 — Group A: Hero spec ticker. JSX renders 4 tuples as
+//   <div><span style="color:var(--fg);font-weight:600">86,420</span><span style="color:var(--fg-4)">verified calls</span></div>
+// (etc). Wrap each numeric span content in a data-tr-field span. Anchored on the
+// "color:rgb(248, 251, 250);font-weight:600" inline style which React renders for T.fg + 600
+// (T.fg = oklch(0.97 0.005 265) → rgb(248, 251, 250) post-color-normalize). To be safe across
+// React's serialization quirks, anchor on the textContent itself when paired with the visible label.
+function applyHowItWorksGroupAHeroTicker(html) {
+  // Match `>86,420</span>` adjacent to "verified calls" label
+  html = html.replace(/>86,420<\/span>/, '><span data-tr-field="call_count">86,420</span></span>');
+  html = html.replace(/>90\.4%<\/span>/, '><span data-tr-field="pfe_wr">90.4%</span></span>');
+  // 720+ in ticker — the literal includes the `+` in the JSX. Wrap "720" + keep "+" outside.
+  html = html.replace(/>720\+<\/span>/, '><span data-tr-field="asset_count">720</span>+</span>');
+  // The hero ticker "5" alone — anchor on adjacent "venues" label to disambiguate from other "5"s
+  // (e.g. the FlywheelSection step "01"/"02" indices, BuildVsBuy "5 venues" already in Group D).
+  html = html.replace(
+    /(>)5(<\/span>(?:<!-- -->)?<span[^>]*>venues<\/span>)/,
+    '$1<span data-tr-field="exchange_count">5</span>$2'
+  );
+  return html;
+}
+
+// R2 — Group B: Hero diagram MODEL node "Batch 34". JSX line 312:
+//   <div style="font-family:...;color:rgb(141, 140, 140);margin-top:4px">Batch 34</div>
+// Wrap the "34" literal in a data-tr-field span. Anchor on "Batch " prefix to avoid matching
+// other 34s (e.g. arbitrary y-coordinate values in SVG path data).
+function applyHowItWorksGroupBBatch(html) {
+  return html.replace(/>Batch 34</g, '>Batch <span data-tr-field="merkle_batch_count">34</span><');
+}
+
+// R2 — Group C: WhatIsSection card body (line 447): "720+ assets. 11 timeframes."
+// JSX renders this inside a <p>. The "720+" and "11 timeframes" literals are unique enough
+// to anchor on, but to keep the diff surgical, target the full sentence pattern.
+function applyHowItWorksGroupCWhatIs(html) {
+  return html.replace(
+    /Same model evaluates Binance, Hyperliquid, Bybit, OKX, Bitget\. 720\+ assets\. 11 timeframes\./g,
+    'Same model evaluates Binance, Hyperliquid, Bybit, OKX, Bitget. <span data-tr-field="asset_count">720</span>+ assets. <span data-tr-field="timeframe_count">11</span> timeframes.'
+  );
+}
+
+// R2 — Group C (extra): WhatIsSection on-chain card body (line 452):
+// "Every signal hashed at emission, anchored on Base L2 daily. 33+ Merkle batches published."
+// FF-1 mandate: "signal" → "call" in public-facing prose. Also live-bind 33 batch count.
+function applyHowItWorksGroupCOnChain(html) {
+  return html.replace(
+    /Every signal hashed at emission, anchored on Base L2 daily\. 33\+ Merkle batches published\./g,
+    'Every call hashed at emission, anchored on Base L2 daily. <span data-tr-field="merkle_batch_count">33</span>+ Merkle batches published.'
+  );
+}
+
+// R2 — Group D: BuildVsBuySection "Call Algovault" column (lines 956-957). JSX renders
+// these in <li> rows. The cells are the full string of each tuple — anchor on the unique
+// phrasing then live-bind the numbers + retain the rest.
+function applyHowItWorksGroupDBuildVsBuy(html) {
+  // Row: "720+ assets · 11 timeframes · 5 venues"
+  html = html.replace(
+    /720\+ assets · 11 timeframes · 5 venues/g,
+    '<span data-tr-field="asset_count">720</span>+ assets · <span data-tr-field="timeframe_count">11</span> timeframes · <span data-tr-field="exchange_count">5</span> venues'
+  );
+  // Row: "86,000+ verified calls · 90.4% PFE WR"
+  html = html.replace(
+    /86,000\+ verified calls · 90\.4% PFE WR/g,
+    '<span data-tr-field="call_count">86,000</span>+ verified calls · <span data-tr-field="pfe_wr">90.4%</span> PFE WR'
+  );
+  return html;
+}
+
+// R2 — Group E: FAQ A2 answer (line 1129):
+//   "...updating across 720+ assets has no single trade to crowd..."
+// React's renderToString inserts <!-- --> separators between text and JSX boundaries.
+// Anchor on the unique surrounding text rather than the bare "720+".
+function applyHowItWorksGroupEFaqA2(html) {
+  return html.replace(
+    /updating across 720\+ assets has no single trade to crowd/g,
+    'updating across <span data-tr-field="asset_count">720</span>+ assets has no single trade to crowd'
+  );
+}
+
+// R3 — CTA href rewrites per architect-ratified URL table.
+function applyHowItWorksCTAs(html) {
+  // 1. Hero + Bottom-CTA "Try Free in Claude" buttons (api.algovault.com/mcp → /#quickstart)
+  html = html.replace(
+    /href="https:\/\/api\.algovault\.com\/mcp"/g,
+    'href="https://algovault.com/#quickstart"'
+  );
+  // 2. Hero "View Live Track Record" CTA — /track-record → absolute URL
+  // NOTE: must be specific to NOT touch /track-record in BFEyebrow link text elsewhere.
+  // Anchor on the PillCTA pattern (textContent "View Live Track Record" + href).
+  html = html.replace(
+    /href="\/track-record"/g,
+    'href="https://algovault.com/track-record"'
+  );
+  // 3. Agents section "Read the integration docs" — /docs.html → absolute URL
+  html = html.replace(
+    /href="\/docs\.html"/g,
+    'href="https://algovault.com/docs.html"'
+  );
+  // 4. Verify section "Verify any call" — /verify → absolute URL
+  html = html.replace(
+    /href="\/verify"/g,
+    'href="https://algovault.com/verify"'
+  );
+  // 5. Build-vs-buy "Start free — 100 calls/mo" — /signup → /#quickstart
+  html = html.replace(
+    /href="\/signup"/g,
+    'href="https://algovault.com/#quickstart"'
+  );
+  // 6 + 7: Telegram + Basescan hrefs are already correct — KEEP.
+  return html;
+}
+
+// R6 — External-link discipline. Every <a> with an external https:// href (NOT
+// algovault.com / api.algovault.com / basescan.org-as-existing) gets
+// target="_blank" rel="noopener noreferrer" if missing.
+function applyHowItWorksExternalLinkRel(html) {
+  // Find <a> tags with external https:// hrefs. Algovault domains are internal.
+  // Replace patterns that don't already have target+rel.
+  return html.replace(
+    /<a([^>]*?\s)href="https:\/\/((?!algovault\.com|api\.algovault\.com)[^"]+)"([^>]*)>/g,
+    (match, before, host, after) => {
+      // Skip if target+rel already present in either before or after
+      if (/target=|rel=/i.test(before + after)) return match;
+      return `<a${before}href="https://${host}"${after} target="_blank" rel="noopener noreferrer">`;
+    }
+  );
+}
+
+// FF-1 (2026-05-13) carry-forward: Mr.1 mandate — public-facing prose uses "call"/"calls",
+// never "signal"/"signals". EXCLUSIONS preserved: CSS class `signal-id-input` (DOM
+// querySelector seam), npm package literal `crypto-quant-signal-mcp` (package name).
+// Targets user-visible prose only — preserves identifier strings per the
+// global-string-replacement-architect-ratified-triage discipline.
+function applyHowItWorksSignalToCall(html) {
+  // VerifySection lead text "Paste any signal ID into the verify form..."
+  html = html.replaceAll('Paste any signal ID into the verify form', 'Paste any call ID into the verify form');
+  // Input placeholder "Paste signal ID (sig_…)" → "Paste call ID (sig_…)" — keep "sig_" hash prefix
+  html = html.replaceAll('placeholder="Paste signal ID (sig_…)"', 'placeholder="Paste call ID (sig_…)"');
+  // Status idle prompt "idle — paste a signal id" → "idle — paste a call id"
+  html = html.replaceAll('idle — paste a signal id', 'idle — paste a call id');
+  // FAQ Q2 wording "uses your signals?" → "uses your calls?"
+  html = html.replaceAll('uses your signals?', 'uses your calls?');
+  return html;
+}
+
+// React 18 renderToString escapes ASCII apostrophes in text content as &#x27; for SSR
+// safety. For SEO + test-grep portability, decode them back to literal apostrophes
+// (browsers render both identically; grep / curl / canary tests prefer literal chars).
+// Safe scope: text content only — attribute values use the same encoding but that's
+// also harmless since browsers normalize. Decoding globally is fine here.
+function normalizeApostrophes(html) {
+  return html.replace(/&#x27;/g, "'");
+}
+
+// Strip mobile-artboard duplicate section IDs (HTML id-uniqueness — same pattern as
+// DESIGN-W7-FF + DESIGN-W9 mobile-id strip). Only the HeroSection in v1-howitworks.jsx
+// has an id (`id="how-it-works"` at line 366); all other sections use data-screen-label
+// instead of id.
+function stripHowItWorksMobileSectionIds(html) {
+  return html.replace(/<section id="how-it-works"/g, '<section');
+}
+
+// Wrap desktop + mobile artboards in lp-howit-{desktop,mobile} divs.
+// @media swap CSS is in HOW_IT_WORKS_HEAD_AND_NAV <style> block.
+function wrapHowItWorksDualRender(desktopHtml, mobileHtml) {
+  return `<main class="how-it-works-main">\n` +
+    `<div class="lp-howit-desktop">${desktopHtml}</div>\n` +
+    `<div class="lp-howit-mobile">${mobileHtml}</div>\n` +
+    `</main>\n`;
+}
+
+// Canonical Footer matching landing/index.html exactly. R4: Mr.1 directive "use the
+// same footer for all pages". Two variants (desktop row-flex, mobile column-flex) wrapped
+// in .lp-howit-{desktop,mobile} for @media swap.
+const HOW_IT_WORKS_FOOTER_HTML = `<div class="lp-howit-desktop"><footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)"><div style="display:flex;align-items:center;gap:10px"><img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0"><span style="color:var(--fg-2)">Built by AlgoVault Labs</span></div><div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap"><a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">GitHub</a><a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">X / Twitter</a><a href="https://algovault.com/#quickstart" style="color:var(--fg-3);text-decoration:none">Signup</a><a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a></div></footer></div>
+<div class="lp-howit-mobile"><footer style="padding:32px 22px 36px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:18px;font-size:13px;color:var(--fg-3)"><div style="display:flex;align-items:center;gap:10px"><img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0"><span style="color:var(--fg-2)">Built by AlgoVault Labs</span></div><div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap"><a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">GitHub</a><a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">X / Twitter</a><a href="https://algovault.com/#quickstart" style="color:var(--fg-3);text-decoration:none">Signup</a><a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a></div></footer></div>`;
+
+// Canonical chrome contract head + nav. Mirrors VERIFY_HEAD_AND_NAV with /how-it-works-specific
+// title, description, canonical, and `How it works` active-link.
+// data-algovault-jsonld blocks are stripped (generate_jsonld.mjs injects them via its own pass).
+const HOW_IT_WORKS_HEAD_AND_NAV = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How AlgoVault Works — The Trading Model API for AI Agents</title>
+<meta name="description" content="AlgoVault is a self-tuning quant ML model served as an MCP API. One call returns a composite verdict — direction, confidence, regime — across 5 perp venues. Every call Merkle-anchored on Base L2.">
+<meta name="last-updated" content="2026-05-14">
+<link rel="canonical" href="https://algovault.com/how-it-works">
+<link rel="icon" type="image/png" href="/logo.png">
+<meta property="og:title" content="How AlgoVault Works — The Trading Model API">
+<meta property="og:description" content="A self-tuning quant ML model with a published track record. One MCP call returns a composite verdict — direction, confidence, regime — Merkle-anchored on Base L2.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://algovault.com/how-it-works">
+<meta property="og:image" content="https://algovault.com/logo.png">
+<meta property="og:site_name" content="AlgoVault Labs">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How AlgoVault Works — The Trading Model API">
+<meta name="twitter:description" content="A self-tuning quant ML model with a published track record. One MCP call returns a composite verdict — Merkle-anchored on Base L2.">
+<meta name="twitter:image" content="https://algovault.com/logo.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- BEGIN: AlgoVault canonical design loader (DESIGN-W2 / D2-C) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/_design/algovault-design.css">
+<!-- END: AlgoVault canonical design loader -->
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: { 900: '#060a14', 800: '#0a0e1a', 700: '#0f1526', 600: '#161d30' },
+        mint: { 50: 'oklch(0.97 0.03 165)', 100: 'oklch(0.94 0.06 165)', 200: 'oklch(0.91 0.09 165)', 300: 'oklch(0.89 0.13 165)', 400: 'oklch(0.86 0.16 165)', 500: 'oklch(0.78 0.18 165)', 600: 'oklch(0.66 0.18 165)', 700: 'oklch(0.54 0.16 165)', 800: 'oklch(0.42 0.12 165)', 900: 'oklch(0.32 0.08 165)' },
+        steel: { 400: '#8b9bb5', 500: '#7b8ca0', 600: '#5e6d82' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  html { scroll-behavior: smooth; }
+  body { background: #0d1815; color: #d1d5db; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  /* DESIGN-HOW-IT-WORKS-W1 dual-render @media swap (lp-howit-{desktop,mobile}). */
+  @media (max-width: 767px) { .lp-howit-desktop { display: none !important; } }
+  @media (min-width: 768px) { .lp-howit-mobile { display: none !important; } }
+</style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-RwGaS0xWrfzs4vNSkMOAX.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
+<!-- track-record-proxy.js hydrates [data-tr-field] spans from /api/performance-public -->
+<script defer src="/js/track-record-proxy.js"></script>
+</head>
+<body class="min-h-screen">
+
+<!-- Cross-page sticky nav (AlgoVault Labs canonical) — preserved across landing pages -->
+<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <a href="/" class="flex items-center gap-2.5">
+        <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
+        <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
+      </a>
+    </div>
+    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
+      <a href="/track-record" class="hover:text-white transition">Track Record</a>
+      <a href="/how-it-works" class="text-mint-400 font-medium" aria-current="page">How it works</a>
+      <a href="/#pricing" class="hover:text-white transition">Pricing</a>
+      <a href="/integrations" class="hover:text-white transition">Integrations</a>
+      <a href="/skills" class="hover:text-white transition">Skills</a>
+      <a href="/docs.html" class="hover:text-white transition">Docs</a>
+      <a href="/verify" class="hover:text-white transition">Verify</a>
+      <a href="https://api.algovault.com/account" class="hover:text-white transition">Account</a>
+      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
+    </div>
+  </div>
+</nav>
+<div style="position:relative;z-index:1;padding-top:56px">
+`;
+
+// Assemble full HTML document.
+function buildHowItWorksHtmlDocument(bodyContent) {
+  return HOW_IT_WORKS_HEAD_AND_NAV +
+    bodyContent +
+    '\n</div>\n' +
+    HOW_IT_WORKS_FOOTER_HTML +
+    '\n</body>\n</html>\n';
+}
+
+// Aggregate post-render overrides for a single artboard.
+function applyHowItWorksOverrides(html, isDesktop) {
+  html = stripHowItWorksJsxNav(html);          // R5: drop JSX Nav (canonical replaces it)
+  html = stripHowItWorksJsxFooter(html);       // R4: drop JSX Footer (canonical replaces it)
+  html = applyHowItWorksGroupAHeroTicker(html);// R2.A: 4 hero ticker live-binds
+  html = applyHowItWorksGroupBBatch(html);     // R2.B: "Batch 34" → merkle_batch_count
+  html = applyHowItWorksGroupCWhatIs(html);    // R2.C: WhatIsSection "720+ assets. 11 timeframes."
+  html = applyHowItWorksGroupCOnChain(html);   // R2.C-extra: WhatIs on-chain card "33+ Merkle batches" + signal→call
+  html = applyHowItWorksGroupDBuildVsBuy(html);// R2.D: BuildVsBuy buy-column rows
+  html = applyHowItWorksGroupEFaqA2(html);     // R2.E: FAQ A2 "across 720+ assets"
+  html = applyHowItWorksCTAs(html);            // R3: CTA href rewrites
+  html = applyHowItWorksSignalToCall(html);    // FF-1 carry-forward: public-facing prose signal→call
+  html = applyHowItWorksExternalLinkRel(html); // R6: external-link rel discipline
+  html = normalizeApostrophes(html);           // React-SSR &#x27; → ' for SEO + test-grep portability
+  if (!isDesktop) {
+    html = stripHowItWorksMobileSectionIds(html);  // dual-render id-uniqueness
+  }
+  return html;
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -1451,8 +1773,8 @@ async function main() {
   const mobile = args.mobile === 'true';
   const out = args.out;
 
-  if (!['belowfold', 'landing-rest', 'hero', 'verify'].includes(target)) {
-    console.error(`[render-jsx-static] invalid --target=${target} (expected belowfold|landing-rest|hero|verify)`);
+  if (!['belowfold', 'landing-rest', 'hero', 'verify', 'how-it-works'].includes(target)) {
+    console.error(`[render-jsx-static] invalid --target=${target} (expected belowfold|landing-rest|hero|verify|how-it-works)`);
     process.exit(2);
   }
 
@@ -1559,6 +1881,24 @@ async function main() {
       // Q-W9-11 hydration order: W4_PRESERVED_JS first (verifySignal handler) then W9_LIVEBIND_JS
       // (track-record-proxy.js script tag + inline batch hydration).
       html = buildVerifyHtmlDocument(wrapped, VERIFY_W4_PRESERVED_JS + '\n' + VERIFY_W9_LIVEBIND_JS);
+    } else if (target === 'how-it-works') {
+      // DESIGN-HOW-IT-WORKS-W1 (2026-05-14): /how-it-works JSX-faithful rebuild from
+      // v1-howitworks.jsx (1289 LoC). Dual-render desktop + mobile; output is a FULL HTML
+      // document. Canonical Nav + Footer swapped in per R4+R5 (drop JSX-emitted chrome,
+      // insert production chrome from landing/index.html for cross-page consistency).
+      const srcRaw = await readFile(path.join(VAULT_HOW_IT_WORKS, 'v1-howitworks.jsx'), 'utf-8');
+      const src = patchHowItWorks(srcRaw);
+      const exports = await evalJsxSrc(
+        src,
+        path.join(VAULT_HOW_IT_WORKS, 'v1-howitworks.jsx'),
+        ['HowItWorksPage']
+      );
+      let desktopRaw = renderToString(React.createElement(exports.HowItWorksPage, { mobile: false }));
+      let mobileRaw = renderToString(React.createElement(exports.HowItWorksPage, { mobile: true }));
+      desktopRaw = applyHowItWorksOverrides(desktopRaw, true);
+      mobileRaw = applyHowItWorksOverrides(mobileRaw, false);
+      const wrapped = wrapHowItWorksDualRender(desktopRaw, mobileRaw);
+      html = buildHowItWorksHtmlDocument(wrapped);
     }
   } catch (e) {
     console.error(`[render-jsx-static] render failed: ${e.message}`);
