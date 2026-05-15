@@ -42,14 +42,33 @@ const SYMBOL_OVERRIDES: Record<string, string> = {
   'MOGCOIN': '1000MOGCOIN',
 };
 
-function toBinanceSymbol(coin: string): string {
-  const mapped = SYMBOL_OVERRIDES[coin] || coin;
+// AlgoVault-canonical → Binance-native base symbol for TradFi assets where Binance's
+// listing uses a different ticker (e.g. GOLD trades as XAUUSDT on Binance, not GOLDUSDT).
+// Derived from live Binance exchangeInfo probe (TRADFI-SYMBOL-ALIAS-W1, 2026-05-15).
+// IMPORTANT: SP500 → SPX was NOT included even though SPXUSDT exists — Binance's
+// SPXUSDT is the SPX6900 memecoin (~$0.40), NOT the S&P 500 index (~$7400 on HL).
+// SP500 stays HL-only via venue-coverage.ts. SPX (the memecoin) is a direct match
+// on all CEXs and HL standard perps; no alias needed.
+const TRADFI_ALIASES: Record<string, string> = {
+  GOLD: 'XAU',
+  SILVER: 'XAG',
+  PLATINUM: 'XPT',
+  PALLADIUM: 'XPD',
+};
+
+export function toBinanceSymbol(coin: string): string {
+  // Resolution order: TRADFI alias wins over meme-coin 1000-prefix override
+  // (they don't actually overlap, but the order documents the intent).
+  const mapped = TRADFI_ALIASES[coin] || SYMBOL_OVERRIDES[coin] || coin;
   return mapped + 'USDT';
 }
 
 // Reverse map: Binance symbol back to our coin name
-function fromBinanceSymbol(symbol: string): string {
+export function fromBinanceSymbol(symbol: string): string {
   const base = symbol.replace(/USDT$/, '');
+  for (const [canon, native] of Object.entries(TRADFI_ALIASES)) {
+    if (native === base) return canon;
+  }
   for (const [ourCoin, binName] of Object.entries(SYMBOL_OVERRIDES)) {
     if (binName === base) return ourCoin;
   }

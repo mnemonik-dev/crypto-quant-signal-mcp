@@ -38,6 +38,33 @@ export class UpstreamRateLimitError extends Error {
 }
 
 /**
+ * Thrown by `getTradeSignal` / `getMarketRegime` when the AlgoVault-canonical
+ * TradFi symbol is not listed on the requested CEX. The MCP tool handler
+ * emits a structured response with `suggested_venues` so an LLM agent can
+ * pattern-match on `error_code === "TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE"`
+ * and self-retry against one of the supported venues. Added in
+ * TRADFI-SYMBOL-ALIAS-W1 (v1.11.1) after CHANGE-DEFAULT-EXCHANGE-W1's probe
+ * surfaced `GOLD/BINANCE → 400 Bad Request` as a confusing raw upstream
+ * error.
+ */
+export class TradFiSymbolUnsupportedOnVenueError extends Error {
+  readonly code = 'TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE' as const;
+  readonly coin: string;
+  readonly requestedExchange: string;
+  readonly suggestedVenues: string[];
+  readonly probedAt: string;
+
+  constructor(coin: string, requestedExchange: string, suggestedVenues: string[], probedAt: string) {
+    super(`${coin} is not listed on ${requestedExchange} as of ${probedAt}. Supported venues for ${coin}: ${suggestedVenues.join(', ')}.`);
+    this.coin = coin;
+    this.requestedExchange = requestedExchange;
+    this.suggestedVenues = suggestedVenues;
+    this.probedAt = probedAt;
+    Object.setPrototypeOf(this, TradFiSymbolUnsupportedOnVenueError.prototype);
+  }
+}
+
+/**
  * Map of which exchanges to suggest as fallbacks when one is rate-limited.
  * Used by the MCP tool handler to populate the `suggestion` field of the
  * structured error response.

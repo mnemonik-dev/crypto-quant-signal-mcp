@@ -17,6 +17,30 @@ const BASE_URL = 'https://api.bitget.com';
 const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 1;
 
+// AlgoVault-canonical → Bitget-native base symbol for TradFi assets where Bitget's
+// listing uses a different ticker (e.g. GOLD trades as XAUUSDT on Bitget, not GOLDUSDT).
+// Derived from live Bitget contracts probe (TRADFI-SYMBOL-ALIAS-W1, 2026-05-15).
+// Symmetric reverse-map applied in fromBitgetSymbol.
+const TRADFI_ALIASES: Record<string, string> = {
+  GOLD: 'XAU',
+  SILVER: 'XAG',
+  PLATINUM: 'XPT',
+  PALLADIUM: 'XPD',
+};
+
+export function toBitgetSymbol(coin: string): string {
+  const mapped = TRADFI_ALIASES[coin] || coin;
+  return mapped + 'USDT';
+}
+
+export function fromBitgetSymbol(symbol: string): string {
+  const base = symbol.replace(/USDT$/, '');
+  for (const [canon, native] of Object.entries(TRADFI_ALIASES)) {
+    if (native === base) return canon;
+  }
+  return base;
+}
+
 // Map our intervals to Bitget granularity values
 // Bitget uses: 1m,3m,5m,15m,30m,1H,4H,6H,12H,1D,1W,1M
 const INTERVAL_MAP: Record<string, string> = {
@@ -112,7 +136,7 @@ export class BitgetAdapter implements ExchangeAdapter {
   }
 
   async getCandles(coin: string, interval: string, startTime: number, _dex?: DexType): Promise<Candle[]> {
-    const symbol = coin + 'USDT';
+    const symbol = toBitgetSymbol(coin);
     const granularity = INTERVAL_MAP[interval] || '1h';
 
     // Response: array of string arrays [ts, open, high, low, close, baseVol, quoteVol]
@@ -136,7 +160,7 @@ export class BitgetAdapter implements ExchangeAdapter {
   }
 
   async getAssetContext(coin: string, _dex?: DexType): Promise<AssetContext> {
-    const symbol = coin + 'USDT';
+    const symbol = toBitgetSymbol(coin);
 
     // Parallel fetch: ticker (single via filtering all tickers) + open interest + current funding rate
     const [tickersData, oiData, fundingData] = await Promise.all([
@@ -182,7 +206,7 @@ export class BitgetAdapter implements ExchangeAdapter {
     return (data || [])
       .filter(entry => entry.symbol.endsWith('USDT'))
       .map(entry => ({
-        coin: entry.symbol.replace(/USDT$/, ''),
+        coin: fromBitgetSymbol(entry.symbol),
         venues: [{
           venue: 'BitgetPerp',
           fundingRate: parseFloat(entry.fundingRate || '0'),
@@ -193,7 +217,7 @@ export class BitgetAdapter implements ExchangeAdapter {
 
   async getFundingHistory(coin: string, _startTime: number): Promise<{ time: number; fundingRate: number }[]> {
     try {
-      const symbol = coin + 'USDT';
+      const symbol = toBitgetSymbol(coin);
       const data = await bitgetGet<BitgetFundingHistoryEntry[]>('/api/v2/mix/market/history-fund-rate', {
         productType: 'USDT-FUTURES',
         symbol,
@@ -211,7 +235,7 @@ export class BitgetAdapter implements ExchangeAdapter {
 
   async getCurrentPrice(coin: string, _dex?: DexType): Promise<number | null> {
     try {
-      const symbol = coin + 'USDT';
+      const symbol = toBitgetSymbol(coin);
       const data = await bitgetGet<BitgetTicker[]>('/api/v2/mix/market/tickers', {
         productType: 'USDT-FUTURES',
         symbol,

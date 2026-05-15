@@ -5,6 +5,37 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2026-05-15 — TradFi symbol aliasing across all 4 CEX adapters
+
+### Added
+
+- **Per-CEX TradFi symbol aliasing** in all 4 CEX adapters (`src/lib/adapters/{binance,bybit,bitget,okx}.ts`). `get_trade_call({coin: "GOLD", exchange: "BINANCE"})` now resolves to `XAUUSDT` instead of returning `400 Bad Request` from upstream. New `TRADFI_ALIASES` constant per adapter — alias-discovery derived from live Binance/Bybit/Bitget/OKX exchangeInfo probes (TRADFI-SYMBOL-ALIAS-W1, 2026-05-15). Aliases:
+  - **Binance**: `GOLD → XAU`, `SILVER → XAG`, `PLATINUM → XPT`, `PALLADIUM → XPD`
+  - **Bybit**: `GOLD → XAU`, `SILVER → XAG`
+  - **Bitget**: `GOLD → XAU`, `SILVER → XAG`, `PLATINUM → XPT`, `PALLADIUM → XPD`
+  - **OKX**: `GOLD → XAU`, `SILVER → XAG`, `COPPER → XCU`, `NATGAS → NG`, `PLATINUM → XPT`, `PALLADIUM → XPD`
+  - Symmetric reverse-aliases in `fromBinanceSymbol` / `fromBybitSymbol` / etc. so `_algovault.coin` in the response envelope surfaces the AlgoVault-canonical name (`GOLD`), NOT the CEX-native (`XAU`).
+- **`src/lib/venue-coverage.ts`** — static per-venue coverage matrix exporting `getVenuesSupporting(coin)` + `isVenueSupportedFor(coin, exchange)`. HL-only TIER_3 symbols enumerated (24 symbols: ALUMINIUM, BRENTOIL, BX, CORN, DKNG, DXY, EUR, HYUNDAI, JP225, JPY, KIOXIA, KR200, PURRDAT, RIVN, SKHX, SMSN, SOFTBANK, **SP500**, TTF, URANIUM, URNM, VIX, WHEAT, XYZ100). Partial-coverage TIER_3 symbols enumerated per-venue (14 symbols including HIMS, XLE, COST, GME, NFLX). Plus `COVERAGE_PROBED_AT = '2026-05-15'` for staleness audits.
+- **`TradFiSymbolUnsupportedOnVenueError`** in `src/lib/errors.ts` — structured error class. Tool handler emits `{error_code: 'TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE', message, coin, requested_exchange, suggested_venues, probed_at}` instead of a flat `{error: 'upstream 400 ...'}`. LLM agents pattern-match on `error_code` and self-retry against `suggested_venues[0]`.
+- **Venue-coverage gate** wired in `getTradeSignal` + `getMarketRegime` (`src/tools/get-trade-call.ts`, `src/tools/get-market-regime.ts`). Fires BEFORE the adapter call to avoid hitting upstream with known-unsupported pairs.
+- **Plan-Mode artifacts** — `audits/TRADFI-SYMBOL-ALIAS-W1-endpoint-truth.md` (full identifier-diff + collision-fix audit) + `audits/TRADFI-SYMBOL-ALIAS-W1-symbol-coverage.csv` (248-row per-coin × per-CEX raw probe data).
+- **NEW test suite `tests/unit/tradfi-symbol-alias.test.ts`** (35+ cases) — forward + reverse alias resolution per adapter; `getVenuesSupporting` invariants (HL-only / partial-coverage / all-5 paths); `isVenueSupportedFor` convenience helper; forbidden-phrase canary carrying over from v1.11.0.
+
+### Refactored
+
+- `src/lib/adapters/bybit.ts` + `src/lib/adapters/bitget.ts` — inline `coin + 'USDT'` (4 sites each) replaced with `toBybitSymbol` / `toBitgetSymbol` helpers (mirror existing `toBinanceSymbol` / `toOKXInstId` pattern). Reverse-map `fromBybitSymbol` / `fromBitgetSymbol` plumbed into `getPredictedFundings` so the canonical coin name surfaces on every adapter's output.
+- All 4 adapter symbol-helpers (`toBinanceSymbol` / `fromBinanceSymbol` / etc.) marked `export` so the new unit tests can lock them.
+
+### Notes — namespace collision caught in Plan Mode
+
+The naive grep-against-symbol-list emitted `SP500 → SPX` as an alias candidate on all 4 CEXs (`SPXUSDT` / `SPX-USDT-SWAP` exists everywhere). Live spot-price probe revealed the collision: `SPX` on every CEX (and on HL standard perps) is the **SPX6900 memecoin** (price ≈ $0.40), NOT the S&P 500 index (price ≈ $7400 on HL). The `SP500 → SPX` alias was DROPPED from all 4 adapter maps BEFORE code-edit landed. `SP500` reclassified as HL-only in `venue-coverage.ts`. Documented in `audits/TRADFI-SYMBOL-ALIAS-W1-endpoint-truth.md` §3.b. The episode confirms the WIS pattern from v1.11.0: claim-removal and alias-discovery waves need a spot-price (or equivalent semantic-fingerprint) sanity check BEFORE any data table is committed to code.
+
+### No client action needed
+
+This is a tool BEHAVIOR change (more permissive resolution), not a schema change. MCP `tools/list` is unchanged — clients don't need a cache refresh. Existing callers passing `exchange: 'HL'` for TradFi are unaffected. Callers passing `coin: 'GOLD', exchange: 'BINANCE'` previously got `400`; now get a live verdict via XAUUSDT.
+
+---
+
 ## [1.11.0] - 2026-05-15 — Default exchange flipped HL → Binance + README v1.11.0 refresh
 
 ### Changed (BEHAVIOR — minor bump)

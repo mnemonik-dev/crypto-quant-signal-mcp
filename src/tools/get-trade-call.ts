@@ -3,7 +3,9 @@ import { rsi, emaLast, ema, hurstExponent, detectSqueeze } from '../lib/indicato
 import { canAccessCoin, canAccessTimeframe, freeGateMessage, isFreeTier, checkQuota, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
 import { recordSignal, recordFunding, getFundingZScore, recordHoldCount } from '../lib/performance-db.js';
 import { hashSignal } from '../lib/merkle.js';
-import { getDexForCoin, classifyAsset, isMemeCoinLiquid } from '../lib/asset-tiers.js';
+import { getDexForCoin, classifyAsset, isMemeCoinLiquid, isKnownTradFi } from '../lib/asset-tiers.js';
+import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
+import { TradFiSymbolUnsupportedOnVenueError } from '../lib/errors.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import { getClosestTradeable, getTryNext } from '../lib/cross-asset-grid.js';
 import { trimToLeaderboardCell } from '../lib/leaderboard-cell.js';
@@ -97,6 +99,20 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   }
 
   const exchange = input.exchange || 'BINANCE';
+
+  // Venue-coverage gate (TRADFI-SYMBOL-ALIAS-W1 / v1.11.1): if the coin is a
+  // known TradFi symbol AND the requested venue does NOT carry it (per the
+  // static coverage matrix derived from live CEX exchangeInfo probes), throw
+  // a structured `TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE` error with
+  // `suggested_venues` so LLM agents can self-retry instead of seeing a raw
+  // `400 Bad Request` from the upstream API. Crypto majors / alts / memes
+  // fall through unchanged — adapter-level errors still bubble up generically.
+  if (isKnownTradFi(coin)) {
+    const supported = getVenuesSupporting(coin);
+    if (!supported.includes(exchange)) {
+      throw new TradFiSymbolUnsupportedOnVenueError(coin, exchange, supported, COVERAGE_PROBED_AT);
+    }
+  }
 
   // Determine which HL dex this coin trades on (standard vs xyz/TradFi)
   // Only applicable for Hyperliquid — Binance doesn't have dex types

@@ -37,7 +37,7 @@ import {
   getCustomerApiKey,
   validateApiKey,
 } from './lib/stripe.js';
-import { UpstreamRateLimitError, EXCHANGE_FALLBACKS } from './lib/errors.js';
+import { UpstreamRateLimitError, EXCHANGE_FALLBACKS, TradFiSymbolUnsupportedOnVenueError } from './lib/errors.js';
 import { checkBotInternalAuth } from './lib/bot-auth.js';
 import { getWelcomePageHtml } from './lib/welcome-page.js';
 
@@ -61,6 +61,18 @@ function toolErrorContent(err: unknown): { content: { type: 'text'; text: string
       exchange: err.exchange,
       retry_after_seconds: err.retryAfterSeconds,
       suggestion: `Try ${fallbackList} instead${retryHint}.`,
+    };
+    return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
+  }
+  if (err instanceof TradFiSymbolUnsupportedOnVenueError) {
+    const payload = {
+      error: err.code,
+      error_code: err.code,
+      message: err.message,
+      coin: err.coin,
+      requested_exchange: err.requestedExchange,
+      suggested_venues: err.suggestedVenues,
+      probed_at: err.probedAt,
     };
     return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
   }

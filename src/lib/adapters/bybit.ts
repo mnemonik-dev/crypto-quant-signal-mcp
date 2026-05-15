@@ -17,6 +17,28 @@ const BASE_URL = 'https://api.bybit.com';
 const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 1;
 
+// AlgoVault-canonical → Bybit-native base symbol for TradFi assets where Bybit's
+// listing uses a different ticker (e.g. GOLD trades as XAUUSDT on Bybit, not GOLDUSDT).
+// Derived from live Bybit instruments-info probe (TRADFI-SYMBOL-ALIAS-W1, 2026-05-15).
+// Symmetric reverse-map applied in fromBybitSymbol.
+const TRADFI_ALIASES: Record<string, string> = {
+  GOLD: 'XAU',
+  SILVER: 'XAG',
+};
+
+export function toBybitSymbol(coin: string): string {
+  const mapped = TRADFI_ALIASES[coin] || coin;
+  return mapped + 'USDT';
+}
+
+export function fromBybitSymbol(symbol: string): string {
+  const base = symbol.replace(/USDT$/, '');
+  for (const [canon, native] of Object.entries(TRADFI_ALIASES)) {
+    if (native === base) return canon;
+  }
+  return base;
+}
+
 // Map our intervals to Bybit kline intervals
 const INTERVAL_MAP: Record<string, string> = {
   '1m': '1', '3m': '3', '5m': '5', '15m': '15',
@@ -102,7 +124,7 @@ export class BybitAdapter implements ExchangeAdapter {
   }
 
   async getCandles(coin: string, interval: string, startTime: number, _dex?: DexType): Promise<Candle[]> {
-    const symbol = coin + 'USDT';
+    const symbol = toBybitSymbol(coin);
     const bybitInterval = INTERVAL_MAP[interval] || '60';
 
     const data = await bybitGet<{ list: string[][] }>('/v5/market/kline', {
@@ -127,7 +149,7 @@ export class BybitAdapter implements ExchangeAdapter {
   }
 
   async getAssetContext(coin: string, _dex?: DexType): Promise<AssetContext> {
-    const symbol = coin + 'USDT';
+    const symbol = toBybitSymbol(coin);
 
     // Parallel fetch: ticker (single symbol) + open interest
     const [tickerData, oiData] = await Promise.all([
@@ -169,7 +191,7 @@ export class BybitAdapter implements ExchangeAdapter {
     return (data.list || [])
       .filter(entry => entry.symbol.endsWith('USDT'))
       .map(entry => ({
-        coin: entry.symbol.replace(/USDT$/, ''),
+        coin: fromBybitSymbol(entry.symbol),
         venues: [{
           venue: 'BybitPerp',
           fundingRate: parseFloat(entry.fundingRate || '0'),
@@ -180,7 +202,7 @@ export class BybitAdapter implements ExchangeAdapter {
 
   async getFundingHistory(coin: string, startTime: number): Promise<{ time: number; fundingRate: number }[]> {
     try {
-      const symbol = coin + 'USDT';
+      const symbol = toBybitSymbol(coin);
       const data = await bybitGet<{ list: BybitFundingHistoryEntry[] }>('/v5/market/funding/history', {
         category: 'linear',
         symbol,
@@ -199,7 +221,7 @@ export class BybitAdapter implements ExchangeAdapter {
 
   async getCurrentPrice(coin: string, _dex?: DexType): Promise<number | null> {
     try {
-      const symbol = coin + 'USDT';
+      const symbol = toBybitSymbol(coin);
       const data = await bybitGet<{ list: BybitTicker[] }>('/v5/market/tickers', {
         category: 'linear',
         symbol,

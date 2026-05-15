@@ -1,6 +1,8 @@
 import { getAdapter } from '../lib/exchange-adapter.js';
 import { adx, atr, detectPriceStructure } from '../lib/indicators.js';
-import { getDexForCoin } from '../lib/asset-tiers.js';
+import { getDexForCoin, isKnownTradFi } from '../lib/asset-tiers.js';
+import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
+import { TradFiSymbolUnsupportedOnVenueError } from '../lib/errors.js';
 import { trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import type { MarketRegimeResult, RegimeType, TrendStrength, CrossVenueFundingSentiment, AdxSlopeCategory, LicenseInfo, ExchangeId } from '../types.js';
@@ -39,6 +41,18 @@ export async function getMarketRegime(input: MarketRegimeInput): Promise<MarketR
   const startTime = Date.now() - candleCount * intervalMs;
 
   const exchange = input.exchange || 'HL';
+
+  // Venue-coverage gate (TRADFI-SYMBOL-ALIAS-W1 / v1.11.1): see same gate in
+  // get_trade_call — block known TradFi symbols on unsupported CEX so callers
+  // get `TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE` with `suggested_venues` instead
+  // of a raw upstream `400`.
+  if (isKnownTradFi(coin)) {
+    const supported = getVenuesSupporting(coin);
+    if (!supported.includes(exchange)) {
+      throw new TradFiSymbolUnsupportedOnVenueError(coin, exchange, supported, COVERAGE_PROBED_AT);
+    }
+  }
+
   const adapter = getAdapter(exchange);
   const dex = exchange === 'HL' ? getDexForCoin(coin) : undefined;
 

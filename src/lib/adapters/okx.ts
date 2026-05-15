@@ -19,12 +19,30 @@ const MAX_RETRIES = 1;
 
 // ── Symbol mapping ──
 
-function toOKXInstId(coin: string): string {
-  return `${coin}-USDT-SWAP`;
+// AlgoVault-canonical → OKX-native base symbol for TradFi assets where OKX's
+// listing uses a different ticker (e.g. GOLD trades as XAU-USDT-SWAP on OKX,
+// COPPER as XCU-USDT-SWAP). Derived from live OKX instruments probe
+// (TRADFI-SYMBOL-ALIAS-W1, 2026-05-15). Symmetric reverse-map in fromOKXInstId.
+const TRADFI_ALIASES: Record<string, string> = {
+  GOLD: 'XAU',
+  SILVER: 'XAG',
+  COPPER: 'XCU',
+  NATGAS: 'NG',
+  PLATINUM: 'XPT',
+  PALLADIUM: 'XPD',
+};
+
+export function toOKXInstId(coin: string): string {
+  const mapped = TRADFI_ALIASES[coin] || coin;
+  return `${mapped}-USDT-SWAP`;
 }
 
-function fromOKXInstId(instId: string): string {
-  return instId.replace(/-USDT-SWAP$/, '');
+export function fromOKXInstId(instId: string): string {
+  const base = instId.replace(/-USDT-SWAP$/, '');
+  for (const [canon, native] of Object.entries(TRADFI_ALIASES)) {
+    if (native === base) return canon;
+  }
+  return base;
 }
 
 // ── Interval mapping ──

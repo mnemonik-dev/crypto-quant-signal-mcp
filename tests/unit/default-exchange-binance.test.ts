@@ -93,8 +93,8 @@ describe('CHANGE-DEFAULT-EXCHANGE-W1 canaries (post-1.11.0 invariants)', () => {
     expect(violations, violations.join('\n')).toEqual([]);
   });
 
-  it('package.json version is 1.11.0 (release coherent with this wave)', () => {
+  it('package.json version is in the 1.11.x minor (release coherent with this wave + future patches)', () => {
     const pkg = JSON.parse(read('package.json'));
-    expect(pkg.version).toBe('1.11.0');
+    expect(pkg.version).toMatch(/^1\.11\.\d+$/);
   });
 });
