@@ -1828,6 +1828,47 @@ function normalizeApostrophes(html) {
   return html.replace(/&#x27;/g, "'");
 }
 
+// DESIGN-HOW-IT-WORKS-FF-3 (2026-05-15): Mr.1 directive — swap HeroDiagram chips from
+// 16×16 colored-text badges (BN/HL/BY/OK/BG monogram on tone bg) to 32×32 logo tiles
+// matching the landing-page hero exactly (same shape + size + dark bg as the V0Diagram
+// chips processed via w7HeroDiagramChipsToLogos). Inner image 26×26 with object-fit:contain.
+// Also widens the chip wrapper from 110→132 (desktop) to fit "Hyperliquid" alongside the
+// larger badge; mobile keeps 84px width (renders 2-letter code, not full name).
+// Logo assets: landing/_design/logos/{binance,bybit,hyperliquid,okx,bitget}.png — already
+// shipped via deploy.yml's `cp -r landing/_design/*` block (no new asset additions).
+function applyHowItWorksHeroChipsToLogos(html) {
+  const logoMap = {
+    'BN': { src: '/_design/logos/binance.png',     alt: 'Binance logo' },
+    'HL': { src: '/_design/logos/hyperliquid.png', alt: 'Hyperliquid logo' },
+    'BY': { src: '/_design/logos/bybit.png',       alt: 'Bybit logo' },
+    'OK': { src: '/_design/logos/okx.png',         alt: 'OKX logo' },
+    'BG': { src: '/_design/logos/bitget.png',      alt: 'Bitget logo' },
+  };
+  // 1. Swap the inner colored 16×16 badge → 32×32 dark tile with logo image
+  //    Anchor on the exact rendered span markup (5 chips × 2 artboards = 10 hits).
+  html = html.replace(
+    /<span style="width:16px;height:16px;border-radius:4px;background:#[0-9A-Fa-f]{6};color:#0a0a0a;display:grid;place-items:center;font-weight:700;font-size:9px">(BN|HL|BY|OK|BG)<\/span>/g,
+    (match, code) => {
+      const cfg = logoMap[code];
+      if (!cfg) return match;
+      // Match landing-page chip pattern: 32×32 outer (rounded 7px, dark bg, thin border),
+      // 26×26 inner image (object-fit:contain, 2px padding) — same dimensions as the
+      // V0Diagram chips processed via w7HeroDiagramChipsToLogos.
+      return `<span style="width:32px;height:32px;border-radius:7px;background:oklch(0.13 0.012 265);border:1px solid oklch(0.34 0.012 265);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">` +
+        `<img src="${cfg.src}" alt="${cfg.alt}" style="width:26px;height:26px;object-fit:contain;padding:2px">` +
+      `</span>`;
+    }
+  );
+  // 2. Widen the chip wrapper from width:110 → 132 on desktop to fit "Hyperliquid"
+  //    alongside the larger 32×32 badge. Mobile width:84 stays (renders 2-letter code).
+  //    Anchor on the unique JSX-rendered desktop chip wrapper signature: the desktop chips
+  //    use width:110px (mobile uses 84px). Replace `;width:110px` literally — appears 5×
+  //    only in the HeroDiagram chips (other 110px occurrences would not have this exact
+  //    trailing form). Audit confirmed 5 hits = 5 desktop chips.
+  html = html.replaceAll(';color:oklch(0.78 0.008 265);width:110px', ';color:oklch(0.78 0.008 265);width:132px');
+  return html;
+}
+
 // Strip mobile-artboard duplicate section IDs (HTML id-uniqueness — same pattern as
 // DESIGN-W7-FF + DESIGN-W9 mobile-id strip). Only the HeroSection in v1-howitworks.jsx
 // has an id (`id="how-it-works"` at line 366); all other sections use data-screen-label
@@ -1961,6 +2002,7 @@ function applyHowItWorksOverrides(html, isDesktop) {
   html = applyHowItWorksGroupEFaqA2(html);     // R2.E: FAQ A2 "across 720+ assets"
   html = applyHowItWorksCTAs(html);            // R3: CTA href rewrites
   html = applyHowItWorksSignalToCall(html);    // FF-1 carry-forward: public-facing prose signal→call
+  html = applyHowItWorksHeroChipsToLogos(html);// FF-3 (2026-05-15): hero chips 16×16 monogram → 32×32 logo tile (matches landing)
   html = applyHowItWorksFlywheelHydration(html, isDesktop); // FF-1 (2026-05-14): client-side flywheel cycling
   html = applyHowItWorksExternalLinkRel(html); // R6: external-link rel discipline
   html = normalizeApostrophes(html);           // React-SSR &#x27; → ' for SEO + test-grep portability
