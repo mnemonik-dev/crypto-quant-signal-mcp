@@ -1,0 +1,17 @@
+[Unit]
+Description=AlgoVault — evaluate-venues daily promotion-decision cron
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+# EXCHANGE-SHADOW-PROMOTE-W1 / C3. Runs daily at 06:00 UTC via
+# evaluate-venues.timer. Reads shadow venues + signals stats, decides
+# promote/extend/manual_required, fires Telegram alert per transition.
+# Idempotent — safe to fire manually for one-off ops.
+Type=oneshot
+User=root
+WorkingDirectory=/opt/crypto-quant-signal-mcp
+EnvironmentFile=/opt/crypto-quant-signal-mcp/.env
+ExecStart=/usr/bin/docker exec crypto-quant-signal-mcp-mcp-server-1 node dist/scripts/evaluate-venues.js
+StandardOutput=append:/var/log/algovault-evaluate-venues.log
+StandardError=append:/var/log/algovault-evaluate-venues.log

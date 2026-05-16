@@ -50,3 +50,58 @@ export async function sendDigest(sections: string[]): Promise<boolean> {
   if (!isConfigured()) return false;
   return post(sections.join('\n\n'));
 }
+
+// ── Venue lifecycle alerts (EXCHANGE-SHADOW-PROMOTE-W1 / C3) ──
+
+export interface VenueStatusChangeAlert {
+  venue: string;
+  action: 'promoted' | 'extended' | 'manual_required';
+  pfe_wr: number | null;
+  buy_sell_count: number;
+  min_buy_sell_sample: number;
+  days_since: number;
+  extension_count: number;
+}
+
+const ACTION_EMOJI: Record<VenueStatusChangeAlert['action'], string> = {
+  promoted: '🟢',
+  extended: '🟡',
+  manual_required: '🔴',
+};
+
+const ACTION_TITLE: Record<VenueStatusChangeAlert['action'], string> = {
+  promoted: 'Venue PROMOTED',
+  extended: 'Venue auto-EXTENDED (day-15 miss)',
+  manual_required: 'Venue MANUAL DECISION REQUIRED (day-30, 2nd miss)',
+};
+
+/**
+ * Fire a structured Telegram alert for a venue lifecycle transition. Reuses
+ * the existing TELEGRAM_CHAT_ID env var (single chat — alert routing
+ * distinguished by emoji + action title in the message body, not by separate
+ * chat). Silently no-ops in dev/test where the bot token isn't configured.
+ */
+export async function sendVenueStatusChange(payload: VenueStatusChangeAlert): Promise<boolean> {
+  if (!isConfigured()) return false;
+
+  const emoji = ACTION_EMOJI[payload.action];
+  const title = ACTION_TITLE[payload.action];
+  const wr = payload.pfe_wr === null ? 'n/a (no Phase-E outcomes yet)' : `${(payload.pfe_wr * 100).toFixed(1)}%`;
+  const sample = `${payload.buy_sell_count} / ${payload.min_buy_sell_sample}`;
+
+  const lines = [
+    `${emoji} *${title}: ${payload.venue}*`,
+    ``,
+    `PFE Win Rate: ${wr}`,
+    `BUY+SELL sample: ${sample}`,
+    `Days since integration: ${payload.days_since}`,
+    `Extensions used: ${payload.extension_count} / 2`,
+  ];
+
+  if (payload.action === 'manual_required') {
+    lines.push(``);
+    lines.push(`Action required: reply PROMOTE | RETIRE | EXTEND_AGAIN`);
+  }
+
+  return post(lines.join('\n'));
+}
