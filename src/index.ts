@@ -38,6 +38,7 @@ import {
   validateApiKey,
 } from './lib/stripe.js';
 import { UpstreamRateLimitError, EXCHANGE_FALLBACKS, TradFiSymbolUnsupportedOnVenueError } from './lib/errors.js';
+import { listVenues } from './lib/venue-store.js';
 import { checkBotInternalAuth } from './lib/bot-auth.js';
 import { getWelcomePageHtml } from './lib/welcome-page.js';
 
@@ -112,7 +113,7 @@ function createServer(): McpServer {
     coin: z.string().max(20).describe("Asset symbol, e.g. 'ETH', 'BTC', 'SOL'"),
     timeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d']).default('15m').describe('Candle timeframe. 1m/3m for HFT scalping, 5m/15m for intraday agents (most popular), 30m/1h/2h for swing, 4h/8h/12h/1d for position trading. Free tier: all 11 timeframes available, 100 calls/month.'),
     includeReasoning: z.boolean().default(true).describe('Include human-readable reasoning'),
-    exchange: z.enum(['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']).default('BINANCE').describe("Exchange to analyze. 'BINANCE' = Binance USDT-M Futures (default), 'HL' = Hyperliquid, 'BYBIT' = Bybit Linear, 'OKX' = OKX Swap, 'BITGET' = Bitget USDT-M. Asset availability varies per venue — pass exchange explicitly to target a specific venue."),
+    exchange: z.enum(['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']).default('BINANCE').describe("Exchange to analyze. 'BINANCE' = Binance USDT-M Futures (default), 'HL' = Hyperliquid, 'BYBIT' = Bybit Linear, 'OKX' = OKX Swap, 'BITGET' = Bitget USDT-M. Shadow venues (experimental, not yet on public dashboard) require explicit exchange param; query the mcp://algovault/venues resource for the live per-venue status table. Asset availability varies per venue — pass exchange explicitly to target a specific venue."),
   };
   function makeTradeCallHandler(toolNameForAnalytics: 'get_trade_call' | 'get_trade_signal') {
     return async ({ coin, timeframe, includeReasoning, exchange }: { coin: string; timeframe: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '2h' | '4h' | '8h' | '12h' | '1d'; includeReasoning: boolean; exchange: 'HL' | 'BINANCE' | 'BYBIT' | 'OKX' | 'BITGET' }) => {
@@ -215,7 +216,7 @@ function createServer(): McpServer {
     {
       coin: z.string().max(20).describe("Asset symbol, e.g. 'BTC', 'ETH', 'SOL'"),
       timeframe: z.enum(['1h', '4h', '1d']).default('4h').describe('Candle timeframe'),
-      exchange: z.enum(['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']).default('HL').describe("Exchange to analyze. 'HL' = Hyperliquid (default), 'BINANCE' = Binance USDT-M Futures, 'BYBIT' = Bybit Linear, 'OKX' = OKX Swap, 'BITGET' = Bitget USDT-M."),
+      exchange: z.enum(['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']).default('HL').describe("Exchange to analyze. 'HL' = Hyperliquid (default), 'BINANCE' = Binance USDT-M Futures, 'BYBIT' = Bybit Linear, 'OKX' = OKX Swap, 'BITGET' = Bitget USDT-M. Shadow venues (experimental, not yet on public dashboard) require explicit exchange param; query the mcp://algovault/venues resource for the live per-venue status table."),
     },
     { readOnlyHint: true, openWorldHint: true },
     async ({ coin, timeframe, exchange }) => {
@@ -353,6 +354,56 @@ function createServer(): McpServer {
           uri: uri.href,
           text: JSON.stringify(body, null, 2),
           mimeType: 'application/json',
+        }],
+      };
+    }
+  );
+
+  // ── Resource: venues (EXCHANGE-SHADOW-PROMOTE-W1 / C2) ──
+  // Live per-venue lifecycle status table. PUBLIC — exposes the same
+  // information surfaced via /api/performance-shadow (C4) but in MCP-resource
+  // form so agents can self-discover supported venues + their experimental/
+  // production state. Sortable enumeration:
+  //   - status='promoted': production-grade; appear in /api/performance-public
+  //   - status='shadow': experimental; opt-in via explicit exchange param;
+  //     NOT yet on dashboard; auto-promote when ≥80% PFE WR over
+  //     asset_count×10 BUY/SELL signals (HOLDs excluded).
+  //   - status='retired': terminal; do NOT route new traffic here.
+  server.resource(
+    'venues',
+    'mcp://algovault/venues',
+    {
+      description: "Per-venue lifecycle state machine: shadow / promoted / retired. Each venue carries asset_count, min_buy_sell_sample, integration timestamp, and last evaluation stats. New venues default to 'shadow' (experimental — not yet on the public /track-record dashboard) and auto-promote via daily cron when PFE WR ≥0.80 over asset_count×10 BUY/SELL signals (HOLDs excluded). Agents querying with a shadow venue's exchange_id should surface an 'experimental' caveat to the end user.",
+      mimeType: 'application/json',
+    },
+    async () => {
+      const venues = await listVenues();
+      const body = {
+        _algovault: {
+          tool: 'venues',
+          version: PKG_VERSION,
+          ts: new Date().toISOString(),
+        },
+        venues: venues.map(v => ({
+          exchange_id: v.exchange_id,
+          status: v.status,
+          asset_count: v.asset_count,
+          min_buy_sell_sample: v.min_buy_sell_sample,
+          integrated_at: v.integrated_at,
+          promoted_at: v.promoted_at,
+          retired_at: v.retired_at,
+          extension_count: v.extension_count,
+          last_eval_at: v.last_eval_at,
+          last_eval_pfe_wr: v.last_eval_pfe_wr,
+          last_eval_buy_sell_count: v.last_eval_buy_sell_count,
+          notes: v.notes,
+        })),
+      };
+      return {
+        contents: [{
+          uri: 'mcp://algovault/venues',
+          mimeType: 'application/json',
+          text: JSON.stringify(body, null, 2),
         }],
       };
     }

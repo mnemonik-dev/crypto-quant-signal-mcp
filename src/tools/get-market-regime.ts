@@ -3,6 +3,7 @@ import { adx, atr, detectPriceStructure } from '../lib/indicators.js';
 import { getDexForCoin, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
 import { TradFiSymbolUnsupportedOnVenueError } from '../lib/errors.js';
+import { getVenueStatus } from '../lib/venue-shadow.js';
 import { trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import type { MarketRegimeResult, RegimeType, TrendStrength, CrossVenueFundingSentiment, AdxSlopeCategory, LicenseInfo, ExchangeId } from '../types.js';
@@ -199,11 +200,17 @@ export async function getMarketRegime(input: MarketRegimeInput): Promise<MarketR
   // Upgrade hint: only for free tier
   const upgradeHint = getUpgradeHint(license, { used: quota.used, total: quota.total });
 
+  // EXCHANGE-SHADOW-PROMOTE-W1 / C2: venue lifecycle status surfaced in every
+  // tool response envelope. See parallel comment in get-trade-call.ts.
+  const venueStatus = await getVenueStatus(exchange);
+
   const meta: MarketRegimeResult['_algovault'] = {
     version: PKG_VERSION,
     tool: 'get_market_regime',
     compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-backtest-mcp'],
     session_id: getRequestSessionId() ?? null,
+    exchange,
+    venue_status: venueStatus,
   };
   if (upgradeHint) meta.upgrade_hint = upgradeHint;
 

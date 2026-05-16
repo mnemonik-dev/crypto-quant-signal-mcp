@@ -6,6 +6,7 @@ import { hashSignal } from '../lib/merkle.js';
 import { getDexForCoin, classifyAsset, isMemeCoinLiquid, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
 import { TradFiSymbolUnsupportedOnVenueError } from '../lib/errors.js';
+import { getVenueStatus } from '../lib/venue-shadow.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import { getClosestTradeable, getTryNext } from '../lib/cross-asset-grid.js';
 import { trimToLeaderboardCell } from '../lib/leaderboard-cell.js';
@@ -373,11 +374,19 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
     ? getUpgradeHint(license, { used: quota.used, total: quota.total })
     : undefined;
 
+  // EXCHANGE-SHADOW-PROMOTE-W1 / C2: venue lifecycle status surfaced in every
+  // tool response envelope. `'promoted'` for the 5 production venues; `'shadow'`
+  // for experimental venues onboarded under the SHADOW-PROMOTE state machine.
+  // Defaults to `'promoted'` for unknown venues (backward-compat).
+  const venueStatus = await getVenueStatus(exchange);
+
   const meta: TradeCallResult['_algovault'] = {
     version: PKG_VERSION,
     tool: 'get_trade_call',
     compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-backtest-mcp'],
     session_id: getRequestSessionId() ?? null,
+    exchange,
+    venue_status: venueStatus,
   };
   if (upgradeHint) meta.upgrade_hint = upgradeHint;
 

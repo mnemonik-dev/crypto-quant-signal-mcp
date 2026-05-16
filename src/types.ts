@@ -94,6 +94,28 @@ export interface ExchangeAdapter {
 
 export type ExchangeId = 'HL' | 'BINANCE' | 'BYBIT' | 'OKX' | 'BITGET';
 
+// ── Venue lifecycle state machine (EXCHANGE-SHADOW-PROMOTE-W1 / C1) ──
+// New exchange integrations default to 'shadow', auto-promote via daily cron
+// when PFE WR ≥ 0.80 over `asset_count × 10` BUY/SELL signals (HOLDs excluded).
+// 'retired' is terminal — used by Mr.1 manual_required Telegram alert path
+// (day-30 second-miss). Source of truth: `venues` postgres table.
+export type VenueStatus = 'shadow' | 'promoted' | 'retired';
+
+export interface VenueRecord {
+  exchange_id: string;
+  status: VenueStatus;
+  asset_count: number;
+  min_buy_sell_sample: number;
+  integrated_at: string;          // ISO 8601 (Postgres TIMESTAMPTZ serialized)
+  promoted_at: string | null;
+  retired_at: string | null;
+  extension_count: number;        // 0, 1, or 2 (CHECK constraint on schema)
+  last_eval_at: string | null;
+  last_eval_pfe_wr: number | null;
+  last_eval_buy_sell_count: number | null;
+  notes: string | null;
+}
+
 // ── Signal Types ──
 
 export type SignalVerdict = 'BUY' | 'SELL' | 'HOLD';
@@ -123,6 +145,23 @@ export interface AlgoVaultMeta {
    * calls to the `agent_sessions` cohort table.
    */
   session_id?: string | null;
+  /**
+   * The CEX/DEX the request routed to. Added EXCHANGE-SHADOW-PROMOTE-W1 / C2
+   * (2026-05-16) to close the CHANGE-DEFAULT-EXCHANGE-W1 AC3 spec drift —
+   * agents need to know explicitly which venue served the call when the
+   * default-routing layer auto-picks.
+   */
+  exchange?: ExchangeId;
+  /**
+   * Lifecycle status of the venue at request time. `'promoted'` for the
+   * 5 production-grade venues (HL/BINANCE/BYBIT/OKX/BITGET); `'shadow'` for
+   * new venues integrated under the SHADOW-PROMOTE state machine that have
+   * not yet met the 80% PFE WR × asset_count×10 BUY/SELL gate. LLM agents
+   * SHOULD pattern-match on `venue_status === 'shadow'` to surface
+   * "experimental — not yet on public dashboard" caveats to the end-user.
+   * Added EXCHANGE-SHADOW-PROMOTE-W1 / C2.
+   */
+  venue_status?: VenueStatus;
 }
 
 // ── Cross-asset grid (v1.9.0 L2/L4 activation patch) ──
