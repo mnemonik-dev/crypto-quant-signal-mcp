@@ -12,6 +12,7 @@ import { BinanceAdapter } from './adapters/binance.js';
 import { BybitAdapter } from './adapters/bybit.js';
 import { OKXAdapter } from './adapters/okx.js';
 import { BitgetAdapter } from './adapters/bitget.js';
+import { AsterAdapter } from './adapters/aster.js';
 
 const adapters = new Map<ExchangeId, ExchangeAdapter>();
 
@@ -31,6 +32,9 @@ export function getAdapter(exchange?: ExchangeId): ExchangeAdapter {
         break;
       case 'BITGET':
         adapter = new BitgetAdapter();
+        break;
+      case 'ASTER':
+        adapter = new AsterAdapter();
         break;
       case 'HL':
       default:

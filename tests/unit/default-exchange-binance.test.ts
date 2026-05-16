@@ -30,7 +30,9 @@ describe('CHANGE-DEFAULT-EXCHANGE-W1 canaries (post-1.11.0 invariants)', () => {
   it('TRADE_CALL_SCHEMA.exchange Zod default = BINANCE (covers get_trade_call AND get_trade_signal)', () => {
     const src = read('src/index.ts');
     // The TRADE_CALL_SCHEMA line is single-source for both tool registrations.
-    const re = /exchange:\s*z\.enum\(\['HL',\s*'BINANCE',\s*'BYBIT',\s*'OKX',\s*'BITGET'\]\)\.default\('BINANCE'\)/;
+    // Enum widened in PILOT-ADAPTERS-W1 (ASTER added for shadow); regex must
+    // accept any trailing additions after the original 5 promoted venues.
+    const re = /exchange:\s*z\.enum\(\['HL',\s*'BINANCE',\s*'BYBIT',\s*'OKX',\s*'BITGET'(?:,\s*'[A-Z]+')*\]\)\.default\('BINANCE'\)/;
     const matches = src.match(new RegExp(re.source, 'g')) || [];
     // Exactly one match expected — the TRADE_CALL_SCHEMA. The get_market_regime
     // schema (separate registration) keeps its 'HL' default for this wave.
@@ -54,7 +56,7 @@ describe('CHANGE-DEFAULT-EXCHANGE-W1 canaries (post-1.11.0 invariants)', () => {
     // The CALL/SIGNAL schema lives at TRADE_CALL_SCHEMA (already covered above);
     // the get_market_regime registration has its own inline exchange Zod field.
     const regimeBlock = src.slice(src.indexOf("'get_market_regime'"));
-    expect(regimeBlock).toMatch(/exchange:\s*z\.enum\(\['HL',\s*'BINANCE',\s*'BYBIT',\s*'OKX',\s*'BITGET'\]\)\.default\('HL'\)/);
+    expect(regimeBlock).toMatch(/exchange:\s*z\.enum\(\['HL',\s*'BINANCE',\s*'BYBIT',\s*'OKX',\s*'BITGET'(?:,\s*'[A-Z]+')*\]\)\.default\('HL'\)/);
   });
 
   it('No public-surface file ships the "HL-only TradFi" claim', () => {

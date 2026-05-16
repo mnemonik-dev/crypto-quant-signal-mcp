@@ -46,6 +46,13 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   'BYBIT':   200,  // 50 req/sec
   'OKX':     150,  // 10 req/sec — keep margin
   'BITGET':  200,  // 20-50 req/sec
+  // PILOT-ADAPTERS-W1 / C1 (2026-05-16): ASTER added to ExchangeId union →
+  // Record<ExchangeId, number> requires the key. Conservative default 300ms.
+  // The seed loop below does NOT yet have an `if (exchanges.includes('ASTER'))`
+  // branch — ASTER is callable via explicit `get_trade_call({exchange:'ASTER'})`
+  // but won't auto-accumulate from this cron until follow-up wave extends
+  // the seed-loop branches. Tracked as PILOT-ADAPTERS-SEED-LOOP-W2 (deferred).
+  'ASTER':   300,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)
