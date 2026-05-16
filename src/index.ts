@@ -858,7 +858,29 @@ async function startHttp() {
             ),
           )
         : stats.byTimeframe;
-      const filteredStats = { ...stats, byTimeframe: filteredByTimeframe };
+      // EXCHANGE-SHADOW-PROMOTE-W1 / C4: filter `byExchange` to only
+      // `venues.status='promoted'` rows. Existing 5 venues all promoted
+      // post-C1 backfill → no behavior change at deploy. Shadow venues
+      // (when they exist post-C5) get their own /api/performance-shadow
+      // endpoint. Fail-open: if venue-store lookup throws, fall through
+      // to unfiltered byExchange so the public surface doesn't break on
+      // a venues-table outage.
+      let filteredByExchange = stats.byExchange;
+      let shadow_venue_count = 0;
+      try {
+        const promoted = await listVenues('promoted');
+        const shadow = await listVenues('shadow');
+        shadow_venue_count = shadow.length;
+        const promotedIds = new Set(promoted.map(v => v.exchange_id));
+        if (promotedIds.size > 0) {
+          filteredByExchange = Object.fromEntries(
+            Object.entries(stats.byExchange).filter(([ex]) => promotedIds.has(ex)),
+          );
+        }
+      } catch (err) {
+        console.error('[performance-public] venues filter failed (fail-open):', err instanceof Error ? err.message : err);
+      }
+      const filteredStats = { ...stats, byTimeframe: filteredByTimeframe, byExchange: filteredByExchange };
 
       res.json({
         ...filteredStats,
@@ -867,9 +889,51 @@ async function startHttp() {
         asset_count,
         exchange_count: EXCHANGE_COUNT,
         timeframe_count: TIMEFRAME_COUNT,
+        shadow_venue_count,
       });
     } catch (err) {
       res.status(500).json({ error: 'Failed to fetch performance stats' });
+    }
+  });
+
+  // ── /api/performance-shadow (EXCHANGE-SHADOW-PROMOTE-W1 / C4) ──
+  // Transparency endpoint for shadow venues — same per-venue stat shape as
+  // /api/performance-public.byExchange.<EX> but filtered to status='shadow'
+  // rows. Public, no auth. Adds lifecycle metadata (asset_count,
+  // min_buy_sell_sample, days_since_integration, extension_count,
+  // last_eval_*) so consumers can see how close each shadow venue is to
+  // promotion.
+  app.get('/api/performance-shadow', async (_req, res) => {
+    try {
+      const shadow = await listVenues('shadow');
+      const stats = shadow.length > 0 ? await getSignalPerformance() : null;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const venues = shadow.map(v => {
+        const integratedSec = Math.floor(new Date(v.integrated_at).getTime() / 1000);
+        const ex = stats?.byExchange?.[v.exchange_id] ?? null;
+        return {
+          exchange_id: v.exchange_id,
+          status: v.status,
+          asset_count: v.asset_count,
+          min_buy_sell_sample: v.min_buy_sell_sample,
+          integrated_at: v.integrated_at,
+          days_since_integration: Math.floor((nowSec - integratedSec) / 86400),
+          extension_count: v.extension_count,
+          last_eval_at: v.last_eval_at,
+          last_eval_pfe_wr: v.last_eval_pfe_wr,
+          last_eval_buy_sell_count: v.last_eval_buy_sell_count,
+          // Mirror the per-venue aggregate shape from byExchange (when stats
+          // include the venue; some shadow venues may not yet have signals).
+          current_buy_sell_count: ex?.count ?? 0,
+          current_pfe_wr: ex?.pfeWinRate ?? null,
+          byTimeframe: ex?.byTimeframe ?? {},
+          byTier: ex?.byTier ?? {},
+          byCallType: ex?.byCallType ?? {},
+        };
+      });
+      res.json({ venues, updated_at: new Date().toISOString() });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch shadow venue stats' });
     }
   });
 
@@ -1538,7 +1602,7 @@ tailwind.config = {
      (matches Cross-Venue ↔ On-Chain Verified visual gap per Mr.1 directive). -->
 <div class="space-y-2 mb-8">
   <h1 class="text-5xl sm:text-6xl font-semibold tracking-tight" style="color:var(--fg)">Live <span class="text-mint-400">Track Record</span></h1>
-  <p class="text-sm" style="color:var(--fg-3)">v<span data-tr-field="pkg_version">${PKG_VERSION}</span> &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges &middot; <span data-tr-field="asset_count">710</span>+ assets</p>
+  <p class="text-sm" style="color:var(--fg-3)">v<span data-tr-field="pkg_version">${PKG_VERSION}</span> &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> promoted exchanges &middot; <span data-tr-field="shadow_venue_count">0</span> shadow (experimental &mdash; see <a href="/api/performance-shadow" style="color:var(--mint);text-decoration:underline">/api/performance-shadow</a>) &middot; <span data-tr-field="asset_count">710</span>+ assets</p>
 </div>
 <div id="loading">Loading performance data...</div>
 <div id="content" style="display:none">
