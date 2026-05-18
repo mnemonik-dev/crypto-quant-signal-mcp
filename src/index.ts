@@ -81,6 +81,12 @@ import { getLLMProvider, type LLMProvider } from './lib/llm-provider.js';
 import { ChatEngine, type ChatResult } from './lib/chat-engine.js';
 import { ChatRateLimit, ensureChatUsageTable, type ChatTier } from './lib/chat-rate-limit.js';
 import { formatChatKnowledgeResponse } from './lib/chat-knowledge-formatter.js';
+// CHAT-USAGE-ANALYTICS-W1 (2026-05-18) — single recording middleware for both
+// chat surfaces (MCP tool + HTTP route). PII-safe (SHA256 hash + length only).
+// Cowork Q-4 Path B: persists provider name so LLM-PROVIDER-A/B-W1 + stub-key-
+// rotation visibility flow from day one.
+import { ensureChatAnalyticsSchema, recordChatEvent } from './lib/chat-analytics.js';
+import { getChatAnalyticsHtml } from './lib/chat-analytics-dashboard.js';
 
 /**
  * Format a thrown error into the MCP tool-content payload. v1.10.2: when the
@@ -431,12 +437,26 @@ function createServer(): McpServer {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
-        const { index, chatEngine, rateLimit } = await getChatStack();
+        const { index, chatEngine, rateLimit, llm } = await getChatStack();
         const tier = chatTierFor(license.tier);
         const quotaKey = chatQuotaApiKey(license.key, getRequestIpHash() ?? null);
         const check = await rateLimit.check(quotaKey, tier);
         if (!check.allowed) {
           const days = Math.max(1, Math.ceil((check.resetAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+          // CHAT-USAGE-ANALYTICS-W1: quota-exhausted recorded as event (errorCode, cost=0)
+          recordChatEvent({
+            apiKeyId: license.key,
+            apiKeyTier: tier,
+            surface: 'mcp_tool',
+            question,
+            answer: '',
+            citationsCount: 0,
+            model: model ?? 'claude-haiku-4-5-20251001',
+            provider: llm.name,
+            usage: { promptTokens: 0, completionTokens: 0 },
+            latencyMs: Date.now() - startMs,
+            errorCode: 'CHAT_QUOTA_EXHAUSTED',
+          });
           const payload = {
             code: 'CHAT_QUOTA_EXHAUSTED',
             message: `Monthly chat quota exhausted for tier ${tier} (${check.limit}/mo). Resets in ${days} day(s).`,
@@ -452,6 +472,19 @@ function createServer(): McpServer {
         await rateLimit.record(quotaKey, result.usage);
         const bundle = index.getBundle();
         const response = formatChatKnowledgeResponse(result, bundle, Math.max(0, check.remaining - 1));
+        // CHAT-USAGE-ANALYTICS-W1: record success event AFTER response built (fire-and-forget)
+        recordChatEvent({
+          apiKeyId: license.key,
+          apiKeyTier: tier,
+          surface: 'mcp_tool',
+          question,
+          answer: result.answer,
+          citationsCount: result.citations.length,
+          model: result.model,
+          provider: llm.name,
+          usage: result.usage,
+          latencyMs: Date.now() - startMs,
+        });
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'chat_knowledge',
@@ -1036,6 +1069,26 @@ async function startHttp() {
       }
     });
 
+    // CHAT-USAGE-ANALYTICS-W1 (2026-05-18): admin-only chat analytics dashboard.
+    // PII-safe (SHA256 hash + length only; no raw question text). Surfaces
+    // LLM-PROVIDER-A/B-W1 trigger status (≥100 queries/day × 7 consecutive
+    // days) and stub-provider banner alert (Cowork Q-4 Path B).
+    app.get('/admin/chat-analytics', async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).send('Unauthorized — add ?key=YOUR_ADMIN_KEY to the URL');
+      }
+      try {
+        const lookback = Math.max(1, Math.min(180, parseInt(String(req.query.days ?? '90'), 10) || 90));
+        const html = await getChatAnalyticsHtml({ lookbackDays: lookback });
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(html);
+      } catch (err) {
+        console.error(`[/admin/chat-analytics] internal error: ${err instanceof Error ? err.message : err}`);
+        res.status(500).send('Internal error rendering chat analytics dashboard');
+      }
+    });
+
     // Signal performance dashboard (admin-only)
     app.get('/performance-dashboard', (req, res) => {
       const key = req.query.key as string;
@@ -1388,6 +1441,11 @@ async function startHttp() {
   // Fire-and-forget DDL at server boot. Idempotent (CREATE TABLE IF NOT EXISTS).
   ensureChatUsageTable();
 
+  // ── CHAT-USAGE-ANALYTICS-W1 (2026-05-18): ensure chat_analytics_events + daily view ──
+  // Fire-and-forget DDL: table + 4 indexes + chat_analytics_daily view.
+  // Idempotent. Same pattern as ensureChatUsageTable.
+  ensureChatAnalyticsSchema();
+
   // ── AV-CHAT-MCP-W1 (C2, 2026-05-18): /api/search HTTP endpoint ──
   // BM25 lexical retrieval over the auto-generated KnowledgeBundle. Shape
   // contract: audits/search-knowledge-shape-snapshot-2026-05-18.json (6
@@ -1429,12 +1487,20 @@ async function startHttp() {
   // audits/chat-knowledge-shape-snapshot-2026-05-18.json (6 sections,
   // 6 error codes incl. CHAT_QUOTA_EXHAUSTED + INVALID_MODEL).
   app.post('/api/chat', express.json({ limit: '8kb' }), async (req, res) => {
+    const startMs = Date.now();
+    // CHAT-USAGE-ANALYTICS-W1: hoist for analytics fallback (validation errors fire before full ctx)
+    let _analyticsQuestion = '';
+    let _analyticsApiKey: string | null = null;
+    let _analyticsTier: ChatTier = 'free';
+    let _analyticsProvider: 'anthropic' | 'stub' | 'openai' | 'gemini' = 'anthropic';
+    let _analyticsModel = 'claude-haiku-4-5-20251001';
     try {
       const body = (req.body ?? {}) as { question?: unknown; model?: unknown };
       if (typeof body.question !== 'string') {
         return res.status(400).json({ code: 'INVALID_QUESTION', message: 'question field is required and must be a string' });
       }
       const question = body.question;
+      _analyticsQuestion = question;
       if (question.length < 5) {
         return res.status(400).json({ code: 'QUESTION_TOO_SHORT', message: 'question must be at least 5 characters' });
       }
@@ -1451,15 +1517,33 @@ async function startHttp() {
           });
         }
         model = body.model;
+        _analyticsModel = model;
       }
 
       const license = getRequestLicense();
-      const { index, chatEngine, rateLimit } = await getChatStack();
+      const { index, chatEngine, rateLimit, llm } = await getChatStack();
+      _analyticsProvider = llm.name;
       const tier = chatTierFor(license.tier);
+      _analyticsApiKey = license.key;
+      _analyticsTier = tier;
       const quotaKey = chatQuotaApiKey(license.key, getRequestIpHash() ?? null);
       const check = await rateLimit.check(quotaKey, tier);
       if (!check.allowed) {
         const days = Math.max(1, Math.ceil((check.resetAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+        // CHAT-USAGE-ANALYTICS-W1: quota-exhausted recorded as event
+        recordChatEvent({
+          apiKeyId: _analyticsApiKey,
+          apiKeyTier: tier,
+          surface: 'http_endpoint',
+          question,
+          answer: '',
+          citationsCount: 0,
+          model: _analyticsModel,
+          provider: _analyticsProvider,
+          usage: { promptTokens: 0, completionTokens: 0 },
+          latencyMs: Date.now() - startMs,
+          errorCode: 'CHAT_QUOTA_EXHAUSTED',
+        });
         return res.status(429).json({
           code: 'CHAT_QUOTA_EXHAUSTED',
           message: `Monthly chat quota exhausted for tier ${tier} (${check.limit}/mo). Resets in ${days} day(s).`,
@@ -1475,8 +1559,37 @@ async function startHttp() {
       const response = formatChatKnowledgeResponse(result, bundle, Math.max(0, check.remaining - 1));
       res.setHeader('Cache-Control', 'no-store');
       res.json(response);
+      // CHAT-USAGE-ANALYTICS-W1: record success AFTER res.json (fire-and-forget)
+      recordChatEvent({
+        apiKeyId: _analyticsApiKey,
+        apiKeyTier: tier,
+        surface: 'http_endpoint',
+        question,
+        answer: result.answer,
+        citationsCount: result.citations.length,
+        model: result.model,
+        provider: _analyticsProvider,
+        usage: result.usage,
+        latencyMs: Date.now() - startMs,
+      });
     } catch (err) {
       console.error(`[/api/chat] internal error: ${err instanceof Error ? err.message : err}`);
+      // CHAT-USAGE-ANALYTICS-W1: record internal-error event for observability
+      if (_analyticsQuestion) {
+        recordChatEvent({
+          apiKeyId: _analyticsApiKey,
+          apiKeyTier: _analyticsTier,
+          surface: 'http_endpoint',
+          question: _analyticsQuestion,
+          answer: '',
+          citationsCount: 0,
+          model: _analyticsModel,
+          provider: _analyticsProvider,
+          usage: { promptTokens: 0, completionTokens: 0 },
+          latencyMs: Date.now() - startMs,
+          errorCode: 'INTERNAL_ERROR',
+        });
+      }
       res.status(500).json({ code: 'INTERNAL_ERROR', message: 'chat engine path failed' });
     }
   });
