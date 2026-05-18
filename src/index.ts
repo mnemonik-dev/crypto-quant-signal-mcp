@@ -2067,7 +2067,16 @@ tailwind.config = {
      100% / 6 cols = 16.66% each. Cols: ID / Time / Tier / Asset / Timeframe /
      Exchange. table-layout:fixed preserves consistent column rendering across
      varying row content (e.g. "#93097" vs "#88150", "Hyperliquid" vs "OKX"). */
-  .recent-table { table-layout: fixed; max-width: none; width: 100%; }
+  /* DESIGN-W11-FF-CARD-BG part-3 (2026-05-15): recent-table bg override.
+     Global table-bg #161b22 + th-bg #0d1117 rules (above) were OVERRIDING
+     the canonical .tr-recent-calls-panel wrapper bg oklch(0.18 0.014 265
+     slash 0.5) inside the LATEST TRADE CALLS panel. Fix: make .recent-table
+     plus its th/td transparent so the canonical panel bg shows through.
+     Methodology tables unaffected (.methodology table has its own
+     background:transparent scoping). */
+  .recent-table { table-layout: fixed; max-width: none; width: 100%; background: transparent; border: none; }
+  .recent-table th, .recent-table td { background: transparent; }
+  .recent-table th { border-bottom: 1px solid var(--line); }
   .recent-table th:nth-child(1), .recent-table td:nth-child(1) { width: 16.66%; }
   .recent-table th:nth-child(2), .recent-table td:nth-child(2) { width: 16.66%; }
   .recent-table th:nth-child(3), .recent-table td:nth-child(3) { width: 16.66%; }
