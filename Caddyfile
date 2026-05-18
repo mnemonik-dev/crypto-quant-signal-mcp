@@ -72,6 +72,15 @@ algovault.com {
     handle /integrations {
         reverse_proxy localhost:3000
     }
+    # DOCS-INTEGRATION-H2-W1 (2026-05-18) — per-slug tutorial pages moved from
+    # /docs/integrations/<slug> to /integrations/<slug> (4 exchanges +
+    # 4 frameworks). Express serves the canonical path here. The old
+    # /docs/integrations/* handler above (proxied to Express) still receives
+    # requests and returns a 301 redirect to the new path for backward
+    # compatibility with any pre-2026-05-18 external link or indexed result.
+    handle /integrations/* {
+        reverse_proxy localhost:3000
+    }
     handle {
         root * /var/www/algovault
         try_files {path} {path}.html {path}/index.html

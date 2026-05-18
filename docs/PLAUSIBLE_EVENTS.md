@@ -55,12 +55,12 @@ For the `/skills` page CTAs, use `surface: 'skills_page'`.
 
 ### 4. `Integration View`
 
-**Where it fires:** Click on any of the 4 Use Cases cards on `/` (Binance/OKX/Bybit/Bitget) OR direct visit to any `/docs/integrations/*` mirror.
+**Where it fires:** Click on any of the 4 Use Cases cards on `/` (Binance/OKX/Bybit/Bitget) OR direct visit to any `/integrations/*` mirror.
 
 **Suggested data attributes:**
 
 ```html
-<a href="/docs/integrations/binance?utm_source=index&utm_medium=use-cases-card&utm_campaign=integration-binance"
+<a href="/integrations/binance?utm_source=index&utm_medium=use-cases-card&utm_campaign=integration-binance"
    onclick="plausible('Integration View', { props: { exchange: 'binance', source: 'use-cases-card' } })">
   ...
 </a>

@@ -29,7 +29,7 @@ const ROOT = resolve(__dirname, '..');
 const EXCHANGES = ['binance', 'okx', 'bybit', 'bitget'];
 // AI-AGENT-FRAMEWORK-TUTORIALS-W1 (2026-05-18): 4 framework integration mirrors
 // extend the same render pipeline. Same template — eyebrow shows `<slug> integration`,
-// canonical URL = /docs/integrations/<slug>, page title = AlgoVault × <Display>.
+// canonical URL = /integrations/<slug>, page title = AlgoVault × <Display>.
 const FRAMEWORKS = ['langchain', 'llamaindex', 'maf', 'crewai'];
 const ALL_TARGETS = [...EXCHANGES, ...FRAMEWORKS];
 
@@ -189,7 +189,7 @@ function techArticleSchema(exchange, display) {
   // SERP rich results in Aug 2023) with TechArticle, which IS rich-result
   // eligible. The HowTo was valid markup but produced "No items detected"
   // in Google's Rich Results Test — TechArticle resolves that.
-  const canonical = `https://algovault.com/docs/integrations/${exchange}`;
+  const canonical = `https://algovault.com/integrations/${exchange}`;
   return {
     "@context": "https://schema.org",
     "@type": "TechArticle",
@@ -210,7 +210,7 @@ function htmlShell(exchange, bodyHtml) {
   const title = pageTitle(exchange);
   const display = DISPLAY_NAMES[exchange] ?? (exchange.charAt(0).toUpperCase() + exchange.slice(1));
   const description = `Pair AlgoVault MCP's composite verdict with ${display}'s agent execution kit. Free testnet demo · ${SNAPSHOT_PFE_WR} PFE Win Rate · ${SNAPSHOT_SIGNAL_COUNT}+ calls · ${SNAPSHOT_BATCH_COUNT}+ Merkle-verified on-chain batches.`;
-  const canonical = `https://algovault.com/docs/integrations/${exchange}`;
+  const canonical = `https://algovault.com/integrations/${exchange}`;
   const techArticle = JSON.stringify(techArticleSchema(exchange, display), null, 2);
   return `<!DOCTYPE html>
 <html lang="en">

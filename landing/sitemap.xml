@@ -37,25 +37,25 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://algovault.com/docs/integrations/binance</loc>
+    <loc>https://algovault.com/integrations/binance</loc>
     <lastmod>2026-04-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://algovault.com/docs/integrations/okx</loc>
+    <loc>https://algovault.com/integrations/okx</loc>
     <lastmod>2026-04-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://algovault.com/docs/integrations/bybit</loc>
+    <loc>https://algovault.com/integrations/bybit</loc>
     <lastmod>2026-04-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://algovault.com/docs/integrations/bitget</loc>
+    <loc>https://algovault.com/integrations/bitget</loc>
     <lastmod>2026-04-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

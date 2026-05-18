@@ -805,22 +805,24 @@ async function startHttp() {
     res.json({ status: 'ok', server: 'crypto-quant-signal-mcp', version: PKG_VERSION, stripe: isStripeConfigured() });
   });
 
-  // ── Integration tutorial mirrors (INTEGRATIONS-W1 C6) ──
+  // ── Integration tutorial mirrors ──
   // Static HTML pre-rendered from algovault-skills/docs/integrations/<x>.md
   // by scripts/render-integrations.mjs. Allowlist-only: anything outside the
-  // 4-exchange set 404s (no path traversal risk; no fs lookups for unknown
-  // slugs). Caddy routes /docs/integrations/* here ahead of the static
-  // catch-all (see Caddyfile algovault.com block).
+  // 4-exchange + 4-framework set 404s (no path traversal risk; no fs lookups
+  // for unknown slugs). Caddy routes /integrations/* AND /docs/integrations/*
+  // here ahead of the static catch-all (see Caddyfile algovault.com block).
+  //
+  // Canonical path is /integrations/<slug>. The /docs/integrations/<slug>
+  // path was the original URL; it is preserved as a 301 redirect so any
+  // pre-2026-05-18 external link, npm-published README link, or indexed
+  // search-result keeps resolving (search-engine SEO juice + agent-builder
+  // clicks both inherit the new path).
   //
   // CJS-friendly path resolution (matches src/lib/pkg-version.ts pattern):
   // tsconfig targets CommonJS via Node16, so __dirname is available natively
   // and `import.meta.url` is forbidden. Read each mirror once at startup
   // into INTEGRATION_HTML so per-request overhead is a Map.get(), no fs hit.
   const INTEGRATION_EXCHANGES = ['binance', 'okx', 'bybit', 'bitget'] as const;
-  // AI-AGENT-FRAMEWORK-TUTORIALS-W1 (2026-05-18): 4 framework integration mirrors
-  // added to the allow-list. Same render pipeline (scripts/render-integrations.mjs);
-  // same Map-on-startup serving pattern. Slugs match the FRAMEWORKS array in the
-  // render script.
   const INTEGRATION_FRAMEWORKS = ['langchain', 'llamaindex', 'maf', 'crewai'] as const;
   const ALL_INTEGRATION_SLUGS = [...INTEGRATION_EXCHANGES, ...INTEGRATION_FRAMEWORKS];
   const INTEGRATION_HTML = new Map<string, string>();
@@ -835,14 +837,18 @@ async function startHttp() {
       }
     }
   }
-  app.get('/docs/integrations/:exchange', (req, res) => {
-    const exchange = (req.params.exchange || '').toLowerCase().replace(/\.html$/, '');
-    const html = INTEGRATION_HTML.get(exchange);
+  app.get('/integrations/:slug', (req, res) => {
+    const slug = (req.params.slug || '').toLowerCase().replace(/\.html$/, '');
+    const html = INTEGRATION_HTML.get(slug);
     if (!html) {
       return res.status(404).type('text/plain').send('Integration not found');
     }
     res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
     res.type('text/html').send(html);
+  });
+  app.get('/docs/integrations/:slug', (req, res) => {
+    const slug = (req.params.slug || '').toLowerCase().replace(/\.html$/, '');
+    return res.redirect(301, `/integrations/${slug}`);
   });
 
   // ── /skills page (WEBSITE-REFRESH-W1 C4) ──

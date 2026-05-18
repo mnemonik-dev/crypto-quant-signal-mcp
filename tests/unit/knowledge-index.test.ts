@@ -62,7 +62,7 @@ const FIXTURE_BUNDLE = {
       framework: 'langchain',
       title: 'AlgoVault × LangChain integration',
       content_markdown: 'Use MultiServerMCPClient to wire up tools.',
-      url: 'https://algovault.com/docs/integrations/langchain',
+      url: 'https://algovault.com/integrations/langchain',
     },
   ],
   examples: [],
@@ -127,7 +127,7 @@ describe('KnowledgeIndex (AV-CHAT-MCP-W1 C1)', () => {
     const integ = idx.getDoc('integration:langchain');
     expect(integ).toBeDefined();
     expect(integ!._source_type).toBe('integration');
-    expect(integ!._source_url).toBe('https://algovault.com/docs/integrations/langchain');
+    expect(integ!._source_url).toBe('https://algovault.com/integrations/langchain');
   });
 
   it('handles missing bundle file gracefully (empty index, no throw)', async () => {
