@@ -27,6 +27,11 @@ import MarkdownIt from 'markdown-it';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const EXCHANGES = ['binance', 'okx', 'bybit', 'bitget'];
+// AI-AGENT-FRAMEWORK-TUTORIALS-W1 (2026-05-18): 4 framework integration mirrors
+// extend the same render pipeline. Same template — eyebrow shows `<slug> integration`,
+// canonical URL = /docs/integrations/<slug>, page title = AlgoVault × <Display>.
+const FRAMEWORKS = ['langchain', 'llamaindex', 'maf', 'crewai'];
+const ALL_TARGETS = [...EXCHANGES, ...FRAMEWORKS];
 
 const args = process.argv.slice(2);
 const sourceArg = args[args.indexOf('--source') + 1];
@@ -46,12 +51,17 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Acronym-aware exchange display names (avoid auto-cap "OKX" → "Okx").
+// Acronym-aware target display names (avoid auto-cap "OKX" → "Okx").
 const DISPLAY_NAMES = {
   binance: 'Binance',
   okx: 'OKX',
   bybit: 'Bybit',
   bitget: 'Bitget',
+  // AI-AGENT-FRAMEWORK-TUTORIALS-W1 frameworks
+  langchain: 'LangChain',
+  llamaindex: 'LlamaIndex',
+  maf: 'Microsoft Agent Framework',
+  crewai: 'CrewAI',
 };
 
 // DESIGN-W10 / C3 (2026-05-11): canonical Nav (8-item, post-W9 + post-W7-FF state)
@@ -353,10 +363,10 @@ async function main() {
   await mkdir(TARGET_DIR, { recursive: true });
   console.log(`[render] source=${SOURCE_DIR}`);
   console.log(`[render] target=${TARGET_DIR}`);
-  for (const ex of EXCHANGES) {
-    await renderOne(ex);
+  for (const slug of ALL_TARGETS) {
+    await renderOne(slug);
   }
-  console.log(`[render] OK — ${EXCHANGES.length} HTML mirrors written`);
+  console.log(`[render] OK — ${ALL_TARGETS.length} HTML mirrors written (${EXCHANGES.length} exchanges + ${FRAMEWORKS.length} frameworks)`);
 }
 
 main().catch((err) => {

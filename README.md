@@ -1,4 +1,3 @@
-
 <p align="center">
   <a href="https://algovault.com">
     <img src="https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/logo.png" alt="AlgoVault" width="120" />
@@ -33,20 +32,14 @@
 
 ---
 
-## 📊 Live Track Record — Public, Verifiable, On-Chain
+## 📊 Live Track Record
 
 <p align="center">
-  <a href="https://algovault.com/track-record">
-    <img src="https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/docs/screenshots/track-record-2026-05-16.png" alt="AlgoVault Live Track Record — 90.5% PFE Win Rate across 92,995 trade calls, 36 Merkle batches anchored on Base L2" width="100%" />
-  </a>
+  <strong><span data-tr-field="pfe_wr">90.5%</span> PFE Win Rate</strong> · <strong><span data-tr-field="total_calls">96,898</span> trade calls</strong> · <strong><span data-tr-field="merkle_batches">38</span> on-chain batches</strong> · <strong><span data-tr-field="hold_rate">99%</span> HOLD rate</strong> <!-- SNAPSHOT-LINE -->
 </p>
 
 <p align="center">
-  <strong><span data-tr-field="pfe_wr">90.5%</span> PFE Win Rate</strong> · <strong><span data-tr-field="total_calls">92,995</span> trade calls</strong> · <strong><span data-tr-field="merkle_batches">36</span> on-chain batches</strong> · <strong><span data-tr-field="hold_rate">99%</span> HOLD rate</strong> <!-- SNAPSHOT-LINE -->
-</p>
-
-<p align="center">
-  Every call is hashed at emission, anchored on Base L2 daily, and re-evaluated against actual price action. We can't edit history. <em>Refetch live numbers any time at <a href="https://algovault.com/track-record">algovault.com/track-record</a> or <a href="https://api.algovault.com/api/performance-public">/api/performance-public</a>.</em>
+  Every call is hashed at emission and anchored on Base L2 daily. We can't edit history.
 </p>
 
 <p align="center">
@@ -85,27 +78,39 @@ AlgoVault MCP serves Streamable HTTP at `https://api.algovault.com/mcp` — MCP-
 
 MCP `tools/list` + `resources/list` is the API surface. No `@algovault/sdk`; the protocol is the contract.
 
+Building inside an agent framework? See the **Framework integrations** section below for drop-in tutorials.
+
 ---
 
-## What's new in v1.13.2
+## Framework integrations
 
-Live since 2026-05-16:
+Drop-in tutorials for the major Python agent frameworks. Each tutorial pairs AlgoVault MCP with the framework's canonical MCP-adapter library — copy-pasteable demo code, no AlgoVault SDK required.
 
-- **🎯 Tool descriptions rewritten for Anthropic Tool Search.** `get_trade_call`, `scan_funding_arb`, `get_market_regime` (plus the `get_trade_signal` alias) now rank cleanly under BOTH `tool_search_tool_regex_20251119` + `tool_search_tool_bm25_20251119`, which retrieve over `tools/list` name + description + arg-name + arg-description. Combined-text coverage hits ≥15 of 20 canonical search phrases AI-agent builders actually type. `get_market_regime` no longer claims "for a Hyperliquid perp" — description now reflects the actual 5-venue coverage. Zero schema mutation; same enum members, same defaults, same Zod constraints.
-- **Cache-refresh recommended.** MCP clients cache tools/list at session start. To pick up the refreshed tool descriptions — Claude.ai / Claude Desktop: toggle connector off+on. Cursor / Cline: restart MCP server connection.
+| Framework | Tutorial | Runnable demo | Mirror |
+|---|---|---|---|
+| **LangChain** | [`docs/integrations/langchain.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/langchain.md) | [`examples/langchain/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/langchain/demo.py) | [algovault.com/docs/integrations/langchain](https://algovault.com/docs/integrations/langchain) |
+| **LlamaIndex** | [`docs/integrations/llamaindex.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/llamaindex.md) | [`examples/llamaindex/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/llamaindex/demo.py) | [algovault.com/docs/integrations/llamaindex](https://algovault.com/docs/integrations/llamaindex) |
+| **Microsoft Agent Framework** | [`docs/integrations/maf.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/maf.md) | [`examples/maf/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/maf/demo.py) | [algovault.com/docs/integrations/maf](https://algovault.com/docs/integrations/maf) |
+| **CrewAI** | [`docs/integrations/crewai.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/crewai.md) | [`examples/crewai/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/crewai/demo.py) | [algovault.com/docs/integrations/crewai](https://algovault.com/docs/integrations/crewai) |
 
-### v1.13.0 highlights (recap)
+Each demo is runnable as `python examples/<framework>/demo.py BTC 4h` — gets a real BUY/SELL/HOLD verdict from `api.algovault.com/mcp`, prints it. ≤5 minutes to first call.
 
-- **🪪 ERC-8004 Verified Agent on Base.** AlgoVault MCP is now registered on the canonical ERC-8004 Identity Registry at [`0x8004A169...e539a432`](https://basescan.org/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432). Each call you make traces back to a portable, censorship-resistant agent identity on Base L2. Same on-chain track record, plus a verified agent handle that AI orchestrators can resolve. agentId [`44544`](https://basescan.org/token/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432?a=44544). Verify on Basescan.
-- **🔌 New `/api/erc-8004-reputation` endpoint.** Read-only JSON aggregator exposing agentId, identity registry address, registration timestamp, and Basescan link. Cached 5 minutes. Drop-in for any agent that wants to verify AlgoVault's on-chain handle programmatically. See `curl -s api.algovault.com/api/erc-8004-reputation | jq`.
-- **🧭 Attestation pipeline rolling out separately.** The per-call on-chain attestation flow is in active design. v1.13.0 ships the identity layer cleanly; reputation scoring lands once the canonical ValidationRegistry deployment on Base mainnet is finalized upstream.
+---
 
-### v1.12.0 highlights (recap)
+## What's new in v1.14.0
 
-- **🪐 DEX adapters added — Aster + edgeX (experimental).** AlgoVault now produces signals on 2 DEX venues in shadow phase. DEX signals are produced internally for validation; promotion to the public `get_trade_call` exchange parameter happens after the shadow cohort meets the same performance bar as the 5 CEX. Direct callers continue to target the 5 CEX (Binance / Hyperliquid / Bybit / OKX / Bitget).
-- **🏷️ Per-CEX TradFi symbol aliasing (v1.11.1).** `get_trade_call({coin:"GOLD", exchange:"BINANCE"})` now resolves to `XAUUSDT` natively. 4 CEX × 4-6 TradFi aliases (GOLD/SILVER/PLATINUM/PALLADIUM, plus COPPER/NATGAS on OKX). Unsupported venue + asset combinations return a structured `TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE` error with `suggested_venues` so agents can self-retry.
+Live since 2026-05-XX (target):
 
-> **Upgrading from v1.12.x or earlier?** The MCP tool surface is unchanged structurally — `get_trade_call`, `scan_funding_arb`, `get_market_regime` keep their parameter shapes. v1.13.0 only adds a new HTTP endpoint (`/api/erc-8004-reputation`) and a public-facing badge. MCP clients (Claude Desktop, Cursor, Cline) cache `tools/list` at session start — toggle the connector off/on to pick up the latest catalog metadata.
+- **🧩 Framework integrations live.** 4 drop-in tutorials shipped in [algovault-skills](https://github.com/AlgoVaultLabs/algovault-skills): LangChain, LlamaIndex, Microsoft Agent Framework, CrewAI. Each tutorial pairs AlgoVault MCP with the framework's canonical MCP-adapter library. Copy-pasteable demo code; no SDK required. See the [Framework integrations](#framework-integrations) section above.
+- **📦 Cross-linked from algovault-skills + signal-MCP READMEs.** Both repos surface the 4 tutorials so framework users discovering AlgoVault from either side find the right entry point.
+
+### v1.13.2 highlights (recap)
+
+- **🔎 Tool descriptions rewritten for retrieval ranking.** `get_trade_call`, `scan_funding_arb`, `get_market_regime` descriptions rewritten for Anthropic Tool Search (BM25 + regex retrieval over `tools/list`). Param `describe()` strings tightened. Zero schema mutation — same enum members, same defaults, same Zod constraints. Pure prose payload change.
+- **🪪 ERC-8004 Verified Agent on Base.** AlgoVault MCP is registered on the canonical ERC-8004 Identity Registry at [`0x8004A169...e539a432`](https://basescan.org/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432). Each call traces back to a portable, censorship-resistant agent identity on Base L2. agentId [`44544`](https://basescan.org/token/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432?a=44544) on Basescan. Same on-chain track record; new verified agent handle that AI orchestrators can resolve.
+- **🔌 `/api/erc-8004-reputation` endpoint.** Read-only JSON aggregator exposing agentId, identity registry address, registration timestamp, and Basescan link. Cached 5 minutes. `curl -s api.algovault.com/api/erc-8004-reputation | jq`.
+
+> **Upgrading from v1.13.x or earlier?** The MCP tool surface is unchanged structurally — `get_trade_call`, `scan_funding_arb`, `get_market_regime` keep their parameter shapes. v1.14.0 only adds the Framework integrations cross-links; no tool schema change. If you upgraded across v1.13.2 you already picked up the refreshed tool descriptions — MCP clients cache `tools/list` at session start, so toggle the connector off/on if you haven't restarted since v1.13.2.
 
 ---
 
@@ -122,6 +127,7 @@ AlgoVault is different. We give your agent **one answer**: a directional verdict
 - **Cross-venue intelligence.** Full signal generation on 5 exchanges with native candle, OI, funding, and volume data per venue. 2 DEX venues (Aster, edgeX) in experimental shadow phase. Cross-venue funding arbitrage scanning across the major CEX — nobody else does multi-exchange derivatives analysis via MCP. <!-- SNAPSHOT-LINE -->
 - **Published track record with every release.** Every call is recorded with outcome prices at multiple horizons. PFE Win Rate, Profit Factor, Expected Value computed continuously. No cherry-picking, no survivorship bias. **Anchored on-chain on Base L2 — we cannot rewrite history.**
 - **ERC-8004 verified agent.** AlgoVault MCP holds a registered agentId on the Base L2 Identity Registry. The agent identity is portable and on-chain.
+- **Drop-in for every major agent framework.** First-party tutorials + runnable demos for LangChain, LlamaIndex, Microsoft Agent Framework, CrewAI. ≤5 minutes to first call. See the [Framework integrations](#framework-integrations) section.
 - **Self-tuning model.** Indicator weights are tuned from live outcome data by our [Autonomous Optimization Engine](https://algovault.com/how-it-works). The model gets sharper with every signal.
 - **Crypto + TradFi coverage.** 730+ assets — standard crypto perps on all 5 CEX; TradFi perps (stocks, indices, commodities, FX); liquidity-filtered meme coins. <!-- SNAPSHOT-LINE -->
 
@@ -198,7 +204,7 @@ Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also
     { "coin": "SOL", "timeframe": "15m", "confidence": 73 }
   ],
   "_algovault": {
-    "version": "1.13.1",
+    "version": "1.14.0",
     "tool": "get_trade_call",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }

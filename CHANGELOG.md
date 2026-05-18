@@ -5,6 +5,26 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-05-18 — Framework integrations live: LangChain · LlamaIndex · Microsoft Agent Framework · CrewAI
+
+### Added — README cross-links to 4 framework tutorials
+
+- **`README.md` overhauled from `NPM-readme-DRAFT.md` SoT.** New Framework integrations subsection mirroring the existing exchange-integrations pattern. 4-row table linking the [algovault-skills](https://github.com/AlgoVaultLabs/algovault-skills) tutorials:
+  - **LangChain** — [`docs/integrations/langchain.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/langchain.md) (pairs with `langchain-mcp-adapters` 0.2.2)
+  - **LlamaIndex** — [`docs/integrations/llamaindex.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/llamaindex.md) (pairs with `llama-index-tools-mcp` 0.4.8)
+  - **Microsoft Agent Framework** — [`docs/integrations/maf.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/maf.md) (pairs with `agent-framework` 1.4.0)
+  - **CrewAI** — [`docs/integrations/crewai.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/crewai.md) (pairs with `crewai` 1.14.4 + `crewai-tools[mcp]` 1.14.4)
+- **Landing-page mirrors at `/docs/integrations/{langchain,llamaindex,maf,crewai}`** — extended `scripts/render-integrations.mjs` with a `FRAMEWORKS` array so the same Tailwind navy/mint canonical-chrome wrap that renders the 4 exchange mirrors now produces 4 framework mirrors alongside. Committed static HTML at `landing/integrations/{langchain,llamaindex,maf,crewai}.html`.
+- **Snapshot lines refreshed** from live API: PFE WR `90.4%` → `90.5%`; total calls `86,093` → `96,898`; Merkle batches `33` → `38`; asset count `720+` → `730+`.
+
+### Changed — README + landing mirrors only (no runtime change)
+
+- Pure README + landing-mirror release. **Zero tool schema mutation** — no parameter changes, no enum changes, no default changes. MCP clients that have already picked up the v1.13.2 tool-description refresh need no further cache invalidation.
+
+### Why a minor (not patch)
+
+- Framework integrations are a NEW public capability surface cross-linked from the npm registry README. Additive, non-breaking. Minor bump per SemVer + per project release ritual (4 marketing artifacts on framework-grade releases).
+
 ## [1.13.2] - 2026-05-16 — Tool descriptions rewritten for BM25 + regex retrieval ranking
 
 ### Changed — `tools/list` description copy (no behavior change)
