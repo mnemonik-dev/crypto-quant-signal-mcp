@@ -5,6 +5,17 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - 2026-05-18
+
+### Added
+- Chat usage analytics (admin-gated `/admin/chat-analytics` dashboard) with weekly Telegram digest.
+
+### Fixed
+- Track-record dashboard: LATEST TRADE CALLS panel now matches surrounding card surfaces (visual unification).
+
+### Distribution
+- npm registry catches up from v1.14.0 (v1.15.0 was published to GitHub + MCP Registry but skipped npm; v1.15.1 publishes to all surfaces simultaneously).
+
 ## [1.15.0] - 2026-05-18 — v1.15.0 — `search_knowledge` + `chat_knowledge` MCP tools (AV-CHAT-MCP-W1)
 
 ### Added — two new MCP tools indexed automatically from the v1.14.1 KnowledgeBundle
