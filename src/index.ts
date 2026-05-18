@@ -81,12 +81,6 @@ import { getLLMProvider, type LLMProvider } from './lib/llm-provider.js';
 import { ChatEngine, type ChatResult } from './lib/chat-engine.js';
 import { ChatRateLimit, ensureChatUsageTable, type ChatTier } from './lib/chat-rate-limit.js';
 import { formatChatKnowledgeResponse } from './lib/chat-knowledge-formatter.js';
-// CHAT-USAGE-ANALYTICS-W1 (2026-05-18) — single recording middleware for both
-// chat surfaces (MCP tool + HTTP route). PII-safe (SHA256 hash + length only).
-// Cowork Q-4 Path B: persists provider name so LLM-PROVIDER-A/B-W1 + stub-key-
-// rotation visibility flow from day one.
-import { ensureChatAnalyticsSchema, recordChatEvent } from './lib/chat-analytics.js';
-import { getChatAnalyticsHtml } from './lib/chat-analytics-dashboard.js';
 
 /**
  * Format a thrown error into the MCP tool-content payload. v1.10.2: when the
@@ -437,27 +431,12 @@ function createServer(): McpServer {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
-        const { index, chatEngine, rateLimit, llm } = await getChatStack();
+        const { index, chatEngine, rateLimit } = await getChatStack();
         const tier = chatTierFor(license.tier);
         const quotaKey = chatQuotaApiKey(license.key, getRequestIpHash() ?? null);
         const check = await rateLimit.check(quotaKey, tier);
         if (!check.allowed) {
           const days = Math.max(1, Math.ceil((check.resetAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
-          // CHAT-USAGE-ANALYTICS-W1: record quota-exhausted as an event too
-          // (errorCode populated, prompt_tokens=0, cost=0; useful for tier-pricing analytics).
-          recordChatEvent({
-            apiKeyId: license.key,
-            apiKeyTier: tier,
-            surface: 'mcp_tool',
-            question,
-            answer: '',
-            citationsCount: 0,
-            model: model ?? 'claude-haiku-4-5-20251001',
-            provider: llm.name,
-            usage: { promptTokens: 0, completionTokens: 0 },
-            latencyMs: Date.now() - startMs,
-            errorCode: 'CHAT_QUOTA_EXHAUSTED',
-          });
           const payload = {
             code: 'CHAT_QUOTA_EXHAUSTED',
             message: `Monthly chat quota exhausted for tier ${tier} (${check.limit}/mo). Resets in ${days} day(s).`,
@@ -473,20 +452,6 @@ function createServer(): McpServer {
         await rateLimit.record(quotaKey, result.usage);
         const bundle = index.getBundle();
         const response = formatChatKnowledgeResponse(result, bundle, Math.max(0, check.remaining - 1));
-        // CHAT-USAGE-ANALYTICS-W1: record success event AFTER response built
-        // (fire-and-forget; never blocks return).
-        recordChatEvent({
-          apiKeyId: license.key,
-          apiKeyTier: tier,
-          surface: 'mcp_tool',
-          question,
-          answer: result.answer,
-          citationsCount: result.citations.length,
-          model: result.model,
-          provider: llm.name,
-          usage: result.usage,
-          latencyMs: Date.now() - startMs,
-        });
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'chat_knowledge',
@@ -1071,26 +1036,6 @@ async function startHttp() {
       }
     });
 
-    // CHAT-USAGE-ANALYTICS-W1 (2026-05-18): admin-only chat analytics dashboard.
-    // PII-safe (SHA256 hash + length only; no raw question text). Surfaces
-    // LLM-PROVIDER-A/B-W1 trigger status (≥100 queries/day × 7 consecutive
-    // days) and stub-provider banner alert (Cowork Q-4 Path B).
-    app.get('/admin/chat-analytics', async (req, res) => {
-      if (!isAdminAuthorized(req)) {
-        return res.status(401).send('Unauthorized — add ?key=YOUR_ADMIN_KEY to the URL');
-      }
-      try {
-        const lookback = Math.max(1, Math.min(180, parseInt(String(req.query.days ?? '90'), 10) || 90));
-        const html = await getChatAnalyticsHtml({ lookbackDays: lookback });
-        res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(html);
-      } catch (err) {
-        console.error(`[/admin/chat-analytics] internal error: ${err instanceof Error ? err.message : err}`);
-        res.status(500).send('Internal error rendering chat analytics dashboard');
-      }
-    });
-
     // Signal performance dashboard (admin-only)
     app.get('/performance-dashboard', (req, res) => {
       const key = req.query.key as string;
@@ -1443,11 +1388,6 @@ async function startHttp() {
   // Fire-and-forget DDL at server boot. Idempotent (CREATE TABLE IF NOT EXISTS).
   ensureChatUsageTable();
 
-  // ── CHAT-USAGE-ANALYTICS-W1 (2026-05-18): ensure chat_analytics_events + daily view ──
-  // Fire-and-forget DDL: table + 4 indexes + chat_analytics_daily view.
-  // Idempotent. Same pattern as ensureChatUsageTable.
-  ensureChatAnalyticsSchema();
-
   // ── AV-CHAT-MCP-W1 (C2, 2026-05-18): /api/search HTTP endpoint ──
   // BM25 lexical retrieval over the auto-generated KnowledgeBundle. Shape
   // contract: audits/search-knowledge-shape-snapshot-2026-05-18.json (6
@@ -1489,20 +1429,12 @@ async function startHttp() {
   // audits/chat-knowledge-shape-snapshot-2026-05-18.json (6 sections,
   // 6 error codes incl. CHAT_QUOTA_EXHAUSTED + INVALID_MODEL).
   app.post('/api/chat', express.json({ limit: '8kb' }), async (req, res) => {
-    const startMs = Date.now();
-    // Hoist for analytics fallback paths (validation errors fire without question access).
-    let _analyticsQuestion = '';
-    let _analyticsApiKey: string | null = null;
-    let _analyticsTier: ChatTier = 'free';
-    let _analyticsProvider: 'anthropic' | 'stub' | 'openai' | 'gemini' = 'anthropic';
-    let _analyticsModel = 'claude-haiku-4-5-20251001';
     try {
       const body = (req.body ?? {}) as { question?: unknown; model?: unknown };
       if (typeof body.question !== 'string') {
         return res.status(400).json({ code: 'INVALID_QUESTION', message: 'question field is required and must be a string' });
       }
       const question = body.question;
-      _analyticsQuestion = question;
       if (question.length < 5) {
         return res.status(400).json({ code: 'QUESTION_TOO_SHORT', message: 'question must be at least 5 characters' });
       }
@@ -1519,33 +1451,15 @@ async function startHttp() {
           });
         }
         model = body.model;
-        _analyticsModel = model;
       }
 
       const license = getRequestLicense();
-      const { index, chatEngine, rateLimit, llm } = await getChatStack();
-      _analyticsProvider = llm.name;
+      const { index, chatEngine, rateLimit } = await getChatStack();
       const tier = chatTierFor(license.tier);
-      _analyticsApiKey = license.key;
-      _analyticsTier = tier;
       const quotaKey = chatQuotaApiKey(license.key, getRequestIpHash() ?? null);
       const check = await rateLimit.check(quotaKey, tier);
       if (!check.allowed) {
         const days = Math.max(1, Math.ceil((check.resetAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
-        // CHAT-USAGE-ANALYTICS-W1: quota-exhausted recorded as event
-        recordChatEvent({
-          apiKeyId: _analyticsApiKey,
-          apiKeyTier: tier,
-          surface: 'http_endpoint',
-          question,
-          answer: '',
-          citationsCount: 0,
-          model: _analyticsModel,
-          provider: _analyticsProvider,
-          usage: { promptTokens: 0, completionTokens: 0 },
-          latencyMs: Date.now() - startMs,
-          errorCode: 'CHAT_QUOTA_EXHAUSTED',
-        });
         return res.status(429).json({
           code: 'CHAT_QUOTA_EXHAUSTED',
           message: `Monthly chat quota exhausted for tier ${tier} (${check.limit}/mo). Resets in ${days} day(s).`,
@@ -1561,37 +1475,8 @@ async function startHttp() {
       const response = formatChatKnowledgeResponse(result, bundle, Math.max(0, check.remaining - 1));
       res.setHeader('Cache-Control', 'no-store');
       res.json(response);
-      // CHAT-USAGE-ANALYTICS-W1: record success AFTER res.json (fire-and-forget).
-      recordChatEvent({
-        apiKeyId: _analyticsApiKey,
-        apiKeyTier: tier,
-        surface: 'http_endpoint',
-        question,
-        answer: result.answer,
-        citationsCount: result.citations.length,
-        model: result.model,
-        provider: _analyticsProvider,
-        usage: result.usage,
-        latencyMs: Date.now() - startMs,
-      });
     } catch (err) {
       console.error(`[/api/chat] internal error: ${err instanceof Error ? err.message : err}`);
-      // CHAT-USAGE-ANALYTICS-W1: record internal-error event for observability.
-      if (_analyticsQuestion) {
-        recordChatEvent({
-          apiKeyId: _analyticsApiKey,
-          apiKeyTier: _analyticsTier,
-          surface: 'http_endpoint',
-          question: _analyticsQuestion,
-          answer: '',
-          citationsCount: 0,
-          model: _analyticsModel,
-          provider: _analyticsProvider,
-          usage: { promptTokens: 0, completionTokens: 0 },
-          latencyMs: Date.now() - startMs,
-          errorCode: 'INTERNAL_ERROR',
-        });
-      }
       res.status(500).json({ code: 'INTERNAL_ERROR', message: 'chat engine path failed' });
     }
   });
@@ -2000,12 +1885,7 @@ tailwind.config = {
   .call-type-verification-row .call-type-section { flex: 1; min-width: 0; }
   .call-type-verification-row .tamper-proof-card { flex: 0 0 340px; }
   @media (max-width: 768px) { .call-type-verification-row { flex-direction: column; } .call-type-verification-row .call-type-section, .call-type-verification-row .tamper-proof-card { width: 100%; flex: none; } }
-  /* DESIGN-W11-FF-CARD-BG (2026-05-15): bg + border unified to canonical
-     tier-stat-card / exchange-stat-card reference per Mr.1 directive. Was:
-     background:#161b22; border:1px solid #30363d. Now: canonical oklch +
-     var(--line). padding:18px kept (within ±4px of tier-stat 22 / exchange-
-     stat 20 — Q-CARDBG-4 tolerance). */
-  .card { background: oklch(0.18 0.014 265 / 0.5); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 18px; }
   .card .label { color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
   .card .value { font-size: 28px; font-weight: 700; color: #58a6ff; }
   .card .value.hero { font-size: 32px; }
@@ -2019,20 +1899,12 @@ tailwind.config = {
   th { color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; background: #0d1117; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
   .badge-buy { background: #0d2818; color: #3fb950; } .badge-sell { background: #2d0b0e; color: #f85149; } .badge-hold { background: #1c1c1c; color: #8b949e; }
-  /* DESIGN-W11-FF-CARD-BG (2026-05-15): filter pill bg + border unified to
-     canonical tier-stat-card reference per Mr.1 directive (Q-CARDBG-2/3).
-     border-radius:8px preserved (Q-CARDBG-3 — pills are CONTROLS, not content
-     cards; rounded shape is UX affordance). Active-state per Q-CARDBG-1:
-     text + border ONLY (no bg-tint). Exchange-tab active uses canonical mint
-     (#5BEEB3); tier-tab active uses per-tier color via inline JS style
-     (T1 blue / T2 green / T3 purple / T4 orange) — Q-CARDBG-1 RELAXATION
-     to preserve per-tier semantic color identity. */
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-  .tab { padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid var(--line); background: oklch(0.18 0.014 265 / 0.5); color: #8b949e; transition: all 0.15s; }
-  .tab:hover { border-color: #5BEEB380; } .tab.active { color: #5BEEB3; border-color: #5BEEB3; font-weight: 600; }
+  .tab { padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid #30363d; background: #161b22; color: #8b949e; transition: all 0.15s; }
+  .tab:hover { border-color: #58a6ff80; } .tab.active { background: #58a6ff20; color: #58a6ff; border-color: #58a6ff; }
   .tier-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-  .tier-tab { padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid var(--line); background: oklch(0.18 0.014 265 / 0.5); color: #8b949e; transition: all 0.15s; }
-  .tier-tab:hover { border-color: #5BEEB380; } .tier-tab.active { border-width: 2px; }
+  .tier-tab { padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid #30363d; background: #161b22; color: #8b949e; transition: all 0.15s; }
+  .tier-tab:hover { border-color: #58a6ff80; } .tier-tab.active { border-width: 2px; }
   .tier-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
   .tradfi-badge { background: linear-gradient(135deg, #bc8cff20, #8957e520); border: 1px solid #bc8cff40; color: #bc8cff; font-size: 11px; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
   /* DESIGN-W8-FIX (2026-05-11): onchain-badge bg unified to .tier-stat-card reference. */
@@ -2730,29 +2602,16 @@ async function load() {
       {id:'4',label:'Tier 4',color:'#d29922'},
     ].map(function(t){
       var isActive = activeTierFilter === t.id;
-      // DESIGN-W11-FF-CARD-BG (2026-05-15): Q-CARDBG-1 active state = text + border
-      // (NO bg-tint per spec; was 'background:'+t.color+'20' creating per-tier bg
-      // differentiation that violated the canonical card-bg unification). Per-tier
-      // color identity preserved on text + border-color (T1 blue / T2 green /
-      // T3 purple / T4 orange) — Q-CARDBG-1 RELAXATION because color encodes
-      // tier semantically; mint-only would lose tier visual identity.
-      var style = isActive ? 'border-color:'+t.color+';color:'+t.color : '';
+      var style = isActive ? 'border-color:'+t.color+';color:'+t.color+';background:'+t.color+'20' : '';
       return '<div class="tier-tab'+(isActive?' active':'')+'" data-tier="'+t.id+'" data-color="'+t.color+'" style="'+style+'" onclick="setTierFilter(\\''+t.id+'\\')">'+t.label+'</div>';
     }).join('');
 
     // Exchange filter tabs
     var exTabs = document.getElementById('exchange-tabs');
     var exchanges = [{id:'all',label:'ALL Exchanges'},{id:'HL',label:'Hyperliquid'},{id:'BINANCE',label:'Binance'},{id:'BYBIT',label:'Bybit'},{id:'OKX',label:'OKX'},{id:'BITGET',label:'Bitget'}];
-    // DESIGN-W11-FF-CARD-BG (2026-05-15): inline style block REMOVED — relies on
-    // .tab + .tab.active CSS rules (canonical bg + mint active text/border per
-    // Q-CARDBG-1 + Q-CARDBG-2). Was: 'style="cursor:pointer;padding:6px 14px;
-    // border-radius:8px;font-size:13px;border:1px solid #58a6ff|#30363d;color:
-    // #58a6ff|#8b949e;background:#58a6ff20|#161b22"' — all of those are now in
-    // the .tab CSS class. font-size:13px overrides .tab default 12px → preserved
-    // via inline style ONLY for that single value.
     exTabs.innerHTML = exchanges.map(function(ex){
       var isActive = activeExchangeFilter === ex.id;
-      return '<div class="tab'+(isActive?' active':'')+'" data-ex="'+ex.id+'" style="font-size:13px" onclick="setExchangeFilter(\\''+ex.id+'\\')">'+ex.label+'</div>';
+      return '<div class="tab'+(isActive?' active':'')+'" data-ex="'+ex.id+'" style="cursor:pointer;padding:6px 14px;border-radius:8px;font-size:13px;border:1px solid '+(isActive?'#58a6ff':'#30363d')+';color:'+(isActive?'#58a6ff':'#8b949e')+';background:'+(isActive?'#58a6ff20':'#161b22')+'" onclick="setExchangeFilter(\\''+ex.id+'\\')">'+ex.label+'</div>';
     }).join('');
 
     // DESIGN-W8 / C4 (2026-05-11): #tf-tabs population REMOVED — DOM target
