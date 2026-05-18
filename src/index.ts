@@ -2615,16 +2615,26 @@ async function load() {
       {id:'4',label:'Tier 4',color:'#d29922'},
     ].map(function(t){
       var isActive = activeTierFilter === t.id;
-      var style = isActive ? 'border-color:'+t.color+';color:'+t.color+';background:'+t.color+'20' : '';
+      // DESIGN-W11-FF-CARD-BG (2026-05-15): Q-CARDBG-1 active state = text + border
+      // (NO bg-tint per spec; was 'background:'+t.color+'20' creating per-tier bg
+      // differentiation that violated the canonical card-bg unification). Per-tier
+      // color identity preserved on text + border-color (T1 blue / T2 green /
+      // T3 purple / T4 orange) — Q-CARDBG-1 RELAXATION because color encodes
+      // tier semantically; mint-only would lose tier visual identity.
+      var style = isActive ? 'border-color:'+t.color+';color:'+t.color : '';
       return '<div class="tier-tab'+(isActive?' active':'')+'" data-tier="'+t.id+'" data-color="'+t.color+'" style="'+style+'" onclick="setTierFilter(\\''+t.id+'\\')">'+t.label+'</div>';
     }).join('');
 
     // Exchange filter tabs
     var exTabs = document.getElementById('exchange-tabs');
     var exchanges = [{id:'all',label:'ALL Exchanges'},{id:'HL',label:'Hyperliquid'},{id:'BINANCE',label:'Binance'},{id:'BYBIT',label:'Bybit'},{id:'OKX',label:'OKX'},{id:'BITGET',label:'Bitget'}];
+    // DESIGN-W11-FF-CARD-BG (2026-05-15): inline style block REMOVED — relies on
+    // .tab + .tab.active CSS rules (canonical bg + mint active text/border per
+    // Q-CARDBG-1 + Q-CARDBG-2). font-size:13px overrides .tab default 12px →
+    // preserved via inline style ONLY for that single value.
     exTabs.innerHTML = exchanges.map(function(ex){
       var isActive = activeExchangeFilter === ex.id;
-      return '<div class="tab'+(isActive?' active':'')+'" data-ex="'+ex.id+'" style="cursor:pointer;padding:6px 14px;border-radius:8px;font-size:13px;border:1px solid '+(isActive?'#58a6ff':'#30363d')+';color:'+(isActive?'#58a6ff':'#8b949e')+';background:'+(isActive?'#58a6ff20':'#161b22')+'" onclick="setExchangeFilter(\\''+ex.id+'\\')">'+ex.label+'</div>';
+      return '<div class="tab'+(isActive?' active':'')+'" data-ex="'+ex.id+'" style="font-size:13px" onclick="setExchangeFilter(\\''+ex.id+'\\')">'+ex.label+'</div>';
     }).join('');
 
     // DESIGN-W8 / C4 (2026-05-11): #tf-tabs population REMOVED — DOM target
