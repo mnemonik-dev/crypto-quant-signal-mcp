@@ -97,13 +97,20 @@ Each demo is runnable as `python examples/<framework>/demo.py BTC 4h` — gets a
 
 ---
 
-## What's new in v1.15.1
+## What's new in v1.16.0
 
-Live since 2026-05-18:
+Live since 2026-05-19:
+
+- **⏱️ 3-minute timeframe public.** Added to the public track record. PFE win rate and sample count visible at [algovault.com/track-record](https://algovault.com/track-record).
+- **🧩 Integration walkthroughs.** Five new walkthroughs at [algovault.com/integrations](https://algovault.com/integrations) for Claude Desktop, Claude.ai, Cursor, Cline, and Codex CLI.
+- **📚 Knowledge tools docs.** New documentation section at [algovault.com/docs](https://algovault.com/docs.html) covering the `search_knowledge` and `chat_knowledge` MCP tools (parameter tables, example responses, rate limits, troubleshooting).
+- **📰 Bundle expansion.** Knowledge tools now index blog posts, YouTube videos, and GitHub Discussions. Bundle refreshes weekly.
+
+### v1.15.1 highlights (recap)
 
 - **📊 Chat usage analytics.** Admin-gated `/admin/chat-analytics` dashboard with weekly Telegram digest. PII-safe per-call telemetry.
-- **🎨 Track-record dashboard polish.** LATEST TRADE CALLS panel now matches surrounding card surfaces (visual unification).
-- **📦 npm catches up.** v1.15.0 was published to MCP Registry + LobeHub + DXT + GitHub Release but skipped `npm publish`. v1.15.1 publishes to all surfaces simultaneously.
+- **🎨 Track-record dashboard polish.** LATEST TRADE CALLS panel now matches surrounding card surfaces.
+- **📦 npm catch-up.** v1.15.0 was published to MCP Registry + LobeHub + DXT + GitHub Release but skipped npm; v1.15.1 brought every surface into sync.
 
 ### v1.15.0 highlights (recap)
 
