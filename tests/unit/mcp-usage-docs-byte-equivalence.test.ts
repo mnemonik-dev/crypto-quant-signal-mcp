@@ -16,56 +16,93 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import MCP_CLIENTS from '../../src/lib/integrations-data/mcp-clients.js';
+import AI_AGENTS from '../../src/lib/integrations-data/ai-agents.js';
+import { renderIntegrationH2, normalizeHtml } from '../../src/lib/integrations-data/render.js';
 import { MCP_USAGE_HTML } from '../../src/lib/mcp-usage-docs.js';
-import { normalizeHtml } from '../../src/lib/integrations-data/render.js';
 
 const FIXTURE_PATH = join(__dirname, '..', 'fixtures', 'mcp-usage-html-pre-refactor.txt');
 
-describe('mcp-usage-docs byte-equivalence (C1 refactor)', () => {
-  it('refactored MCP_USAGE_HTML normalizes to match pre-refactor fixture', () => {
-    const fixture = readFileSync(FIXTURE_PATH, 'utf8');
-    const normalizedFixture = normalizeHtml(fixture);
-    const normalizedRefactored = normalizeHtml(MCP_USAGE_HTML);
-    expect(normalizedRefactored).toBe(normalizedFixture);
+/**
+ * Byte-equivalence asserts the refactored renderer, when called with
+ * exchangeKits:null (the C1 contract), produces output byte-matching the
+ * pre-refactor inline HTML. The fixture is permanent; this test catches
+ * accidental content drift in any future edit to the data files or
+ * renderer.
+ *
+ * MCP_USAGE_HTML (the actual export consumed by build_landing.mjs) is
+ * exercised separately — at C1 it equals the renderer output with
+ * exchangeKits:null; from C2 onward it adds the exchangeKits H3 too.
+ */
+describe('mcp-usage-docs byte-equivalence (C1 refactor contract)', () => {
+  const renderedWithoutExchangeKits = renderIntegrationH2({
+    mcpClients: MCP_CLIENTS,
+    aiAgents: AI_AGENTS,
+    exchangeKits: null,
   });
 
-  it('refactored output preserves all 3 existing anchors (connect-mcp + connect-ai-agent + outer integration)', () => {
-    expect(MCP_USAGE_HTML).toContain('id="integration"');
-    expect(MCP_USAGE_HTML).toContain('id="connect-mcp"');
-    expect(MCP_USAGE_HTML).toContain('id="connect-ai-agent"');
+  it('renderer output (exchangeKits:null) normalizes to match pre-refactor fixture', () => {
+    const fixture = readFileSync(FIXTURE_PATH, 'utf8');
+    expect(normalizeHtml(renderedWithoutExchangeKits)).toBe(normalizeHtml(fixture));
+  });
+
+  it('renderer output preserves outer #integration + first two H3 anchors', () => {
+    expect(renderedWithoutExchangeKits).toContain('id="integration"');
+    expect(renderedWithoutExchangeKits).toContain('id="connect-mcp"');
+    expect(renderedWithoutExchangeKits).toContain('id="connect-ai-agent"');
   });
 
   it('exchangeKits:null path does NOT introduce a 3rd H3 anchor', () => {
-    expect(MCP_USAGE_HTML).not.toContain('id="connect-exchange-kit"');
-    expect(MCP_USAGE_HTML).not.toContain('Connect Your Exchange Kit');
+    expect(renderedWithoutExchangeKits).not.toContain('id="connect-exchange-kit"');
+    expect(renderedWithoutExchangeKits).not.toContain('Connect Your Exchange Kit');
   });
 
   it('preserves the 6 MCP-client table rows (5 dedicated + Plain HTTP)', () => {
-    expect(MCP_USAGE_HTML).toContain('Claude Desktop');
-    expect(MCP_USAGE_HTML).toContain('Cursor');
-    expect(MCP_USAGE_HTML).toContain('Cline (VSCode)');
-    expect(MCP_USAGE_HTML).toContain('Claude Code');
-    expect(MCP_USAGE_HTML).toContain('Smithery');
-    expect(MCP_USAGE_HTML).toContain('Plain HTTP / curl');
+    expect(renderedWithoutExchangeKits).toContain('Claude Desktop');
+    expect(renderedWithoutExchangeKits).toContain('Cursor');
+    expect(renderedWithoutExchangeKits).toContain('Cline (VSCode)');
+    expect(renderedWithoutExchangeKits).toContain('Claude Code');
+    expect(renderedWithoutExchangeKits).toContain('Smithery');
+    expect(renderedWithoutExchangeKits).toContain('Plain HTTP / curl');
   });
 
   it('preserves the 4 AI-agent framework table rows', () => {
-    expect(MCP_USAGE_HTML).toContain('LangChain');
-    expect(MCP_USAGE_HTML).toContain('LlamaIndex');
-    expect(MCP_USAGE_HTML).toContain('Microsoft Agent Framework');
-    expect(MCP_USAGE_HTML).toContain('CrewAI');
+    expect(renderedWithoutExchangeKits).toContain('LangChain');
+    expect(renderedWithoutExchangeKits).toContain('LlamaIndex');
+    expect(renderedWithoutExchangeKits).toContain('Microsoft Agent Framework');
+    expect(renderedWithoutExchangeKits).toContain('CrewAI');
   });
 
   it('preserves all 4 NEW /integrations/<framework> tutorial links', () => {
-    expect(MCP_USAGE_HTML).toContain('/integrations/langchain');
-    expect(MCP_USAGE_HTML).toContain('/integrations/llamaindex');
-    expect(MCP_USAGE_HTML).toContain('/integrations/maf');
-    expect(MCP_USAGE_HTML).toContain('/integrations/crewai');
+    expect(renderedWithoutExchangeKits).toContain('/integrations/langchain');
+    expect(renderedWithoutExchangeKits).toContain('/integrations/llamaindex');
+    expect(renderedWithoutExchangeKits).toContain('/integrations/maf');
+    expect(renderedWithoutExchangeKits).toContain('/integrations/crewai');
   });
 
   it('does NOT leak the deprecated /docs/integrations/<slug> path', () => {
-    expect(MCP_USAGE_HTML).not.toMatch(
+    expect(renderedWithoutExchangeKits).not.toMatch(
       /\/docs\/integrations\/(binance|okx|bybit|bitget|langchain|llamaindex|maf|crewai)/,
     );
+  });
+});
+
+describe('MCP_USAGE_HTML (live export, post-C2)', () => {
+  it('contains all 3 H3 anchors (Exchange Kit added in C2)', () => {
+    expect(MCP_USAGE_HTML).toContain('id="integration"');
+    expect(MCP_USAGE_HTML).toContain('id="connect-mcp"');
+    expect(MCP_USAGE_HTML).toContain('id="connect-ai-agent"');
+    expect(MCP_USAGE_HTML).toContain('id="connect-exchange-kit"');
+  });
+
+  it('contains 4 exchange-kit display names in the new H3 block', () => {
+    expect(MCP_USAGE_HTML).toContain('Binance');
+    expect(MCP_USAGE_HTML).toContain('OKX');
+    expect(MCP_USAGE_HTML).toContain('Bybit');
+    expect(MCP_USAGE_HTML).toContain('Bitget');
+  });
+
+  it('H2 intro mentions exchange kits (3-path framing)', () => {
+    expect(MCP_USAGE_HTML).toContain('exchange Agent Trade Kit');
   });
 });
