@@ -152,8 +152,15 @@ describe('getVenuesSupporting — venue-coverage matrix', () => {
     expect(getVenuesSupporting('TTF')).toEqual(['HL']);
   });
 
-  it('JPY: HL-only (FX TradFi pair not listed on CEXs as USDT perp)', () => {
-    expect(getVenuesSupporting('JPY')).toEqual(['HL']);
+  it('JPY: HL-only among PROMOTED venues + MEXC shadow (FX TradFi pair on JPY_USDT)', () => {
+    // PILOT-ADAPTERS-W2 / C2 (2026-05-19): MEXC added to JPY coverage
+    // (MEXC has JPY_USDT — 1/USDJPY reciprocal). Test widened from strict
+    // ['HL'] to membership check.
+    const venues = getVenuesSupporting('JPY');
+    expect(venues).toContain('HL');
+    expect(venues).toContain('MEXC');
+    expect(venues).not.toContain('BINANCE');  // still HL-only among PROMOTED
+    expect(venues).not.toContain('BYBIT');
   });
 
   it('HIMS: partial coverage — Bitget only (per probe 2026-05-15)', () => {

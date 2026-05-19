@@ -15,6 +15,7 @@ import { BitgetAdapter } from './adapters/bitget.js';
 import { AsterAdapter } from './adapters/aster.js';
 import { EdgeXAdapter } from './adapters/edgex.js';
 import { GateAdapter } from './adapters/gateio.js';
+import { MEXCAdapter } from './adapters/mexc.js';
 
 const adapters = new Map<ExchangeId, ExchangeAdapter>();
 
@@ -43,6 +44,9 @@ export function getAdapter(exchange?: ExchangeId): ExchangeAdapter {
         break;
       case 'GATE':
         adapter = new GateAdapter();
+        break;
+      case 'MEXC':
+        adapter = new MEXCAdapter();
         break;
       case 'HL':
       default:

@@ -64,6 +64,12 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // type-system compat; seed-loop branch is OUT of C1 scope per Scope Rule
   // (deferred to PILOT-ADAPTERS-SEED-LOOP-W2). Conservative 300ms delay.
   'GATE':    300,
+  // PILOT-ADAPTERS-W2 / C2 (2026-05-19): MEXC shadow venue. Same deferral
+  // as ASTER/EDGEX/GATE — Record<ExchangeId, number> key required for
+  // type-system compat; seed-loop branch deferred to PILOT-ADAPTERS-SEED-
+  // LOOP-W2. MEXC has aggressive listing cadence (881 perps), conservative
+  // 350ms delay.
+  'MEXC':    350,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)

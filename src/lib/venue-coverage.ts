@@ -31,15 +31,16 @@ const ALL_5: ExchangeId[] = ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET'];
 // non-HL promoted CEXes as of 2026-05-15. SP500 included because the CEX `SPX`
 // ticker is the SPX6900 memecoin, not the S&P 500 index.
 //
-// PILOT-ADAPTERS-W2 / C1 (2026-05-19) refinement: VIX moved OUT of HL_ONLY
-// into PARTIAL_COVERAGE — Plan-Mode probe rev 2 surfaced VIX_USDT on Gate.io.
-// EUR/JPY/JP225/BRENTOIL stay HL_ONLY here; C2 (MEXC) moves them out + adds
-// PARTIAL rows for MEXC shadow-venue listings (EUR_USDT, JPY_USDT, JP225_USDT,
-// UKOIL_USDT). Per-chapter additive widening pattern matches the
-// EXCHANGE-SHADOW-PROMOTE-W1 / per-chapter system-map.md touch lesson.
+// PILOT-ADAPTERS-W2 / C1 + C2 (2026-05-19) refinement: VIX (C1, Gate has
+// VIX_USDT) + EUR + JPY + JP225 + BRENTOIL (C2, MEXC has EUR_USDT, JPY_USDT,
+// JP225_USDT, UKOIL_USDT) moved OUT of HL_ONLY into PARTIAL_COVERAGE. They
+// remain HL-only AMONG THE 5 PROMOTED venues but are reachable via shadow.
+// GBP added per-chapter to PARTIAL_COVERAGE (was never in HL_ONLY since
+// not in TIER_3 set — MEXC has GBP_USDT; flagged for future TRADFI_FALLBACK
+// extension).
 const HL_ONLY: Set<string> = new Set([
-  'ALUMINIUM', 'BRENTOIL', 'BX', 'CORN', 'DKNG', 'DXY', 'EUR', 'HYUNDAI',
-  'JP225', 'JPY', 'KIOXIA', 'KR200', 'PURRDAT', 'RIVN', 'SKHX', 'SMSN',
+  'ALUMINIUM', 'BX', 'CORN', 'DKNG', 'DXY', 'HYUNDAI',
+  'KIOXIA', 'KR200', 'PURRDAT', 'RIVN', 'SKHX', 'SMSN',
   'SOFTBANK', 'SP500', 'TTF', 'URANIUM', 'URNM', 'WHEAT', 'XYZ100',
 ]);
 
@@ -54,7 +55,7 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   // Existing promoted-CEX rows extended with GATE where Plan-Mode probe found a listing
   AMD:       ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],
   BABA:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],
-  COPPER:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],   // Gate has XCU_USDT (alias)
+  COPPER:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC'],   // C1 Gate XCU + C2 MEXC literal COPPER
   COST:      ['HL', 'BINANCE', 'BITGET', 'GATE'],
   CRWV:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],
   GME:       ['HL', 'BINANCE', 'BITGET'],                  // not on Gate
@@ -62,22 +63,24 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   LLY:       ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],
   NATGAS:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],   // Gate has NG_USDT (alias)
   NFLX:      ['HL', 'BINANCE', 'BITGET', 'GATE'],
-  PALLADIUM: ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],   // Gate has XPD_USDT (alias)
-  PLATINUM:  ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],   // Gate has XPT_USDT (alias)
+  PALLADIUM: ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC'],   // C1 Gate XPD + C2 MEXC XPD
+  PLATINUM:  ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC'],   // C1 Gate XPT + C2 MEXC XPT
   USAR:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE'],
-  XLE:       ['HL', 'BITGET'],                              // not on Gate (Plan-Mode probe)
+  XLE:       ['HL', 'BITGET', 'MEXC'],                      // C2 MEXC adds (not on Gate per Plan-Mode probe)
 
-  // NEW rows: HL_ONLY → shadow-venue-extended (W2 moves these out of HL_ONLY)
-  VIX:       ['HL', 'GATE'],                                // Gate has VIX_USDT
-  // BRENTOIL: moved to a C2 row (MEXC has UKOIL_USDT). Stays HL-only until C2.
-  // EUR/JPY/JP225: moved to a C2 row (MEXC has EUR_USDT, JPY_USDT, JP225_USDT). Stays HL-only until C2.
+  // NEW rows (C1 + C2 — moved OUT of HL_ONLY into PARTIAL_COVERAGE):
+  VIX:       ['HL', 'GATE'],                                // C1: Gate has VIX_USDT
+  EUR:       ['HL', 'MEXC'],                                // C2: MEXC has EUR_USDT
+  JPY:       ['HL', 'MEXC'],                                // C2: MEXC has JPY_USDT
+  JP225:     ['HL', 'MEXC'],                                // C2: MEXC has JP225_USDT
+  BRENTOIL:  ['HL', 'MEXC'],                                // C2: MEXC has UKOIL_USDT (alias)
 
   // NEW rows: TradFi symbols that previously defaulted to ALL_5 but Gate.io adds shadow-venue coverage
-  GOLD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],     // Gate has XAU_USDT (alias)
-  SILVER:    ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],     // Gate has XAG_USDT (alias)
-  CL:        ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],     // Gate has CL_USDT
-  EWJ:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],     // Gate has EWJ_USDT
-  EWY:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],     // Gate has EWY_USDT
+  GOLD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC'],     // C1 Gate XAU + C2 MEXC XAUT (alias)
+  SILVER:    ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC'],     // C1 Gate XAG + C2 MEXC SILVER literal
+  CL:        ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC'],     // C1 Gate CL + C2 MEXC USOIL (alias)
+  EWJ:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC'],     // C1 Gate + C2 MEXC
+  EWY:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC'],     // C1 Gate + C2 MEXC
   INTC:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],
   LITE:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],
   MSFT:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE'],
@@ -124,4 +127,4 @@ export function isVenueSupportedFor(coin: string, exchange: ExchangeId): boolean
  * Probe-date marker — useful for future "is this matrix stale?" audits.
  * Update in lockstep with re-running the alias coverage CSV.
  */
-export const COVERAGE_PROBED_AT = '2026-05-19';   // PILOT-ADAPTERS-W2 / C1 — Gate.io shadow-venue TradFi coverage added; C2 (MEXC) + C3 (KuCoin) follow
+export const COVERAGE_PROBED_AT = '2026-05-19';   // PILOT-ADAPTERS-W2 / C1+C2 — Gate.io + MEXC shadow-venue TradFi coverage added; C3 (KuCoin) follows
