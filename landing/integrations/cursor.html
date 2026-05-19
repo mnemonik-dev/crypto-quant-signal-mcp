@@ -156,16 +156,43 @@ tailwind.config = {
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h1>Connect AlgoVault to Cursor</h1>
 <p>Drop AlgoVault into Cursor’s IDE agent. Live trade calls inside your editor while you write strategy code.</p>
 <blockquote>
-<p><em>Snapshot taken 2026-05-19 — live numbers refreshed in-page from <a href="https://algovault.com/api/performance-public">https://algovault.com/api/performance-public</a>.</em></p>
+<p><em>Snapshot 2026-05-19 — live numbers refreshed in-page from <a href="https://algovault.com/api/performance-public">https://algovault.com/api/performance-public</a>.</em></p>
 </blockquote></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Setup</h2>
-<p>Placeholder — full setup walkthrough lands in C5 of INTEGRATIONS-FULL-STACK-W1.</p></div>
-<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Worked example</h2>
-<p>Coming in C5.</p></div>
+<p>Edit <code>~/.cursor/mcp.json</code> (global, all projects) OR <code>.cursor/mcp.json</code> in the project root (per-project, commit-friendly):</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;algovault&quot;: {
+      &quot;url&quot;: &quot;https://api.algovault.com/mcp&quot;,
+      &quot;headers&quot;: {
+        &quot;Authorization&quot;: &quot;Bearer ${env:AV_API_KEY}&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<p>Set <code>AV_API_KEY</code> in your shell. Restart Cursor. Cursor’s agent now has the 4 AlgoVault tools available in any prompt.</p></div>
+<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Example: get a BTC trade call</h2>
+<p>Open Cursor’s agent panel. Ask: <em>“Use AlgoVault to check BTC at 4h.”</em> The agent invokes <code>get_trade_call</code> and returns the verdict (call, confidence, regime, indicators) inline.</p>
+<blockquote>
+<p><em>Screenshot placeholder — Cursor IDE with agent panel showing AlgoVault tool call and the returned trade verdict.</em></p>
+</blockquote>
+<p>Cursor’s coding agent can also chain AlgoVault calls into strategy-code edits — ask <em>“If BTC 4h is BUY, add a long entry at the current bar in <code>strategy.py</code>.”</em></p></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Troubleshooting</h2>
-<p>Coming in C5.</p></div>
+<ul>
+<li><strong>AlgoVault tool not showing in agent menu</strong> — restart Cursor. The <code>mcp.json</code> is read at app launch.</li>
+<li><strong><code>${env:AV_API_KEY}</code> not interpolated</strong> — Cursor reads env vars from the shell that launched it (macOS Launchpad vs terminal differ). Set the key in <code>/etc/launchd.conf</code> or use <code>launchctl setenv</code> on macOS.</li>
+<li><strong>Network timeout</strong> — AlgoVault MCP is hosted at <code>api.algovault.com</code>. Check VPN/firewall.</li>
+<li><strong><code>401 unauthorized</code></strong> — confirm the Bearer key shape: <code>av_live_…</code> for paid; free tier needs NO header (delete the <code>headers</code> block entirely).</li>
+<li><strong>Tools appear once then disappear</strong> — your <code>mcp.json</code> may have invalid JSON (trailing comma, unquoted key). Cursor silently drops servers it can’t parse. Validate via <code>jq . ~/.cursor/mcp.json</code> (or use Cursor’s Validate JSON command). Fix the parse error and restart.</li>
+</ul></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>FAQ</h2>
-<p>Coming in C5.</p></div>
+<p><strong>Free tier OK?</strong> Yes. Remove the <code>headers</code> block from <code>mcp.json</code>. 100 calls/month, every coin + timeframe.</p>
+<p><strong>Per-project vs global?</strong> Per-project (<code>.cursor/mcp.json</code>) is commit-friendly — teammates inherit. Global is private.</p>
+<p><strong>Cursor’s agent vs chat?</strong> Both have access to MCP tools. The agent can chain calls + edit code; chat is single-turn.</p>
+<p><strong>Does Cursor Composer use these tools?</strong> Yes. Composer has the same MCP access as the agent and chat panels.</p></div>
+<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Next steps</h2>
+<p>Pull live signals into your strategy code, mid-edit. Message <a href="https://t.me/algovaultofficialbot">@algovaultofficialbot</a> for support, or <a href="https://algovault.com/track-record">verify the track record on-chain</a>.</p></div>
       </article>
     </div>
   </div>

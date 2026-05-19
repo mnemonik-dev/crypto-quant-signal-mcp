@@ -2,20 +2,61 @@
 
 Wire AlgoVault into your Claude Code CLI as a project-scoped MCP server. Commit `.mcp.json` so every teammate gets the same setup.
 
-> *Snapshot taken 2026-05-19 — live numbers refreshed in-page from <https://algovault.com/api/performance-public>.*
+> *Snapshot 2026-05-19 — live numbers refreshed in-page from <https://algovault.com/api/performance-public>.*
 
 ## Setup
 
-Placeholder — full setup walkthrough lands in C5 of INTEGRATIONS-FULL-STACK-W1.
+**One-liner (recommended):**
 
-## Worked example
+```bash
+claude mcp add --transport http --scope project algovault \
+  https://api.algovault.com/mcp \
+  --header "Authorization: Bearer $AV_API_KEY"
+```
 
-Coming in C5.
+This writes `.mcp.json` in your repo root. Commit it; teammates clone, run `claude`, and the connector is already wired.
+
+**`.mcp.json` shape (auto-generated):**
+
+```json
+{
+  "mcpServers": {
+    "algovault": {
+      "type": "http",
+      "url": "https://api.algovault.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AV_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Set `AV_API_KEY` in your shell or `.envrc`.
+
+## Example: get a BTC trade call
+
+In a Claude Code session, type `/mcp` to list connected servers. AlgoVault should appear with 4 tools (`get_trade_call`, `get_trade_signal`, `scan_funding_arb`, `get_market_regime`). Then ask: *"Use AlgoVault to get a trade call for BTC 4h."* Claude Code shows the tool call inline; the returned JSON pretty-prints in the response.
+
+> *Screenshot placeholder — Claude Code terminal showing `/mcp` list with AlgoVault + 4 tools and a `get_trade_call` response.*
 
 ## Troubleshooting
 
-Coming in C5.
+- **"Server not initialized" on first call** — Claude Code expects the 3-step MCP handshake; the `http` transport handles this automatically. If you see this error, your `.mcp.json` `type` might be set to `sse` instead of `http`.
+- **`AV_API_KEY` not set in env** — Claude Code reads from the shell that launched it. Use direnv or set the key in `~/.zshrc`.
+- **`.mcp.json` not picked up** — Claude Code reads `.mcp.json` from the CWD at session start. Restart Claude Code from the repo root.
+- **`403 Forbidden`** — your key is expired or wrong tier. Visit `algovault.com/account` to verify.
 
 ## FAQ
 
-Coming in C5.
+**Project scope vs user scope?** Project (`.mcp.json` in repo root) shares with the team. User (`~/.claude/mcp.json`) is private.
+
+**Free tier works?** Yes. Drop the `--header` arg from `claude mcp add`. 100 calls/month, all coins + timeframes.
+
+**Multiple MCP servers?** Yes — repeat `claude mcp add` per server.
+
+**How does this differ from Claude Desktop?** Claude Code is the CLI; Claude Desktop is the chat app. Both run on the same Claude family but use separate config files.
+
+## Next steps
+
+Add AlgoVault to your strategy-dev repo in 30 seconds. Message [@algovaultofficialbot](https://t.me/algovaultofficialbot) for support, or [see the verified track record](https://algovault.com/track-record).

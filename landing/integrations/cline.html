@@ -156,16 +156,46 @@ tailwind.config = {
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h1>Connect AlgoVault to Cline (VSCode)</h1>
 <p>Add AlgoVault as a remote MCP server to Cline, the VSCode coding agent. Streamable-HTTP transport; setup ≤2 minutes.</p>
 <blockquote>
-<p><em>Snapshot taken 2026-05-19 — live numbers refreshed in-page from <a href="https://algovault.com/api/performance-public">https://algovault.com/api/performance-public</a>.</em></p>
+<p><em>Snapshot 2026-05-19 — live numbers refreshed in-page from <a href="https://algovault.com/api/performance-public">https://algovault.com/api/performance-public</a>.</em></p>
 </blockquote></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Setup</h2>
-<p>Placeholder — full setup walkthrough lands in C5 of INTEGRATIONS-FULL-STACK-W1.</p></div>
-<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Worked example</h2>
-<p>Coming in C5.</p></div>
+<p>Open the Cline panel in VSCode → MCP Servers → Remote Servers tab → Add server. OR edit <code>cline_mcp_settings.json</code> directly (Configure MCP Servers → Edit):</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;algovault&quot;: {
+      &quot;type&quot;: &quot;streamableHttp&quot;,
+      &quot;url&quot;: &quot;https://api.algovault.com/mcp&quot;,
+      &quot;headers&quot;: {
+        &quot;Authorization&quot;: &quot;Bearer ${env:AV_API_KEY}&quot;
+      },
+      &quot;disabled&quot;: false,
+      &quot;autoApprove&quot;: []
+    }
+  }
+}
+</code></pre>
+<p><code>type: &quot;streamableHttp&quot;</code> is the modern transport (recommended). The legacy <code>&quot;sse&quot;</code> type still works but is being deprecated upstream.</p></div>
+<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Example: get a BTC trade call</h2>
+<p>In a Cline thread, type <em>“Use AlgoVault to check ETH 1h.”</em> Cline lists the tools available, selects <code>get_trade_call</code>, and returns the parsed verdict.</p>
+<blockquote>
+<p><em>Screenshot placeholder — VSCode with Cline panel showing AlgoVault MCP server entry and a <code>get_trade_call</code> response.</em></p>
+</blockquote>
+<p>Cline can also wire AlgoVault into multi-step plans — <em>“If ETH 1h is BUY, write a Python script that opens a long position via ccxt.”</em></p></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Troubleshooting</h2>
-<p>Coming in C5.</p></div>
+<ul>
+<li><strong><code>streamableHttp</code> transport not supported</strong> — update Cline to v3.x or later. v2.x only supports SSE.</li>
+<li><strong>“Server not initialized”</strong> — first call needs the MCP handshake; Cline handles this automatically on <code>streamableHttp</code>. If you see this, switch <code>type</code> to <code>streamableHttp</code> (NOT <code>sse</code>).</li>
+<li><strong><code>autoApprove</code> not respected</strong> — Cline asks before each tool call by default. Add tool names to <code>autoApprove</code> (e.g. <code>[&quot;get_trade_call&quot;]</code>) to pre-approve.</li>
+<li><strong>Cline can’t find <code>cline_mcp_settings.json</code></strong> — path varies by OS. Access via Cline panel → Configure MCP Servers; that opens the file.</li>
+<li><strong>Tool calls silently rejected on free tier</strong> — your free-tier counter is full (100 calls/month resets at UTC month boundary). Remove the <code>headers</code> block if you accidentally left an empty Bearer; or upgrade at <code>algovault.com/account</code> for Starter (3,000/mo).</li>
+</ul></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>FAQ</h2>
-<p>Coming in C5.</p></div>
+<p><strong>Cline vs Continue.dev?</strong> Both are VSCode coding agents. Cline supports MCP natively. Continue.dev’s MCP support is community-driven.</p>
+<p><strong>Free tier?</strong> Yes. Remove the <code>headers</code> field. 100 calls/month.</p>
+<p><strong>SSE vs streamableHttp?</strong> <code>streamableHttp</code> is the modern transport. AlgoVault MCP supports both, but new setups should use <code>streamableHttp</code>.</p>
+<p><strong>Auto-approve safe?</strong> Auto-approve is convenient for trusted servers. AlgoVault is read-only (no order placement), so auto-approving its tools won’t trigger side effects.</p></div>
+<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Next steps</h2>
+<p>Test AlgoVault in your VSCode workflow today. Free tier, no signup. Message <a href="https://t.me/algovaultofficialbot">@algovaultofficialbot</a> for support, or <a href="https://algovault.com/track-record">see the verified track record</a>.</p></div>
       </article>
     </div>
   </div>

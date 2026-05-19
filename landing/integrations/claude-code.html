@@ -156,16 +156,48 @@ tailwind.config = {
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h1>Connect AlgoVault to Claude Code</h1>
 <p>Wire AlgoVault into your Claude Code CLI as a project-scoped MCP server. Commit <code>.mcp.json</code> so every teammate gets the same setup.</p>
 <blockquote>
-<p><em>Snapshot taken 2026-05-19 — live numbers refreshed in-page from <a href="https://algovault.com/api/performance-public">https://algovault.com/api/performance-public</a>.</em></p>
+<p><em>Snapshot 2026-05-19 — live numbers refreshed in-page from <a href="https://algovault.com/api/performance-public">https://algovault.com/api/performance-public</a>.</em></p>
 </blockquote></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Setup</h2>
-<p>Placeholder — full setup walkthrough lands in C5 of INTEGRATIONS-FULL-STACK-W1.</p></div>
-<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Worked example</h2>
-<p>Coming in C5.</p></div>
+<p><strong>One-liner (recommended):</strong></p>
+<pre><code class="language-bash">claude mcp add --transport http --scope project algovault \
+  https://api.algovault.com/mcp \
+  --header &quot;Authorization: Bearer $AV_API_KEY&quot;
+</code></pre>
+<p>This writes <code>.mcp.json</code> in your repo root. Commit it; teammates clone, run <code>claude</code>, and the connector is already wired.</p>
+<p><strong><code>.mcp.json</code> shape (auto-generated):</strong></p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;algovault&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://api.algovault.com/mcp&quot;,
+      &quot;headers&quot;: {
+        &quot;Authorization&quot;: &quot;Bearer ${AV_API_KEY}&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<p>Set <code>AV_API_KEY</code> in your shell or <code>.envrc</code>.</p></div>
+<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Example: get a BTC trade call</h2>
+<p>In a Claude Code session, type <code>/mcp</code> to list connected servers. AlgoVault should appear with 4 tools (<code>get_trade_call</code>, <code>get_trade_signal</code>, <code>scan_funding_arb</code>, <code>get_market_regime</code>). Then ask: <em>“Use AlgoVault to get a trade call for BTC 4h.”</em> Claude Code shows the tool call inline; the returned JSON pretty-prints in the response.</p>
+<blockquote>
+<p><em>Screenshot placeholder — Claude Code terminal showing <code>/mcp</code> list with AlgoVault + 4 tools and a <code>get_trade_call</code> response.</em></p>
+</blockquote></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Troubleshooting</h2>
-<p>Coming in C5.</p></div>
+<ul>
+<li><strong>“Server not initialized” on first call</strong> — Claude Code expects the 3-step MCP handshake; the <code>http</code> transport handles this automatically. If you see this error, your <code>.mcp.json</code> <code>type</code> might be set to <code>sse</code> instead of <code>http</code>.</li>
+<li><strong><code>AV_API_KEY</code> not set in env</strong> — Claude Code reads from the shell that launched it. Use direnv or set the key in <code>~/.zshrc</code>.</li>
+<li><strong><code>.mcp.json</code> not picked up</strong> — Claude Code reads <code>.mcp.json</code> from the CWD at session start. Restart Claude Code from the repo root.</li>
+<li><strong><code>403 Forbidden</code></strong> — your key is expired or wrong tier. Visit <code>algovault.com/account</code> to verify.</li>
+</ul></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>FAQ</h2>
-<p>Coming in C5.</p></div>
+<p><strong>Project scope vs user scope?</strong> Project (<code>.mcp.json</code> in repo root) shares with the team. User (<code>~/.claude/mcp.json</code>) is private.</p>
+<p><strong>Free tier works?</strong> Yes. Drop the <code>--header</code> arg from <code>claude mcp add</code>. 100 calls/month, all coins + timeframes.</p>
+<p><strong>Multiple MCP servers?</strong> Yes — repeat <code>claude mcp add</code> per server.</p>
+<p><strong>How does this differ from Claude Desktop?</strong> Claude Code is the CLI; Claude Desktop is the chat app. Both run on the same Claude family but use separate config files.</p></div>
+<div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Next steps</h2>
+<p>Add AlgoVault to your strategy-dev repo in 30 seconds. Message <a href="https://t.me/algovaultofficialbot">@algovaultofficialbot</a> for support, or <a href="https://algovault.com/track-record">see the verified track record</a>.</p></div>
       </article>
     </div>
   </div>
