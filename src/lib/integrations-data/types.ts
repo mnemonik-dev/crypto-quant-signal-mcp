@@ -8,7 +8,7 @@
  *     curated but sourced from these entries — keep in sync at edit time)
  *   - src/index.ts  (Express route allow-list reads slugs from hasDedicatedPage:true entries)
  *
- * Introduced INTEGRATIONS-FULL-STACK-W1 C1 (Fix-at-Generator refactor).
+ * Introduced via the Fix-at-Generator refactor of the integration surfaces.
  */
 
 export type SurfaceType = 'mcp-client' | 'ai-agent' | 'exchange-kit';

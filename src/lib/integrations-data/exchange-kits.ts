@@ -1,16 +1,14 @@
 /**
  * Exchange Kit integrations — 4 entries (Binance · OKX · Bybit · Bitget).
  *
- * Used at C2 to add the new "Connect Your Exchange Kit" H3 to
+ * Used to add the "Connect Your Exchange Kit" H3 to
  * docs.html#integration. Per-slug landing pages already shipped (4
- * detailed tutorials at /integrations/{binance,okx,bybit,bitget} via
- * INTEGRATIONS-W1 C6 + AI-AGENT-FRAMEWORK-TUTORIALS-W1).
+ * detailed tutorials at /integrations/{binance,okx,bybit,bitget}).
  *
- * Setup snippets reflect live npm/GH coords (Plan-Mode P12 probe
- * 2026-05-19): @okx_ai/okx-trade-mcp@1.3.3 (bumped from spec's 1.3.1);
- * bybit-official-trading-server@2.1.5 (bumped from 2.0.9);
- * bitget-mcp-server@1.1.0 (unchanged); binance/binance-skills-hub is a
- * GH-coord, not an npm package — install via `claude plugin install`.
+ * Setup snippets reflect live npm/GH coords (probed 2026-05-19):
+ * @okx_ai/okx-trade-mcp@1.3.3; bybit-official-trading-server@2.1.5;
+ * bitget-mcp-server@1.1.0; binance/binance-skills-hub is a GH-coord,
+ * not an npm package — install via `claude plugin install`.
  */
 
 import type { SurfaceModule } from './types.js';

@@ -2,10 +2,8 @@
  * AI Agent framework integrations — 4 entries.
  *
  * Content sourced VERBATIM from the pre-refactor src/lib/mcp-usage-docs.ts
- * (DOCS-INTEGRATION-H2-W1 ship 2026-05-18) for the C1 byte-equivalence
- * test. Per-slug landing pages already shipped via
- * AI-AGENT-FRAMEWORK-TUTORIALS-W1 (2026-05-18); all 4 entries have
- * hasDedicatedPage:true.
+ * for the byte-equivalence test. Per-slug landing pages already shipped
+ * 2026-05-18; all 4 entries have hasDedicatedPage:true.
  */
 
 import type { SurfaceModule } from './types.js';
