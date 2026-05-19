@@ -14,6 +14,12 @@ import type { GeoQueryResult } from './geo-orchestrator.js';
 import type { GeoMentions } from './geo-extractor.js';
 
 export function ensureGeoSchema(): void {
+  // SINGLE multi-statement dbExec — PgBackend.exec is fire-and-forget per
+  // statement, so issuing N separate dbExec calls races (CREATE INDEX
+  // referencing a not-yet-committed CREATE TABLE fails). Pg's pool.query()
+  // processes a single multi-statement SQL string in order within ONE
+  // backend session. Witnessed live in GEO-MEASUREMENT-W1 deploy:
+  // 5 indexes + view all failed because they raced their CREATE TABLEs.
   dbExec(`
     CREATE TABLE IF NOT EXISTS geo_query_runs (
       id                BIGSERIAL PRIMARY KEY,
@@ -27,13 +33,11 @@ export function ensureGeoSchema(): void {
       completion_tokens INT NOT NULL DEFAULT 0,
       latency_ms        INT NOT NULL DEFAULT 0,
       error_code        TEXT
-    )
-  `);
-  dbExec(`CREATE INDEX IF NOT EXISTS idx_geo_query_runs_ran_at ON geo_query_runs (ran_at)`);
-  dbExec(`CREATE INDEX IF NOT EXISTS idx_geo_query_runs_run_id ON geo_query_runs (run_id)`);
-  dbExec(`CREATE INDEX IF NOT EXISTS idx_geo_query_runs_query_id ON geo_query_runs (query_id, ran_at)`);
+    );
+    CREATE INDEX IF NOT EXISTS idx_geo_query_runs_ran_at ON geo_query_runs (ran_at);
+    CREATE INDEX IF NOT EXISTS idx_geo_query_runs_run_id ON geo_query_runs (run_id);
+    CREATE INDEX IF NOT EXISTS idx_geo_query_runs_query_id ON geo_query_runs (query_id, ran_at);
 
-  dbExec(`
     CREATE TABLE IF NOT EXISTS geo_mentions (
       id                     BIGSERIAL PRIMARY KEY,
       run_id                 UUID NOT NULL,
@@ -46,12 +50,10 @@ export function ensureGeoSchema(): void {
       mention_context        TEXT,
       competitors_mentioned  TEXT[],
       sentiment_score        REAL NOT NULL DEFAULT 0
-    )
-  `);
-  dbExec(`CREATE INDEX IF NOT EXISTS idx_geo_mentions_ran_at ON geo_mentions (ran_at)`);
-  dbExec(`CREATE INDEX IF NOT EXISTS idx_geo_mentions_query_id ON geo_mentions (query_id, ran_at)`);
+    );
+    CREATE INDEX IF NOT EXISTS idx_geo_mentions_ran_at ON geo_mentions (ran_at);
+    CREATE INDEX IF NOT EXISTS idx_geo_mentions_query_id ON geo_mentions (query_id, ran_at);
 
-  dbExec(`
     CREATE OR REPLACE VIEW geo_weekly_summary AS
     SELECT
       date_trunc('week', ran_at AT TIME ZONE 'UTC') AS week_utc,
@@ -64,7 +66,7 @@ export function ensureGeoSchema(): void {
     FROM geo_mentions
     WHERE ran_at > now() - interval '1 year'
     GROUP BY week_utc, model
-    ORDER BY week_utc DESC, model
+    ORDER BY week_utc DESC, model;
   `);
 }
 
