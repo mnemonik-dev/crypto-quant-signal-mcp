@@ -70,6 +70,9 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // LOOP-W2. MEXC has aggressive listing cadence (881 perps), conservative
   // 350ms delay.
   'MEXC':    350,
+  // PILOT-ADAPTERS-W2 / C3 (2026-05-19): KUCOIN shadow venue. Type-system
+  // cascade only; seed-loop branch deferred to PILOT-ADAPTERS-SEED-LOOP-W2.
+  'KUCOIN':  300,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)

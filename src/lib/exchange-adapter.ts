@@ -16,6 +16,7 @@ import { AsterAdapter } from './adapters/aster.js';
 import { EdgeXAdapter } from './adapters/edgex.js';
 import { GateAdapter } from './adapters/gateio.js';
 import { MEXCAdapter } from './adapters/mexc.js';
+import { KuCoinAdapter } from './adapters/kucoin.js';
 
 const adapters = new Map<ExchangeId, ExchangeAdapter>();
 
@@ -47,6 +48,9 @@ export function getAdapter(exchange?: ExchangeId): ExchangeAdapter {
         break;
       case 'MEXC':
         adapter = new MEXCAdapter();
+        break;
+      case 'KUCOIN':
+        adapter = new KuCoinAdapter();
         break;
       case 'HL':
       default:

@@ -181,8 +181,17 @@ describe('getVenuesSupporting — venue-coverage matrix', () => {
     expect(venues).not.toContain('BYBIT');
   });
 
-  it('TSLA: 5 venues (direct USDT match on every CEX, no alias)', () => {
-    expect(getVenuesSupporting('TSLA').length).toBe(5);
+  it('TSLA: 5 promoted venues + KUCOIN shadow (direct USDT match on every CEX, no alias)', () => {
+    // PILOT-ADAPTERS-W2 / C3 (2026-05-19): KuCoin added to TSLA coverage
+    // (KuCoin has TSLAUSDTM direct). Widened from `length == 5` to
+    // membership-check.
+    const venues = getVenuesSupporting('TSLA');
+    expect(venues).toContain('HL');
+    expect(venues).toContain('BINANCE');
+    expect(venues).toContain('BYBIT');
+    expect(venues).toContain('OKX');
+    expect(venues).toContain('BITGET');
+    expect(venues).toContain('KUCOIN');
   });
 
   it('BTC (non-TradFi): returns all 5 venues by default (function only narrows TradFi)', () => {

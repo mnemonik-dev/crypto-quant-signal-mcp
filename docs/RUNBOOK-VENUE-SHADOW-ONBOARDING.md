@@ -382,3 +382,168 @@ If any returns `HTTP 4xx` with `X-Cache: FunctionGeneratedResponse from
 cloudfront` or similar function-level rejection from BOTH geos → flag
 HALT-class and triage paths (defer / degraded / auth-investigate).
 
+
+---
+
+## Appendix — Wave 2 CEX adapter lessons (PILOT-ADAPTERS-W2, 2026-05-19)
+
+Wave 2 shipped 3 CEX shadow adapters (Gate.io + MEXC + KuCoin) into shadow
+mode. All 3 share Binance-family architecture (custom REST envelope; auth-
+free public read paths; 8h funding cadence × 1095 annualization). The
+divergence is on candle response shape + symbol naming + TradFi catalog
+coverage. Per Mr.1 "integrate all in one batch" directive 2026-05-19, the
+3 chapters shipped full TRADFI_ALIASES maps + venue-coverage.ts extensions
+in lockstep.
+
+### Archetype D: Custom-envelope CEX with all-in-one ticker (Gate.io pattern)
+
+**Gate.io (719 USDT perps + 26 TradFi)** ships a JSON REST API at
+`api.gateio.ws/api/v4/futures/usdt/*`:
+
+- Custom envelope: array responses for tickers/contracts/klines (no
+  `{code, data, msg}` wrapper).
+- Symbol convention: `<COIN>_USDT` (underscore separator).
+- Candle response row-wise with field names `o/h/l/c/v/sum/t` — `t` in
+  SECONDS (not ms; adapter converts).
+- All-in-one ticker `/api/v4/futures/usdt/tickers?contract=<sym>` bundles
+  `funding_rate + mark_price + index_price + total_size (OI) +
+  volume_24h_quote + last + change_percentage`.
+- Embedded funding rate AND funding interval on the contracts list (one
+  call gives funding for all venues at once via `getPredictedFundings`).
+
+**TRADFI_ALIASES map (6 entries):**
+`GOLD → XAU` (Gate has BOTH XAU and XAUT spot symbols; prefer XAU per
+Binance canonical pattern). `SILVER → XAG, PLATINUM → XPT, PALLADIUM → XPD,
+COPPER → XCU, NATGAS → NG`. Stocks (AMD/BABA/COST/CRWV/HIMS/INTC/LITE/LLY/
+MSFT/MU/NFLX/SNDK/TSM/USAR) + ETFs (EWJ/EWY) + VIX route DIRECT.
+
+**Adapter authoring**: ~245 LoC fresh implementation (NOT a Binance clone
+— different field names + seconds-not-ms time + array envelope). Single
+all-in-one ticker call simplifies `getAssetContext` compared to Binance's
+3-fan-out (premiumIndex + openInterest + ticker/24hr).
+
+### Archetype E: Column-wise candle response (MEXC pattern)
+
+**MEXC (881 USDT perps + 15 TradFi)** ships REST at
+`contract.mexc.com/api/v1/contract/*`:
+
+- Envelope: `{success, code, data:{...}}` — adapter unwraps `.data`.
+- Symbol convention: `<COIN>_USDT` (underscore — same as Gate).
+- **Candle response is COLUMN-WISE**: `{time:[], open:[], high:[],
+  low:[], close:[], vol:[], amount:[]}`. Adapter MUST zip-transpose into
+  row-wise `Candle[]`. Unique among the 3 W2 venues.
+- Kline interval strings are SNAKE-UPPERCASE: `Min1`, `Min5`, `Min15`,
+  `Min30`, `Min60`, `Hour4`, `Hour8`, `Day1`, `Week1`, `Month1`.
+- All-in-one ticker `/api/v1/contract/ticker?symbol=<sym>` bundles
+  `fairPrice (=mark) + indexPrice + lastPrice + holdVol (=OI) +
+  fundingRate + volume24 + amount24 + high24Price + lower24Price`.
+- **The dedicated OI endpoint `/api/v1/contract/open_interest/<sym>`
+  returns Akamai 403 from any IP**. Use ticker `holdVol` instead.
+
+**MEXC's unique TradFi naming**: uses descriptive English names where
+other CEXes use trading-symbol abbreviations:
+- `USOIL_USDT` ≠ `CL_USDT` (canonical CL = WTI crude → alias `CL: 'USOIL'`).
+- `UKOIL_USDT` ≠ `BRENT_USDT` (canonical BRENTOIL → alias `BRENTOIL: 'UKOIL'`).
+- `SILVER_USDT` (literal; canonical name match).
+- `COPPER_USDT` (literal; canonical name match).
+- `XAUT_USDT` (Tether Gold, NOT XAU; price-probe confirmed $4546 ≈ gold
+  spot $4555 → 0.20% spread within tolerance per
+  `semantic-fingerprint-probe-before-alias-commit` skill).
+
+**TRADFI_ALIASES map (4 entries):** `GOLD → XAUT, CL → USOIL,
+BRENTOIL → UKOIL, PLATINUM → XPT, PALLADIUM → XPD`. SILVER/COPPER/FX
+(EUR/GBP/JPY)/JP225/EWJ/EWY/XLE route DIRECT.
+
+**Adapter authoring**: ~245 LoC. The column-wise transpose helper is
+~10 LoC inline; everything else mirrors the Gate.io pattern.
+
+### Archetype F: X-prefix + M-suffix legacy convention (KuCoin pattern)
+
+**KuCoin Futures (594 USDT perps + 36 TradFi)** at
+`api-futures.kucoin.com/api/v1/*` is the most-divergent of the 3:
+
+- **Symbol convention: `<COIN>USDTM`** (M-suffix for USDT-margined) +
+  **`BTC → XBT` override** (X-prefix replaces B per KuCoin legacy spot
+  convention; `XBTUSDTM` not `BTCUSDTM`). Other coins: M-suffix only.
+- `contracts/active` IS the all-in-one ticker — single endpoint returns
+  the instrument list AND per-contract live data (markPrice, indexPrice,
+  openInterest in contracts, multiplier, fundingFeeRate,
+  nextFundingRateTime as ms-until-next, daily ticker fields).
+- Single-contract endpoint `/api/v1/contracts/<symbol>` for per-symbol
+  fetch.
+- Kline `granularity` is **INTEGER MINUTES** (60 for 1h, 15 for 15m,
+  1440 for 1d, etc.). NOT a string.
+- Candle response is row-wise array-of-arrays `[t, o, h, l, c, v]` —
+  Binance-like row shape but raw integer-minutes granularity index.
+- OI multiplier-aware: `openInterest` is in CONTRACTS; multiply by
+  `multiplier` (e.g. 0.001 for XBT) to get base-asset OI.
+
+**TRADFI_ALIASES map (4 entries):** `GOLD → XAUT` (KuCoin has only XAUT;
+price-probe confirmed $4548 ≈ gold spot), `SILVER → XAG, PLATINUM → XPT,
+PALLADIUM → XPD`. **26 stocks route DIRECT** (AAPL/AMD/AMZN/BABA/COIN/
+COST/CRCL/CRWV/GOOGL/HIMS/HOOD/INTC/LITE/LLY/META/MSFT/MSTR/MU/NFLX/
+NVDA/ORCL/PLTR/SNDK/TSLA/TSM/USAR). ETFs EWJ/EWY direct. COPPER/CL/
+NATGAS direct.
+
+**KUCOIN_SYMBOL_OVERRIDES** map: `{ BTC: 'XBT' }` — single entry; ETH and
+other crypto don't need overrides.
+
+**SPX trap (consistent with TRADFI-SYMBOL-ALIAS-W1 lesson)**: `SPXUSDTM`
+on KuCoin is the SPX6900 memecoin ($0.37 mark), NOT the S&P 500 index.
+**DO NOT alias `SP500 → SPX`** on KuCoin. SP500 stays HL-only.
+
+**Adapter authoring**: ~245 LoC. Most divergent of the 3 (X-prefix
+override + M-suffix + integer-minutes granularity + multiplier-aware OI).
+All endpoints publicly accessible (no HMAC required for read paths —
+confirmed via Plan-Mode probe).
+
+### Semantic-fingerprint price-probe (Wave-2 application)
+
+The TRADFI-SYMBOL-ALIAS-W1 lesson (`semantic-fingerprint-probe-before-
+alias-commit` skill) fired again in W2:
+
+- `SPX_USDT` (Gate) = $0.37 = SPX6900 memecoin → DO NOT alias as SP500.
+- `SPXUSDTM` (KuCoin) = $0.37 = SPX6900 memecoin → DO NOT alias.
+- `XAUT` (Gate/MEXC/KuCoin) = $4546-4549 vs gold spot $4555 → 0.20%
+  Tether redemption spread, within tolerance → SAFE to alias as GOLD on
+  venues where XAU is not listed.
+
+**Rule: every TRADFI alias candidate gets a price-probe BEFORE adapter
+ships**. Run the bash one-liner from the cross-archetype probe checklist
+in the W1 appendix above. Fail-loud if mark-price is >2× off
+expected order of magnitude.
+
+### venue-coverage.ts full-stack alignment lesson
+
+C1 (Gate.io) initially shipped with adapter `TRADFI_ALIASES` but no
+corresponding `src/lib/venue-coverage.ts` extension. Live MCP probe
+caught the failure immediately:
+
+```
+get_trade_call({coin:"GOLD", exchange:"GATE"})
+→ TRADFI_SYMBOL_UNSUPPORTED_ON_VENUE (gate fires before adapter)
+```
+
+The venue-coverage gate at `src/tools/get-trade-call.ts:111` checks
+`getVenuesSupporting(coin).includes(exchange)` BEFORE calling the
+adapter. Without the matrix extension, the adapter's TRADFI_ALIASES map
+is functionally dead.
+
+**Rule: per `feedback_full_stack_alignment` memory** — adapter
+TRADFI_ALIASES and `venue-coverage.ts` matrix are a coupled pair. Every
+W2 chapter touches BOTH in lockstep. The C1-FF hotfix commit (~30 min
+after C1's initial deploy) added the missing matrix entries; C2 + C3
+included them in the initial commit.
+
+When onboarding venue N+1:
+1. Probe venue's TradFi catalog against `TRADFI_FALLBACK` 60-symbol set.
+2. Build `TRADFI_ALIASES` map per the per-venue native conventions.
+3. **In the same commit**, extend `src/lib/venue-coverage.ts`:
+   - Add the new venue to existing PARTIAL_COVERAGE rows where it has
+     that TradFi listing.
+   - Move HL_ONLY entries OUT to PARTIAL_COVERAGE when the new venue
+     unlocks them (e.g. C2 MEXC moved EUR/JPY/JP225/BRENTOIL out).
+   - Add NEW PARTIAL_COVERAGE rows for TradFi symbols that previously
+     defaulted to ALL_5 but the new venue adds coverage for.
+4. Live MCP probe a NON-CRYPTO TradFi call against the new venue to
+   confirm the matrix extension is correct end-to-end.
