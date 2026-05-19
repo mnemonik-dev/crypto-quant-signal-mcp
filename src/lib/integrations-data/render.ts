@@ -117,3 +117,74 @@ ${sections.join('\n\n')}
 export function normalizeHtml(html: string): string {
   return html.replace(/\s+/g, ' ').trim();
 }
+
+// ── /integrations index-page renderer (C3) ────────────────────────────
+//
+// Separate renderer for the algovault.com/integrations index page. Same
+// data files as the docs.html renderer above, but card-grid layout
+// matching the existing exchange-tile aesthetic (vs docs.html's table +
+// <details> walkthrough layout).
+//
+// Exchange-kit cards keep the existing tile shape (logo + Demo→ link).
+// MCP-client + AI-agent cards use a simpler text-only shape (diamond
+// accent + display name + whatYouGet + setupSummary + View tutorial→).
+
+const EXCHANGE_LOGO_OVERRIDES: Record<string, { src: string; classes: string }> = {
+  binance: { src: '/assets/logos/binance.svg', classes: 'w-10 h-10 object-contain' },
+  okx: { src: '/assets/logos/okx.svg', classes: 'w-10 h-10 object-contain invert' },
+  bybit: { src: '/assets/logos/bybit.png', classes: 'w-10 h-10 object-contain' },
+  bitget: { src: '/assets/logos/bitget.png', classes: 'w-10 h-10 object-contain' },
+};
+
+const EXCHANGE_DEMO_URL: Record<string, string> = {
+  binance: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/binance',
+  okx: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/okx',
+  bybit: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bybit',
+  bitget: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bitget',
+};
+
+function renderIndexCard(entry: IntegrationEntry): string {
+  const utmHref = `${entry.fullTutorialUrl}?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-${entry.slug}`;
+  const plausibleProps = `{props:{surface:'${entry.surfaceType}',slug:'${entry.slug}',source:'integrations_index'}}`;
+  const logo = EXCHANGE_LOGO_OVERRIDES[entry.slug];
+  const headIcon = logo
+    ? `<img src="${logo.src}" alt="${entry.displayName} logo" class="${logo.classes}">`
+    : `<span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>`;
+  const heading =
+    entry.surfaceType === 'exchange-kit'
+      ? `${entry.displayName} &times; AlgoVault`
+      : entry.displayName;
+  const demoUrl = EXCHANGE_DEMO_URL[entry.slug];
+  const demoLink = demoUrl
+    ? `\n          <a href="${demoUrl}" class="text-steel-400 hover:text-mint-400" onclick="event.stopPropagation()">Demo &rarr;</a>`
+    : '';
+  return `      <a href="${utmHref}"
+         onclick="if(window.plausible)plausible('Integration View',${plausibleProps})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          ${headIcon}
+          <h3 class="text-white font-semibold text-base">${heading}</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">${entry.whatYouGet}</p>
+        <p class="text-gray-600 text-xs mb-3">${entry.setupSummary}</p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>${demoLink}
+        </div>
+      </a>`;
+}
+
+/**
+ * Render the inner content of a BUILD block in landing/integrations.html
+ * for one surface (mcp-clients / ai-agents / exchange-kits). Returns the
+ * concatenated card HTML for all hasDedicatedPage:true entries.
+ *
+ * The outer <section> wrapper + H2 + intro + grid <div> live in the
+ * landing/integrations.html source; this function only emits the cards
+ * that go between the grid div's BUILD markers.
+ */
+export function renderIndexGrid(surface: SurfaceModule): string {
+  return surface.entries
+    .filter((e) => e.hasDedicatedPage)
+    .map(renderIndexCard)
+    .join('\n');
+}
