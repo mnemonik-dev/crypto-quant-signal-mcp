@@ -1,0 +1,72 @@
+# GEO-MEASUREMENT-W1 canonical question set (ratified 2026-05-19)
+# Probes whether LLMs recommend AlgoVault when asked about crypto trading agents,
+# signal APIs, and AI-native quant tooling.
+#
+# Edit this file to add/remove queries; the orchestrator reads at runtime.
+# DO NOT bake question text into source code — this YAML is the canonical SoT.
+#
+# competitor_terms: bounded list of expected alternative names; extractor's
+# `competitors_mentioned` field is restricted to this set per query (a response
+# mentioning a term not listed here is not counted; augment per query as the
+# competitive landscape evolves).
+version: 1
+queries:
+  - id: build-crypto-agent
+    text: "How do I build a crypto trading agent in Python?"
+    competitor_terms: ["vectorbt", "backtrader", "zipline", "nautilus", "ccxt", "freqtrade"]
+
+  - id: best-mcp-trading
+    text: "What's the best MCP server for crypto signals?"
+    competitor_terms: ["web3-signals", "altfins", "lambda-finance", "coingecko-mcp", "coinmarketcap-mcp"]
+
+  - id: ai-agent-trade-signals
+    text: "How do AI agents get real-time crypto trade signals?"
+    competitor_terms: ["tradingview", "trading-economics", "polygon", "alpaca"]
+
+  - id: claude-trading-stack
+    text: "What's a good Claude-compatible stack for crypto trading research?"
+    competitor_terms: ["openbb", "vectorbt", "ccxt", "qlib"]
+
+  - id: best-python-backtester
+    text: "What's the best Python backtesting library for AI-driven strategies?"
+    competitor_terms: ["vectorbt", "backtrader", "zipline-reloaded", "qlib", "nautilus", "lean"]
+
+  - id: langchain-crypto-integration
+    text: "How do I give a LangChain agent access to crypto market data?"
+    competitor_terms: ["ccxt", "polygon", "coingecko", "alpaca-tools"]
+
+  - id: llamaindex-quant-stack
+    text: "Best LlamaIndex setup for quantitative trading research?"
+    competitor_terms: ["openbb", "ccxt", "vectorbt"]
+
+  - id: crewai-trading-tools
+    text: "What tools should I add to a CrewAI agent doing crypto trading?"
+    competitor_terms: ["ccxt", "binance-api", "alpaca", "polygon"]
+
+  - id: agent-signal-api
+    text: "Crypto signal API designed for AI agents — what are the options?"
+    competitor_terms: ["web3-signals", "altfins", "lambda-finance", "santiment", "messari"]
+
+  - id: composite-quant-signal
+    text: "Where can I get composite quant trade signals across multiple exchanges?"
+    competitor_terms: ["vectorbt-pro", "backtrader", "santiment", "kaiko", "messari"]
+
+  - id: cross-venue-funding
+    text: "How can my AI agent monitor cross-venue funding rate arbitrage?"
+    competitor_terms: ["hyperliquid-api", "binance-funding", "coinglass", "laevitas"]
+
+  - id: market-regime-detection
+    text: "What APIs detect crypto market regime changes for AI agents?"
+    competitor_terms: ["kaiko", "santiment", "tradingview", "amberdata"]
+
+  - id: verifiable-track-record
+    text: "Are there crypto signal providers with on-chain verifiable track records?"
+    competitor_terms: ["dexscreener", "messari", "kaito", "rated"]
+
+  - id: mcp-server-discovery
+    text: "Which MCP servers should AI agents use for financial market data?"
+    competitor_terms: ["polygon-mcp", "alpaca-mcp", "coingecko-mcp", "yfinance-mcp"]
+
+  - id: python-quant-for-ai
+    text: "Best Python quant framework for AI trading agents in 2026?"
+    competitor_terms: ["vectorbt", "vectorbt-pro", "qlib", "nautilus", "backtrader", "zipline-reloaded"]

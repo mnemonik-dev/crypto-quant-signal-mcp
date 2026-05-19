@@ -39,6 +39,10 @@ COPY landing/skills.html ./landing/skills.html
 # route in dist/index.js. Caddy routes /integrations to Express ahead of
 # the static catch-all (see Caddyfile algovault.com block).
 COPY landing/integrations.html ./landing/integrations.html
+# GEO-MEASUREMENT-W1 (C1, 2026-05-19) — canonical 15-query SoT read at
+# weekly-cron-fire time by dist/lib/geo-orchestrator.js::loadQueries().
+# Path resolution: path.resolve(__dirname, '..', '..', 'landing', 'Prompt', ...).
+COPY landing/Prompt/ ./landing/Prompt/
 EXPOSE 3000
 ENV TRANSPORT=http
 USER node

@@ -87,6 +87,11 @@ import { formatChatKnowledgeResponse } from './lib/chat-knowledge-formatter.js';
 // rotation visibility flow from day one.
 import { ensureChatAnalyticsSchema, recordChatEvent } from './lib/chat-analytics.js';
 import { getChatAnalyticsHtml } from './lib/chat-analytics-dashboard.js';
+// GEO-MEASUREMENT-W1 (C1, 2026-05-19): geo_query_runs + geo_mentions schema
+// + geo_weekly_summary view. Idempotent DDL fired at module-init.
+import { ensureGeoSchema } from './lib/geo-storage.js';
+// GEO-MEASUREMENT-W1 (C2, 2026-05-19): admin GEO dashboard at /admin/geo-dashboard.
+import { getGeoDashboardData, renderGeoDashboardHtml } from './lib/geo-dashboard.js';
 
 /**
  * Format a thrown error into the MCP tool-content payload. v1.10.2: when the
@@ -1098,6 +1103,25 @@ async function startHttp() {
       }
     });
 
+    // GEO-MEASUREMENT-W1 (C2, 2026-05-19): admin GEO dashboard. Measures whether
+    // LLMs recommend AlgoVault when asked about crypto trading agents. Mirrors
+    // chat-analytics auth pattern: inline isAdminAuthorized(req) check.
+    app.get('/admin/geo-dashboard', async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).send('Unauthorized — add ?key=YOUR_ADMIN_KEY to the URL');
+      }
+      try {
+        const lookbackWeeks = Math.max(1, Math.min(52, parseInt(String(req.query.weeks ?? '12'), 10) || 12));
+        const data = await getGeoDashboardData({ lookbackWeeks });
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(renderGeoDashboardHtml(data));
+      } catch (err) {
+        console.error(`[/admin/geo-dashboard] internal error: ${err instanceof Error ? err.message : err}`);
+        res.status(500).send('Internal error rendering GEO dashboard');
+      }
+    });
+
     // Signal performance dashboard (admin-only)
     app.get('/performance-dashboard', (req, res) => {
       const key = req.query.key as string;
@@ -1454,6 +1478,10 @@ async function startHttp() {
   // Fire-and-forget DDL: table + 4 indexes + chat_analytics_daily view.
   // Idempotent. Same pattern as ensureChatUsageTable.
   ensureChatAnalyticsSchema();
+
+  // ── GEO-MEASUREMENT-W1 (C1, 2026-05-19): ensure geo_query_runs + geo_mentions
+  // + geo_weekly_summary view. Fire-and-forget DDL; idempotent.
+  ensureGeoSchema();
 
   // ── AV-CHAT-MCP-W1 (C2, 2026-05-18): /api/search HTTP endpoint ──
   // BM25 lexical retrieval over the auto-generated KnowledgeBundle. Shape
