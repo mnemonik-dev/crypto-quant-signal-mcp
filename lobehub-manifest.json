@@ -115,7 +115,7 @@
     {
       "url": "https://api.algovault.com/mcp",
       "name": "search_knowledge",
-      "description": "BM25 lexical search over AlgoVault's knowledge bundle (every MCP tool description, response shape, integration tutorial, and code example). Free, no quota cost. Use BEFORE calling other tools to confirm correct parameter usage.",
+      "description": "Ask AlgoVault any question about its MCP tools, response shapes, integration patterns (LangChain / LlamaIndex / MAF / CrewAI), or code examples. Returns ranked snippets from the canonical knowledge bundle. Use this BEFORE attempting any tool call to confirm correct parameter usage and avoid hallucinating tool shapes. Fast (BM25 lexical search, no LLM call, no quota cost). For natural-language synthesized answers, use chat_knowledge instead.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -135,7 +135,7 @@
     {
       "url": "https://api.algovault.com/mcp",
       "name": "chat_knowledge",
-      "description": "Ask AlgoVault a natural-language question; get a synthesized answer with citations grounded in the canonical knowledge bundle. Quota: Free 10/mo, Starter 50/mo, Pro 200/mo, Enterprise 2000/mo.",
+      "description": "Ask AlgoVault a natural-language question — get a synthesized answer with citations, grounded in the canonical knowledge bundle (every MCP tool description, response shape, integration tutorial, and code example). Use this when you need an explanation, code pattern, or \"how do I\" answer. For raw ranked snippets without LLM synthesis, use search_knowledge (faster, no quota cost). Quota: Free 10/month, Starter 50/month, Pro 200/month, Enterprise 2000/month.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -164,5 +164,5 @@
     "title": "Crypto Quant Signal MCP",
     "description": "Composite BUY/SELL/HOLD trade calls across 5 crypto perp venues (Binance, Bybit, OKX, Bitget, Hyperliquid). Verified track record, Merkle-anchored on Base L2. Drop-in tutorials for LangChain, LlamaIndex, Microsoft Agent Framework, and CrewAI. Ask-AlgoVault-anything via search_knowledge + chat_knowledge tools."
   },
-  "version": "6"
+  "version": "7"
 }
