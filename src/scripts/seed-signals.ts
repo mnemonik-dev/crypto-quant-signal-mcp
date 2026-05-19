@@ -59,6 +59,11 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // SEED-LOOP-W2 follow-up). Slightly higher delay (400ms) because edgeX
   // has no published rate-limit budget; conservative throttle for unknown.
   'EDGEX':   400,
+  // PILOT-ADAPTERS-W2 / C1 (2026-05-19): GATE shadow venue. Same scope
+  // deferral as ASTER/EDGEX — Record<ExchangeId, number> key required for
+  // type-system compat; seed-loop branch is OUT of C1 scope per Scope Rule
+  // (deferred to PILOT-ADAPTERS-SEED-LOOP-W2). Conservative 300ms delay.
+  'GATE':    300,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)
