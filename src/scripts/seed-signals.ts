@@ -83,6 +83,11 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // BingX Swap V2 USDT-M perpetual (638 USDT-listed). Rate-limit upgrade
   // 2025-10-16 (per primary docs); conservative 300ms.
   'BINGX':   300,
+  // PILOT-ADAPTERS-W3A / C3 (2026-05-20): HTX shadow venue. Type-system
+  // cascade only; seed-loop branch deferred to PILOT-ADAPTERS-SEED-LOOP-W2.
+  // HTX (formerly Huobi) Linear USDT-Margined Swap (233 USDT-listed). Most-
+  // generous rate limit of W3A batch (800req/s per-IP market data); 200ms.
+  'HTX':     200,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)

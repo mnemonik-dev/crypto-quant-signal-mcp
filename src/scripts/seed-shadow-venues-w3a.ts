@@ -56,8 +56,7 @@ const W3A_VENUES: ShadowVenueSeed[] = [
   {
     exchangeId: 'HTX',
     assetCount: 233,
-    notes: 'PILOT-ADAPTERS-W3A C3 (2026-05-20) — HTX (formerly Huobi) Linear USDT-Margined Swap; $4.75B 24h OI / 233 USDT swap perps / +14.48pp derivs swing Q1 2026 / 800req/s per-IP market-data rate limit / Tier-A reputation, recovery story.',
-    guardEnv: 'W3A_C3_ACTIVATED',
+    notes: 'PILOT-ADAPTERS-W3A C3 (2026-05-20) — HTX (formerly Huobi) Linear USDT-Margined Swap; $4.75B 24h OI / 233 USDT swap perps / +14.48pp derivs swing Q1 2026 / 800req/s per-IP market-data rate limit / Tier-A reputation, recovery story. C3 ACTIVATED (guard removed). Symbol convention BTC-USDT (hyphen, mirrors BingX). 3-call fan-out via Promise.all([merged-ticker, swap_funding_rate, swap_open_interest]). Direct-float JSON throughout; kline size accepts normal integer range up to ≥2000.',
   },
 ];
 

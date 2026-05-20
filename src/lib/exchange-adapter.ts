@@ -19,6 +19,7 @@ import { MEXCAdapter } from './adapters/mexc.js';
 import { KuCoinAdapter } from './adapters/kucoin.js';
 import { PhemexAdapter } from './adapters/phemex.js';
 import { BingxAdapter } from './adapters/bingx.js';
+import { HTXAdapter } from './adapters/htx.js';
 
 const adapters = new Map<ExchangeId, ExchangeAdapter>();
 
@@ -59,6 +60,9 @@ export function getAdapter(exchange?: ExchangeId): ExchangeAdapter {
         break;
       case 'BINGX':
         adapter = new BingxAdapter();
+        break;
+      case 'HTX':
+        adapter = new HTXAdapter();
         break;
       case 'HL':
       default:

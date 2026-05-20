@@ -547,3 +547,139 @@ When onboarding venue N+1:
      defaulted to ALL_5 but the new venue adds coverage for.
 4. Live MCP probe a NON-CRYPTO TradFi call against the new venue to
    confirm the matrix extension is correct end-to-end.
+
+---
+
+## Wave 3A CEX adapter lessons (PILOT-ADAPTERS-W3A 2026-05-20)
+
+Three Tier-A established CEX adapters shipped sequentially into shadow:
+Phemex (C1) + BingX (C2) + HTX (C3). Each lands an `ExchangeAdapter`
+implementation + Zod widening + dispatch + venue-coverage extension +
+unit tests + venue insert via the one-shot `seed-shadow-venues-w3a.ts`
+script. Below are the lessons unique to W3A's batch.
+
+### Per-venue symbol convention
+
+| Venue   | Convention   | Example       | Note                                            |
+|---------|--------------|---------------|-------------------------------------------------|
+| Phemex  | concatenated | `BTCUSDT`     | V2 hedged USDT perp; **no `c` prefix** (legacy non-hedged uses `c`-prefix on a DIFFERENT product family — `cBTCUSD` — NOT targeted) |
+| BingX   | hyphen       | `BTC-USDT`    | mirrors HTX                                     |
+| HTX     | hyphen       | `BTC-USDT`    | field name is `contract_code`, not `symbol`     |
+
+### Phemex Rp/Rv/Rr REAL-suffix clarification (NOT Ev/Rv encoding)
+
+Plan-Mode spec warned about Phemex's "Ev/Rv scaled-integer encoding"
+where prices need `decodeEv(value, scale)` division by 10^scale. **For
+the V2 hedged USDT perpetual family (`perpProductsV2`), this is FICTIONAL.**
+
+Live probe 2026-05-20 of `BTCUSDT` V2 contract metadata:
+```
+priceScale: 0
+ratioScale: 0
+```
+
+And the V2 ticker endpoint `/md/v2/ticker/24hr?symbol=BTCUSDT` returns:
+```
+closeRp = "76646.9"       (Real Price)
+markPriceRp = "76648.7"
+fundingRateRr = "0.00007873"  (Real Ratio)
+openInterestRv = "2726.8480639" (Real Value)
+```
+
+The `Rp/Rv/Rr/Rq` suffix = **R**eal value (already unscaled). The
+`Ev/Er` encoding only applies to the LEGACY non-hedged inverse contracts
+(`data.products` array, e.g. `cBTCUSD`). For the V2 USDT-margined hedged
+perp — the actual W3A integration target — NO decoding required.
+
+**Adapter implication:** Phemex `getCandles` parses the 10-field kline row
+`[ts_sec, interval_sec, last_close, open, high, low, close, volume,
+turnover, symbol]` as direct decimals (indices 3-7 for OHLCV). No
+`decodeEv()` helper exists; no decoding unit tests needed.
+
+### Phemex kline `limit` is a FIXED ENUM
+
+`/exchange/public/md/v2/kline/last?symbol=&resolution=&limit=N` accepts
+ONLY: `{5, 10, 50, 100, 500, 1000}` → HTTP 200. Any other value (11, 20,
+30, 40, 60, 70, 75, 80, 90, 110, 120, 150, 200, 250, 300, ...) returns
+HTTP 400 `code:30000 "Please double check input arguments"`.
+
+This was the most surprising W3A finding. Initial adapter shipped
+`KLINE_LIMIT = 200` and got caught by the post-deploy R7 verification
+gate (`Phemex API 400: Bad Request`); hotfix commit `c2b258c` bumped to
+`KLINE_LIMIT = 1000` (max of the enum). **No other W3A venue has this
+quirk** — BingX (`limit` up to 1440) and HTX (`size` up to ≥2000) accept
+normal integer ranges.
+
+### BingX rate-limit upgrade context (2025-10-16)
+
+BingX did a public rate-limit refresh per their bingx.com support
+article 31103871611289. Adapter ships standard `Retry-After` parse on
+HTTP 429 + 500ms backoff between attempts. The upgrade is generous
+enough that 429s rarely fire under shadow-mode load (1 candle fetch
++ 3-call fan-out per `get_trade_call` cycle).
+
+### HTX rate-limit generosity (800 req/sec per-IP, market-data only)
+
+HTX is the most-generous of W3A's three on market-data endpoints.
+Retries should rarely fire. The non-market public endpoints have
+240/3s per-IP — still ample for shadow venue load.
+
+### TradFi coverage per W3A venue (Plan-Mode probe 2026-05-20)
+
+| Coin     | Phemex     | BingX    | HTX        | Notes                                  |
+|----------|------------|----------|------------|----------------------------------------|
+| GOLD     | XAU ✓      | XAUT ✓   | XAU ✓      | HTX has BOTH XAU + XAUT; prefer XAU spot (mirrors Gate). BingX only has XAUT. |
+| SILVER   | XAG ✓      | (none)   | XAG ✓      |                                        |
+| PLATINUM | XPT ✓      | (none)   | XPT ✓      |                                        |
+| PALLADIUM| XPD ✓      | (none)   | XPD ✓      |                                        |
+| COPPER   | direct ✓   | (none)   | direct ✓   | venue uses literal canonical name      |
+| NATGAS   | NG ✓       | (none)   | direct ✓   | Phemex aliases; HTX literal            |
+| USOIL    | CLO ✓      | (none)   | direct ✓   | Phemex's `CLO` is WTI oil; HTX literal |
+| BRENTOIL | (none)     | (none)   | direct ✓   | HTX-only of W3A batch                  |
+| VIX      | direct ✓   | (none)   | (none)     | Phemex-only of W3A batch               |
+| **SP500**| **direct ✓** ($7338 real S&P 500) | (none)   | (none)     | **Phemex UNIQUELY routable** — only shadow CEX with the real S&P 500 perp |
+| Stocks (TSLA/NVDA/META/GOOGL/AAPL/AMZN/COIN/MSTR/MSFT) | direct (8 of 9 listed; HOOD/ORCL/PLTR/CRCL not) | (none) | direct (5 of 9: META/NVDA/MSFT/GOOGL/AAPL listed) | sparsity varies; matrix matters |
+
+### SPX6900 memecoin trap — 4th-sighting affirmation
+
+All 3 W3A venues carry `SPXUSDT` / `SPX-USDT` at $0.36 — the SPX6900
+memecoin namespace collision (NOT S&P 500). 4th sighting across the
+adapter fleet (Binance / Gate / KuCoin previously). **None of the three
+W3A `TRADFI_ALIASES` maps include SPX.** Phemex uniquely also has the
+real `SP500USDT` ($7338 verified live); that routes via identity (no
+alias row needed). HTX has BOTH `XAU` (real spot, $4467) AND `XAUT`
+(Tether Gold, $4466) — adapter prefers `GOLD → XAU` for spot fidelity.
+
+### `getPredictedFundings()` returns `[]` for all 3 venues (W3A Q-4 ratification)
+
+Phemex has no working batch-tickers endpoint (probed
+`/md/v2/ticker/24hr/all` returned empty; `/md/v3/ticker/24hr/all`
+returned null). BingX has per-symbol `/premiumIndex` only.  HTX has
+per-symbol `/swap_funding_rate` only. For a shadow venue not yet
+published to `scan_funding_arb`, returning `[]` is the correct shape —
+cross-venue funding fanout fires only for promoted venues. Per
+PILOT-ADAPTERS-W3A Plan-Mode Q-4 ratification 2026-05-20. Promotion-
+ready implementation can wire per-canonical-universe (~30 coin) parallel
+fetch when each venue clears the PFE WR ≥ 0.80 + `asset_count × 10`
+sample gate.
+
+### Seed-script: bypass `dbRun` fire-and-forget on PgBackend
+
+`venue-store.insertVenue()` calls `dbRun(...)` which on `PgBackend` is
+fire-and-forget (`this.pool.query(...).catch(err => ...)` — Promise
+dropped). In a one-shot script context the pool gets closed BEFORE the
+INSERT commits. **`seed-shadow-venues-w3a.ts` bypasses the helper** and
+uses `pg.Pool` directly with `await pool.query(...)` + `RETURNING
+exchange_id` for explicit insert-landed confirmation. Same class of bug
+as GEO-MEASUREMENT-W1's `dbExec` fire-and-forget DDL-bundling hotfix
+(`5b2244f`). Permanent fix is the deferred `VENUE-STORE-AWAIT-INSERT-W1`
+follow-up to add a properly-awaitable `insertVenueAsync` on the helper.
+
+### Identifier-diff: actual 10 → 13 venues (NOT spec's 11 → 14)
+
+Plan-Mode spec's "11 venues post-W2 → 14 post-W3A" was off by 1.
+Lighter (PILOT-ADAPTERS-W1's third venue) is a DEX served via the
+`HyperliquidAdapter` route and never landed in the `ExchangeId` union
+nor the `venues` table. Pre-W3A state was **10 venues (5 promoted + 5
+shadow)**; post-W3A C3 is **13 venues (5 promoted + 8 shadow:
+ASTER/EDGEX/GATE/MEXC/KUCOIN/PHEMEX/BINGX/HTX)**.
