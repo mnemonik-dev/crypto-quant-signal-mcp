@@ -59,16 +59,16 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   // Existing promoted-CEX rows extended with GATE where Plan-Mode probe found a listing
   AMD:       ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
   BABA:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
-  COPPER:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX'],   // W2 C1 Gate XCU + C2 MEXC + C3 KuCoin literal; W3A C1 Phemex COPPER direct; W3A C3 HTX COPPER direct
+  COPPER:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W2 C1 Gate XCU + C2 MEXC + C3 KuCoin literal; W3A C1 Phemex COPPER direct; W3A C3 HTX COPPER direct
   COST:      ['HL', 'BINANCE', 'BITGET', 'GATE', 'KUCOIN'],
   CRWV:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
   GME:       ['HL', 'BINANCE', 'BITGET'],                  // not on Gate/MEXC/KuCoin
   HIMS:      ['HL', 'BITGET', 'GATE', 'KUCOIN'],
   LLY:       ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
-  NATGAS:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX'],   // Gate NG (alias) + KuCoin direct + W3A C1 Phemex NG (alias); W3A C3 HTX NATGAS direct
+  NATGAS:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // Gate NG (alias) + KuCoin direct + W3A C1 Phemex NG (alias); W3A C3 HTX NATGAS direct
   NFLX:      ['HL', 'BINANCE', 'BITGET', 'GATE', 'KUCOIN'],
-  PALLADIUM: ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX'],   // W2 Gate/MEXC/KuCoin XPD + W3A C1 Phemex XPD; W3A C3 HTX XPD
-  PLATINUM:  ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX'],   // W2 Gate/MEXC/KuCoin XPT + W3A C1 Phemex XPT; W3A C3 HTX XPT
+  PALLADIUM: ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W2 Gate/MEXC/KuCoin XPD + W3A C1 Phemex XPD; W3A C3 HTX XPD
+  PLATINUM:  ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W2 Gate/MEXC/KuCoin XPT + W3A C1 Phemex XPT; W3A C3 HTX XPT
   USAR:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
   XLE:       ['HL', 'BITGET', 'MEXC'],                      // C2 MEXC adds (not on Gate per Plan-Mode probe)
 
@@ -81,13 +81,13 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
 
   // NEW rows: TradFi symbols that previously defaulted to ALL_5 but Gate.io adds shadow-venue coverage
   GOLD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'BINGX', 'HTX'],     // W2 Gate XAU + MEXC XAUT + KuCoin XAUT; W3A C1 Phemex XAU; W3A C2 BingX XAUT; W3A C3 HTX XAU
-  SILVER:    ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX'],     // W2 Gate XAG + MEXC literal + KuCoin XAG; W3A C1 Phemex XAG; W3A C3 HTX XAG
+  SILVER:    ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],     // W2 Gate XAG + MEXC literal + KuCoin XAG; W3A C1 Phemex XAG; W3A C3 HTX XAG
   CL:        ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN'],     // C1 Gate + C2 MEXC USOIL + C3 KuCoin CL direct
   EWJ:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN'],     // C1+C2+C3
   EWY:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN'],     // C1+C2+C3
   INTC:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
   LITE:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
-  MSFT:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX'],   // W3A C1 Phemex MSFTUSDT direct; W3A C3 HTX MSFT-USDT direct
+  MSFT:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C1 Phemex MSFTUSDT direct; W3A C3 HTX MSFT-USDT direct
   MU:        ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
   SNDK:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
   TSM:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
@@ -95,23 +95,23 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   // C3-only NEW rows (KuCoin extends stocks beyond Gate's 14 + adds new ones)
   // W3A C1 (2026-05-20): Phemex adds AAPL/AMZN/COIN/GOOGL/META/MSTR/NVDA/TSLA
   // (8 stocks live-probed under perpProductsV2). ORCL/HOOD/PLTR/CRCL NOT on Phemex.
-  AAPL:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX'],   // KuCoin AAPLUSDTM + Phemex AAPLUSDT + HTX AAPL-USDT
-  AMZN:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX'],   // KuCoin AMZNUSDTM + Phemex AMZNUSDT (HTX does NOT list AMZN per W3A C3 probe)
-  COIN:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX'],
-  GOOGL:     ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX'],   // W3A C3 HTX GOOGL-USDT
+  AAPL:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // KuCoin AAPLUSDTM + Phemex AAPLUSDT + HTX AAPL-USDT
+  AMZN:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'WEEX'],   // KuCoin AMZNUSDTM + Phemex AMZNUSDT (HTX does NOT list AMZN per W3A C3 probe)
+  COIN:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'WEEX'],
+  GOOGL:     ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C3 HTX GOOGL-USDT
   HOOD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe; not on HTX per W3A C3 probe
-  META:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX'],   // W3A C3 HTX META-USDT
-  MSTR:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX'],
-  NVDA:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX'],   // W3A C3 HTX NVDA-USDT
+  META:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C3 HTX META-USDT
+  MSTR:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'WEEX'],
+  NVDA:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C3 HTX NVDA-USDT
   ORCL:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe
   PLTR:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe
-  TSLA:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX'],
+  TSLA:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'WEEX'],
   CRCL:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe
 
   // PILOT-ADAPTERS-W3A / C1 (2026-05-20): NEW rows for Phemex-unique TradFi
   // listings (SP500 moved out of HL_ONLY; USOIL was implicit ALL_5 default).
   SP500:     ['HL', 'PHEMEX'],   // moved out of HL_ONLY; Phemex SP500USDT is the REAL S&P 500 ($7338)
-  USOIL:     ['HL', 'PHEMEX', 'HTX'],   // Phemex CLOUSDT (alias from USOIL via TRADFI_ALIASES); HTX USOIL-USDT direct
+  USOIL:     ['HL', 'PHEMEX', 'HTX', 'WEEX'],   // Phemex CLOUSDT (alias from USOIL via TRADFI_ALIASES); HTX USOIL-USDT direct
 };
 
 /**
@@ -152,4 +152,4 @@ export function isVenueSupportedFor(coin: string, exchange: ExchangeId): boolean
  * Probe-date marker — useful for future "is this matrix stale?" audits.
  * Update in lockstep with re-running the alias coverage CSV.
  */
-export const COVERAGE_PROBED_AT = '2026-05-20';   // PILOT-ADAPTERS-W3A / C1+C2+C3 COMPLETE — Phemex (16 row extensions + SP500 moved out of HL_ONLY + USOIL new row); BingX (1 row extension: GOLD only — sparse TradFi catalog); HTX (11 row extensions: GOLD/SILVER/PLATINUM/PALLADIUM/COPPER/NATGAS/BRENTOIL/MSFT/AAPL/META/GOOGL/NVDA + USOIL row extension). Semantic-fingerprint probes: Phemex SP500USDT=$7338 real S&P 500 vs SPXUSDT=$0.36 memecoin; BingX SPX-USDT=$0.36 memecoin + XAUT=$4464.81 Tether Gold; HTX SPX-USDT=$0.36 memecoin + XAU=$4467.31 real spot gold + XAUT=$4466.75 Tether Gold (HTX has BOTH; alias prefers XAU spot)
+export const COVERAGE_PROBED_AT = '2026-05-20';   // PILOT-ADAPTERS-W3B / C1 (2026-05-20) — WEEX added to 9 stock rows + 6 commodity rows (SILVER/PLATINUM/PALLADIUM/COPPER/NATGAS/USOIL); WEEX has NO XAU/GOLD listing. SPX intentionally NOT aliased (5th-sighting memecoin trap confirmed cmt_spxusdt=$0.37).

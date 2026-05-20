@@ -88,6 +88,8 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // HTX (formerly Huobi) Linear USDT-Margined Swap (233 USDT-listed). Most-
   // generous rate limit of W3A batch (800req/s per-IP market data); 200ms.
   'HTX':     200,
+  // PILOT-ADAPTERS-W3B / C1 (2026-05-20): WEEX shadow venue. cmt_ prefix + 4h funding.
+  'WEEX':    300,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)
