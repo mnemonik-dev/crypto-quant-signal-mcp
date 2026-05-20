@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "wave": "ACTIVATION-PAYWALL-W1",
+    "emitted_at": "2026-05-20",
+    "purpose": "Canonical exclude-list for AC4-organic measurement (future wave: ACTIVATION-PAYWALL-W1-SOAK-MEASURE). Stripe Checkout completed-sessions matching ANY field below are operator-test conversions and MUST be excluded from organic-paid-conversion counts.",
+    "rule_cite": "ACTIVATION-PAYWALL-W1 spec R9 + AC4 + CLAUDE.md '## Data Integrity (THE LAW)' (no operator-test contamination in public/audit conversion counts)"
+  },
+  "operator_emails": [
+    "diophantus.hau@gmail.com",
+    "admin@algovault.com",
+    "algovaultlabs@gmail.com"
+  ],
+  "test_card_brands": [
+    "test"
+  ],
+  "test_card_numbers_documented_at": "https://docs.stripe.com/testing#cards",
+  "operator_stripe_session_ids_known_so_far": [
+    "cs_live_a1wrkLemtboPnt86XnOUyl3XiUatwcUnrUdAg2L0ZcUjrp0gIGpBhobGpO",
+    "cs_live_a1EUtSqyGn0NP60HElKyiL7tncGCoxOhEBdJFXSBSTbuJ0Gb7xoAqkapVn"
+  ],
+  "operator_metadata_markers": {
+    "utm_source": [
+      "operator_test",
+      "test_paywall_w1",
+      "smoke_test",
+      "ci_test"
+    ],
+    "utm_campaign": [
+      "operator_dev",
+      "smoke",
+      "soak_test"
+    ]
+  },
+  "exclusion_logic": {
+    "step_1": "MATCH session.customer_email against operator_emails (case-insensitive, trim). EXCLUDE if hit.",
+    "step_2": "MATCH session.id against operator_stripe_session_ids_known_so_far. EXCLUDE if hit.",
+    "step_3": "MATCH session.metadata.utm_source against operator_metadata_markers.utm_source. EXCLUDE if hit.",
+    "step_4": "MATCH session.metadata.utm_campaign against operator_metadata_markers.utm_campaign. EXCLUDE if hit.",
+    "step_5": "Test cards (4242 4242 4242 4242 et al per the docs URL above) are auto-flagged by Stripe's payment_method_details.card.brand field. EXCLUDE if brand == 'test' OR if last4 matches a known test-card last4 (e.g. '4242', '0341', '0119', '5556', '1117')."
+  },
+  "consumer_pattern": "ACTIVATION-PAYWALL-W1-SOAK-MEASURE (filed in ToDoList.md by this wave; fires 14d post-deploy 2026-06-03). The soak-measure wave reads this JSON + the live Stripe Checkout completed-session list, applies the 5-step exclusion, and produces a single audit doc with the NON-operator organic paid-conversion count + verdict on EXCHANGE-EXPANSION-CADENCE green-light condition (≥5 NON-operator Stripe Checkout completed-sessions sustained 14d post-deploy).",
+  "update_cadence": "Append-only — never delete entries. New operator-test session-ids added here as they're created (manual flow-testing, smoke tests, CI integration tests). The wave creating an operator-test session MUST file the session-id under `operator_stripe_session_ids_known_so_far` in the same commit."
+}

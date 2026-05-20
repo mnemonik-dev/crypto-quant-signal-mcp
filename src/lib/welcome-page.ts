@@ -10,14 +10,54 @@
  * bot validates via the internal-bypass-gated /api/bot/validate-key endpoint.
  */
 
+/**
+ * Sanitize a UTM-ish param to safe URL-injection-free chars. Anything outside
+ * [a-zA-Z0-9_:.-] is dropped; result is also length-capped. Empty when input
+ * is null/undefined/empty.
+ */
+function sanitizeUtm(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/[^a-zA-Z0-9_:.\-]/g, '').slice(0, 64);
+}
+
+export interface WelcomePageOptions {
+  utmSource?: string | null;
+  utmCampaign?: string | null;
+}
+
 export function getWelcomePageHtml(
   apiKey: string | null,
   tier: string | null,
   email: string | null,
+  opts: WelcomePageOptions = {},
 ): string {
+  const utmSource = sanitizeUtm(opts.utmSource);
+  const utmCampaign = sanitizeUtm(opts.utmCampaign);
+
+  // ACTIVATION-PAYWALL-W1: organic-visit paywall CTA. When the visitor lands
+  // on /welcome WITHOUT a session_id (no apiKey, no tier, no email — i.e.
+  // NOT redirected back from Stripe Checkout), render an upgrade CTA above
+  // the (empty) API-key area. The CTA preserves any incoming UTM tags so
+  // post-Stripe-checkout attribution flows through.
+  const isOrganicVisit = !apiKey && !tier && !email;
+  const utmQuery = utmSource || utmCampaign
+    ? `&${utmSource ? `utm_source=${encodeURIComponent(utmSource)}` : ''}${utmSource && utmCampaign ? '&' : ''}${utmCampaign ? `utm_campaign=${encodeURIComponent(utmCampaign)}` : ''}`
+    : '';
+
+  const paywallCta = isOrganicVisit
+    ? `<div class="paywall-cta">
+         <div class="paywall-headline">Free-tier MCP access — 100 calls per month</div>
+         <p class="paywall-body">Upgrade to Starter for 3,000 calls per month, full asset coverage, and unlimited Telegram bot alerts.</p>
+         <a class="paywall-btn" href="/signup?plan=starter&utm_source=welcome_page${utmSource ? `_${utmSource}` : ''}${utmQuery}">Upgrade to Starter — $9.99/mo</a>
+         <p class="paywall-fineprint">Or stay on the free tier — your API key is auto-provisioned on every <code>/signup</code> click. <a href="/signup?plan=pro${utmQuery}">Need higher volume? See Pro / Enterprise →</a></p>
+       </div>`
+    : '';
+
   const keyDisplay = apiKey
     ? `<div class="key-box"><div class="label">Your API Key</div><code id="api-key">${apiKey}</code><button onclick="navigator.clipboard.writeText(document.getElementById('api-key').textContent);this.textContent='Copied!'">Copy</button></div>`
-    : `<div class="pending"><p>Your API key is being provisioned. This usually takes a few seconds.</p><p>Refresh this page in a moment, or check your email at <strong>${email || 'your registered address'}</strong>.</p></div>`;
+    : isOrganicVisit
+      ? ''
+      : `<div class="pending"><p>Your API key is being provisioned. This usually takes a few seconds.</p><p>Refresh this page in a moment, or check your email at <strong>${email || 'your registered address'}</strong>.</p></div>`;
 
   // BOT-W2 / D1-C: post-checkout deep-link to @algovaultofficialbot.
   // The api_key is encoded defensively even though current av_live_* keys are
@@ -55,12 +95,20 @@ export function getWelcomePageHtml(
   .usage { margin-top: 24px; text-align: left; }
   .usage h2 { font-size: 16px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
   .usage pre { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; font-size: 13px; overflow-x: auto; color: #c9d1d9; }
+  .paywall-cta { background: #161b22; border: 1px solid #3fb950; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: left; }
+  .paywall-headline { color: #3fb950; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 12px; }
+  .paywall-body { color: #c9d1d9; font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+  .paywall-btn { display: inline-block; background: #238636; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .paywall-btn:hover { background: #2ea043; }
+  .paywall-fineprint { color: #8b949e; font-size: 12px; margin-top: 12px; }
+  .paywall-fineprint a { color: #58a6ff; text-decoration: none; }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>Welcome to AlgoVault! &#x1f389;</h1>
-  <div class="subtitle">${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) + ' plan activated' : 'Setting up your account...'}</div>
+  <div class="subtitle">${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) + ' plan activated' : isOrganicVisit ? 'AlgoVault MCP — the crypto signal layer for AI agents' : 'Setting up your account...'}</div>
+  ${paywallCta}
   ${keyDisplay}
   ${tgConnect}
   <div class="usage">

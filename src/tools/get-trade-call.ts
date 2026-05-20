@@ -1,11 +1,12 @@
 import { getAdapter } from '../lib/exchange-adapter.js';
 import { rsi, emaLast, ema, hurstExponent, detectSqueeze } from '../lib/indicators.js';
-import { canAccessCoin, canAccessTimeframe, freeGateMessage, isFreeTier, checkQuota, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
+import { canAccessCoin, canAccessTimeframe, freeGateMessage, isFreeTier, checkQuota, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId, daysUntilMonthReset, getMonthlyQuota } from '../lib/license.js';
 import { recordSignal, recordFunding, getFundingZScore, recordHoldCount } from '../lib/performance-db.js';
 import { hashSignal } from '../lib/merkle.js';
 import { getDexForCoin, classifyAsset, isMemeCoinLiquid, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
-import { TradFiSymbolUnsupportedOnVenueError } from '../lib/errors.js';
+import { TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError } from '../lib/errors.js';
+import { withTierWarning, DEFAULT_UPGRADE_URL } from '../lib/tier-warning.js';
 import { getVenueStatus } from '../lib/venue-shadow.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import { getClosestTradeable, getTryNext } from '../lib/cross-asset-grid.js';
@@ -96,7 +97,14 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
     ? { allowed: true, used: 0, total: 0 }
     : checkQuota(input.license || { tier: 'free', key: null });
   if (!quota.allowed) {
-    throw new Error(getQuotaExhaustedMessage(quota.used, quota.total));
+    const licenseForReset = input.license || { tier: 'free' as const, key: null };
+    throw new TierLimitReachedError({
+      currentUsage: quota.used,
+      monthlyLimit: quota.total,
+      tier: licenseForReset.tier,
+      suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
+      retryAfterDays: daysUntilMonthReset(licenseForReset),
+    });
   }
 
   const exchange = input.exchange || 'BINANCE';
@@ -380,7 +388,7 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   // Defaults to `'promoted'` for unknown venues (backward-compat).
   const venueStatus = await getVenueStatus(exchange);
 
-  const meta: TradeCallResult['_algovault'] = {
+  let meta: TradeCallResult['_algovault'] = {
     version: PKG_VERSION,
     tool: 'get_trade_call',
     compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-backtest-mcp'],
@@ -389,6 +397,18 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
     venue_status: venueStatus,
   };
   if (upgradeHint) meta.upgrade_hint = upgradeHint;
+  // ACTIVATION-PAYWALL-W1: structured tier_warning at 75%+ / 90%+ thresholds for
+  // free-tier (paid + bot-internal + internal-grid-refresh paths are no-op via
+  // withTierWarning's internal gate).
+  if (!input.internal) {
+    meta = withTierWarning(meta, {
+      tier: license.tier,
+      currentUsage: quota.used,
+      monthlyLimit: quota.total || getMonthlyQuota(license.tier),
+      isBotInternal: license.tier === 'internal',
+      upgradeUrl: DEFAULT_UPGRADE_URL,
+    });
+  }
 
   // v1.10.0: `call` is the canonical verdict field. The legacy `signal` field
   // and all 7 raw indicators (rsi/ema_cross/ema_9/ema_21/hurst/funding_z_score/

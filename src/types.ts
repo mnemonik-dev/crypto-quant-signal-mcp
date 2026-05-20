@@ -133,6 +133,32 @@ export type { TrendPersistence, FundingState, BreakoutPending } from './lib/indi
 
 // ── _algovault Metadata ──
 
+/**
+ * Structured tier-warning surface populated by `withTierWarning()` when a
+ * free-tier caller approaches the monthly quota. Added ACTIVATION-PAYWALL-W1.
+ *
+ * Semantics:
+ *  - `level: 'soft'` fires at currentUsage / monthlyLimit >= 0.75 (default).
+ *  - `level: 'hard'` fires at >= 0.90 (default). Hard ALWAYS displaces soft.
+ *  - Field is OMITTED entirely when below the soft threshold, when tier is
+ *    paid (starter/pro/enterprise/x402/internal), or when the caller is
+ *    `is_bot_internal=true` (bot service has its own per-user quota).
+ *  - At >=1.00 the request hits the `TIER_LIMIT_REACHED` structured error
+ *    envelope at the checkQuota block path; this field is NOT present in
+ *    that error path (the envelope itself carries the upgrade context).
+ *
+ * `suggested_upgrade_url` carries UTM tags so post-payment attribution flows
+ * through Stripe `client_reference_id` + `metadata.utm_*` back to
+ * `request_log` rows for per-channel conversion measurement.
+ */
+export interface TierWarning {
+  level: 'soft' | 'hard';
+  current_usage: number;
+  monthly_limit: number;
+  tier: LicenseTier;
+  suggested_upgrade_url: string;
+}
+
 export interface AlgoVaultMeta {
   version: string;
   tool: string;
@@ -162,6 +188,12 @@ export interface AlgoVaultMeta {
    * Added EXCHANGE-SHADOW-PROMOTE-W1 / C2.
    */
   venue_status?: VenueStatus;
+  /**
+   * Structured tier-warning surface (ACTIVATION-PAYWALL-W1). See `TierWarning`.
+   * Populated by `withTierWarning()` on free-tier callers approaching quota.
+   * OMITTED entirely below the soft threshold or for paid/bot-internal tiers.
+   */
+  tier_warning?: TierWarning;
 }
 
 // ── Cross-asset grid (v1.9.0 L2/L4 activation patch) ──

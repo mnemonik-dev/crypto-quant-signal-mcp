@@ -413,3 +413,20 @@ export function getUpgradeHint(
 export function getQuotaExhaustedMessage(used: number, total: number): string {
   return `Free tier limit reached (${used}/${total} calls this month). Upgrade to Starter ($9.99/mo) for 3,000 calls/mo, or pay per call via x402. → ${UPGRADE_URL}`;
 }
+
+/**
+ * Days remaining until the in-process monthly counter resets. Reads the
+ * caller's tracker `periodStart` and computes wall-clock days until
+ * `periodStart + MONTH_MS`. If no tracker exists (caller hasn't made any
+ * call yet — unusual at the quota-exhausted path), returns 30 as a safe
+ * default. Used by ACTIVATION-PAYWALL-W1 `TierLimitReachedError` to set
+ * the structured-error `retry_after_days` field.
+ */
+export function daysUntilMonthReset(license: LicenseInfo): number {
+  const key = license.tier === 'free' ? `free:${getRequestIpHash() || 'anon'}` : (license.key || 'unknown');
+  const tracker = callTrackers.get(key);
+  if (!tracker) return 30;
+  const msUntilReset = (tracker.periodStart + MONTH_MS) - Date.now();
+  if (msUntilReset <= 0) return 0;
+  return Math.ceil(msUntilReset / (24 * 60 * 60 * 1000));
+}

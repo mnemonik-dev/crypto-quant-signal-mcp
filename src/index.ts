@@ -28,6 +28,7 @@ import { EXCHANGES, EXCHANGE_COUNT, TIMEFRAME_COUNT, getAssetCount, floorRoundTo
 import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, getRequestSessionId, getRequestIpHash, getRequestVerdict, setRequestVerdict, initQuotaDb } from './lib/license.js';
 import { initX402, settleX402Async } from './lib/x402.js';
 import { initAnalytics, logRequest, hashIp, getUsageStats, logSkillInvocation } from './lib/analytics.js';
+import { ensureProcessedStripeEventsSchema, tryClaimEvent } from './lib/stripe-events-store.js';
 import { getAnalyticsSummary } from './resources/analytics-summary.js';
 import { getSkillsAnalytics } from './resources/skills-analytics.js';
 import {
@@ -38,8 +39,9 @@ import {
   createCheckoutSession,
   getCustomerApiKey,
   validateApiKey,
+  summarizeCheckoutCompleted,
 } from './lib/stripe.js';
-import { UpstreamRateLimitError, EXCHANGE_FALLBACKS, TradFiSymbolUnsupportedOnVenueError } from './lib/errors.js';
+import { UpstreamRateLimitError, EXCHANGE_FALLBACKS, TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError } from './lib/errors.js';
 import { listVenues } from './lib/venue-store.js';
 import { checkBotInternalAuth } from './lib/bot-auth.js';
 import { getWelcomePageHtml } from './lib/welcome-page.js';
@@ -125,6 +127,19 @@ function toolErrorContent(err: unknown): { content: { type: 'text'; text: string
       requested_exchange: err.requestedExchange,
       suggested_venues: err.suggestedVenues,
       probed_at: err.probedAt,
+    };
+    return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
+  }
+  if (err instanceof TierLimitReachedError) {
+    const payload = {
+      code: err.code,
+      error_code: err.code,
+      message: err.message,
+      current_usage: err.current_usage,
+      monthly_limit: err.monthly_limit,
+      tier: err.tier,
+      suggested_upgrade_url: err.suggested_upgrade_url,
+      retry_after_days: err.retry_after_days,
     };
     return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
   }
@@ -730,6 +745,9 @@ function createServer(): McpServer {
 async function startStdio() {
   initAnalytics();
   initQuotaDb();
+  // ACTIVATION-PAYWALL-W1: processed_stripe_events idempotency table.
+  // Single multi-statement dbExec per CLAUDE.md "Postgres DDL bundling" rule.
+  ensureProcessedStripeEventsSchema();
   const server = createServer();
   const transport = new StdioServerTransport();
 
@@ -754,6 +772,9 @@ async function startHttp() {
   await initX402();
   initAnalytics();
   initQuotaDb();
+  // ACTIVATION-PAYWALL-W1: processed_stripe_events idempotency table.
+  // Single multi-statement dbExec per CLAUDE.md "Postgres DDL bundling" rule.
+  ensureProcessedStripeEventsSchema();
 
   const { default: express } = await import('express');
   const { default: rateLimit } = await import('express-rate-limit');
@@ -919,6 +940,53 @@ async function startHttp() {
         case 'customer.subscription.deleted':
           await handleSubscriptionDeleted(event);
           break;
+        case 'checkout.session.completed': {
+          // ACTIVATION-PAYWALL-W1: structured tier promotion + UTM round-trip.
+          const summary = summarizeCheckoutCompleted(event);
+          if (!summary) {
+            console.warn(`Stripe webhook: checkout.session.completed with unparseable session payload (event ${event.id})`);
+            break;
+          }
+          // Idempotency BEFORE side-effect: claim the event-id, dedup retries.
+          const isNew = await tryClaimEvent({
+            event_id: event.id,
+            event_type: event.type,
+            session_id: summary.sessionId,
+            customer_email: summary.customerEmail,
+            amount_total: summary.amountTotal,
+            metadata: {
+              tier: summary.tier,
+              utm_source: summary.utmSource,
+              utm_campaign: summary.utmCampaign,
+              client_reference_id: summary.clientReferenceId,
+            },
+          });
+          if (!isNew) {
+            console.log(`Stripe webhook: duplicate checkout.session.completed (event ${event.id}) — already processed`);
+            return res.json({ received: true, status: 'duplicate' });
+          }
+          // Attribution write: NEW request_log row anchoring the conversion.
+          // Per CLAUDE.md "load-bearing side-effect inside try/except needs a
+          // companion success-path log" — both branches log.
+          try {
+            const referrerTag = summary.utmSource
+              ? `utm:${summary.utmSource}${summary.utmCampaign ? `:${summary.utmCampaign}` : ''}`
+              : null;
+            logRequest({
+              sessionId: summary.sessionId,
+              toolName: 'stripe_checkout_completed',
+              licenseTier: summary.tier,
+              responseTimeMs: 0,
+              verdict: referrerTag ?? undefined,
+              isBotInternal: false,
+            });
+            console.log(`Stripe webhook: checkout.session.completed processed — tier=${summary.tier} session=${summary.sessionId} utm=${summary.utmSource ?? 'none'}/${summary.utmCampaign ?? 'none'}`);
+          } catch (logErr) {
+            console.error('Stripe webhook: request_log attribution write failed:', logErr instanceof Error ? logErr.message : logErr);
+            // Don't rethrow — the event-id is already claimed; Stripe won't retry.
+          }
+          break;
+        }
         default:
           console.log(`Stripe webhook: unhandled event ${event.type}`);
       }
@@ -931,6 +999,9 @@ async function startHttp() {
   });
 
   // ── Signup (redirects to Stripe Checkout) ──
+  // ACTIVATION-PAYWALL-W1: forwards UTM query params (utm_source, utm_campaign)
+  // through to Stripe metadata so `checkout.session.completed` attribution
+  // round-trips into `request_log`.
   app.get('/signup', async (req, res) => {
     const plan = req.query.plan as string;
     if (plan !== 'starter' && plan !== 'pro' && plan !== 'enterprise') {
@@ -939,7 +1010,16 @@ async function startHttp() {
 
     try {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const url = await createCheckoutSession(plan, baseUrl);
+      const utmSource = typeof req.query.utm_source === 'string' ? req.query.utm_source : undefined;
+      const utmCampaign = typeof req.query.utm_campaign === 'string' ? req.query.utm_campaign : undefined;
+      // Derive a session-unique client_reference_id for downstream attribution
+      // join even when UTM tags are absent (e.g. direct /signup typing).
+      const clientReferenceId = `${utmSource ?? 'direct'}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      const url = await createCheckoutSession(plan, baseUrl, {
+        utmSource,
+        utmCampaign,
+        clientReferenceId,
+      });
       if (!url) return res.status(500).send('Stripe not configured or missing price IDs');
       res.redirect(303, url);
     } catch (err) {
@@ -948,14 +1028,24 @@ async function startHttp() {
     }
   });
 
-  // ── Welcome (shows API key after successful checkout) ──
+  // ── Welcome (shows API key after successful checkout OR paywall CTA on organic visit) ──
+  // ACTIVATION-PAYWALL-W1: organic visits (no session_id) get the paywall CTA
+  // arm. Post-checkout visits (session_id present) get the API-key reveal.
+  // UTM query params are surfaced to the template so the paywall button
+  // preserves the attribution chain through to Stripe.
   app.get('/welcome', async (req, res) => {
-    const sessionId = req.query.session_id as string;
-    if (!sessionId) return res.status(400).send('Missing session_id');
+    const sessionId = req.query.session_id as string | undefined;
+    const utmSource = typeof req.query.utm_source === 'string' ? req.query.utm_source : null;
+    const utmCampaign = typeof req.query.utm_campaign === 'string' ? req.query.utm_campaign : null;
+
+    // Organic visit (no session_id) — render paywall CTA + no API-key reveal.
+    if (!sessionId) {
+      return res.send(getWelcomePageHtml(null, null, null, { utmSource, utmCampaign }));
+    }
 
     try {
       const { apiKey, tier, email } = await getCustomerApiKey(sessionId);
-      res.send(getWelcomePageHtml(apiKey, tier, email));
+      res.send(getWelcomePageHtml(apiKey, tier, email, { utmSource, utmCampaign }));
     } catch (err) {
       console.error('Welcome page error:', err instanceof Error ? err.message : err);
       res.status(500).send('Failed to retrieve your API key. Please contact support@algovault.com');

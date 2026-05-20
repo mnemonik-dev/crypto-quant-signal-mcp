@@ -2,9 +2,10 @@ import { getAdapter } from '../lib/exchange-adapter.js';
 import { adx, atr, detectPriceStructure } from '../lib/indicators.js';
 import { getDexForCoin, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
-import { TradFiSymbolUnsupportedOnVenueError } from '../lib/errors.js';
+import { TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError } from '../lib/errors.js';
 import { getVenueStatus } from '../lib/venue-shadow.js';
-import { trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
+import { trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId, daysUntilMonthReset, getMonthlyQuota } from '../lib/license.js';
+import { withTierWarning, DEFAULT_UPGRADE_URL } from '../lib/tier-warning.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import type { MarketRegimeResult, RegimeType, TrendStrength, CrossVenueFundingSentiment, AdxSlopeCategory, LicenseInfo, ExchangeId } from '../types.js';
 
@@ -34,7 +35,13 @@ export async function getMarketRegime(input: MarketRegimeInput): Promise<MarketR
   // Quota tracking (all tiers)
   const quota = trackCall(license);
   if (!quota.allowed) {
-    throw new Error(getQuotaExhaustedMessage(quota.used, quota.total));
+    throw new TierLimitReachedError({
+      currentUsage: quota.used,
+      monthlyLimit: quota.total,
+      tier: license.tier,
+      suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
+      retryAfterDays: daysUntilMonthReset(license),
+    });
   }
 
   const candleCount = CANDLE_COUNTS[timeframe] || 168;
@@ -204,7 +211,7 @@ export async function getMarketRegime(input: MarketRegimeInput): Promise<MarketR
   // tool response envelope. See parallel comment in get-trade-call.ts.
   const venueStatus = await getVenueStatus(exchange);
 
-  const meta: MarketRegimeResult['_algovault'] = {
+  let meta: MarketRegimeResult['_algovault'] = {
     version: PKG_VERSION,
     tool: 'get_market_regime',
     compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-backtest-mcp'],
@@ -213,6 +220,14 @@ export async function getMarketRegime(input: MarketRegimeInput): Promise<MarketR
     venue_status: venueStatus,
   };
   if (upgradeHint) meta.upgrade_hint = upgradeHint;
+  // ACTIVATION-PAYWALL-W1: structured tier_warning at 75%+ / 90%+ thresholds.
+  meta = withTierWarning(meta, {
+    tier: license.tier,
+    currentUsage: quota.used,
+    monthlyLimit: quota.total || getMonthlyQuota(license.tier),
+    isBotInternal: license.tier === 'internal',
+    upgradeUrl: DEFAULT_UPGRADE_URL,
+  });
 
   return {
     regime,

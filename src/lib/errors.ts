@@ -65,6 +65,52 @@ export class TradFiSymbolUnsupportedOnVenueError extends Error {
 }
 
 /**
+ * Thrown by MCP tools when a free-tier caller's `trackCall()` returns
+ * `allowed: false` (the in-process monthly counter exceeded `getMonthlyQuota('free') = 100`).
+ *
+ * Replaces the legacy `throw new Error(getQuotaExhaustedMessage(...))` pattern
+ * which surfaced as `{error: 'Free tier limit reached...'}` — an unparseable
+ * string. The structured envelope lets clients pattern-match on
+ * `error_code === "TIER_LIMIT_REACHED"` and direct the user to the upgrade
+ * URL programmatically (badges in IDE plugins, in-chat upgrade buttons, etc).
+ *
+ * Added in ACTIVATION-PAYWALL-W1 (2026-05-20) as the structural counterpart
+ * to `_algovault.tier_warning` (soft + hard quota warnings below 100%).
+ *
+ * The `suggested_upgrade_url` carries UTM tags (`utm_source=mcp_tool` +
+ * `utm_campaign=tier_limit_reached`) so post-Stripe-checkout attribution
+ * flows back through `client_reference_id` + `metadata.utm_*` to the
+ * `request_log` row written by the `checkout.session.completed` webhook.
+ *
+ * `retry_after_days` reports the days until calendar-month reset, derived
+ * from the in-process `callTrackers.periodStart` in license.ts.
+ */
+export class TierLimitReachedError extends Error {
+  readonly code = 'TIER_LIMIT_REACHED' as const;
+  readonly current_usage: number;
+  readonly monthly_limit: number;
+  readonly tier: string;
+  readonly suggested_upgrade_url: string;
+  readonly retry_after_days: number;
+
+  constructor(args: {
+    currentUsage: number;
+    monthlyLimit: number;
+    tier: string;
+    suggestedUpgradeUrl: string;
+    retryAfterDays: number;
+  }) {
+    super(`Free-tier monthly limit reached (${args.currentUsage}/${args.monthlyLimit} calls). Upgrade for unlimited access: ${args.suggestedUpgradeUrl}`);
+    this.current_usage = args.currentUsage;
+    this.monthly_limit = args.monthlyLimit;
+    this.tier = args.tier;
+    this.suggested_upgrade_url = args.suggestedUpgradeUrl;
+    this.retry_after_days = args.retryAfterDays;
+    Object.setPrototypeOf(this, TierLimitReachedError.prototype);
+  }
+}
+
+/**
  * Map of which exchanges to suggest as fallbacks when one is rate-limited.
  * Used by the MCP tool handler to populate the `suggestion` field of the
  * structured error response.

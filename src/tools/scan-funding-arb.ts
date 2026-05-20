@@ -1,5 +1,7 @@
 import { getAdapter, type ExchangeAdapter } from '../lib/exchange-adapter.js';
-import { getFundingArbLimit, isFreeTier, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
+import { getFundingArbLimit, isFreeTier, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId, daysUntilMonthReset, getMonthlyQuota } from '../lib/license.js';
+import { TierLimitReachedError } from '../lib/errors.js';
+import { withTierWarning, DEFAULT_UPGRADE_URL } from '../lib/tier-warning.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import type {
   FundingArbResult,
@@ -144,7 +146,13 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
   // Quota tracking (all tiers)
   const quota = trackCall(license);
   if (!quota.allowed) {
-    throw new Error(getQuotaExhaustedMessage(quota.used, quota.total));
+    throw new TierLimitReachedError({
+      currentUsage: quota.used,
+      monthlyLimit: quota.total,
+      tier: license.tier,
+      suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
+      retryAfterDays: daysUntilMonthReset(license),
+    });
   }
 
   const adapter = getAdapter();
@@ -325,13 +333,21 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
     total: quota.total,
   });
 
-  const meta: FundingArbResult['_algovault'] = {
+  let meta: FundingArbResult['_algovault'] = {
     version: PKG_VERSION,
     tool: 'scan_funding_arb',
     compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-execution-mcp'],
     session_id: getRequestSessionId() ?? null,
   };
   if (upgradeHint) meta.upgrade_hint = upgradeHint;
+  // ACTIVATION-PAYWALL-W1: structured tier_warning at 75%+ / 90%+ thresholds.
+  meta = withTierWarning(meta, {
+    tier: license.tier,
+    currentUsage: quota.used,
+    monthlyLimit: quota.total || getMonthlyQuota(license.tier),
+    isBotInternal: license.tier === 'internal',
+    upgradeUrl: DEFAULT_UPGRADE_URL,
+  });
 
   return {
     opportunities: capped,

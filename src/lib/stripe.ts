@@ -131,17 +131,42 @@ export async function validateApiKey(apiKey: string): Promise<StripeValidation> 
 
 // ── Checkout Session Creation ──
 
-export async function createCheckoutSession(plan: 'starter' | 'pro' | 'enterprise', baseUrl: string): Promise<string | null> {
+export interface CheckoutSessionOptions {
+  /** Forwarded to `client_reference_id`; used by webhook to attribute the conversion. */
+  clientReferenceId?: string;
+  /** Optional UTM tags — persisted in `metadata.utm_source` / `metadata.utm_campaign`. */
+  utmSource?: string;
+  utmCampaign?: string;
+}
+
+export async function createCheckoutSession(
+  plan: 'starter' | 'pro' | 'enterprise',
+  baseUrl: string,
+  opts: CheckoutSessionOptions = {},
+): Promise<string | null> {
   if (!stripe) return null;
 
   const priceId = plan === 'enterprise' ? ENTERPRISE_PRICE_ID : plan === 'starter' ? STARTER_PRICE_ID : PRO_PRICE_ID;
   if (!priceId) return null;
+
+  // ACTIVATION-PAYWALL-W1: optional UTM round-trip — Stripe persists metadata
+  // on the Checkout Session, retrievable in checkout.session.completed event
+  // for attribution-aware request_log write.
+  const metadata: Record<string, string> = { tier: plan };
+  if (opts.utmSource) metadata.utm_source = opts.utmSource.slice(0, 64);
+  if (opts.utmCampaign) metadata.utm_campaign = opts.utmCampaign.slice(0, 64);
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${baseUrl}/welcome?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/signup?cancelled=true`,
+    metadata,
+    // client_reference_id is bounded to 200 chars per Stripe; we cap at 128
+    // to leave headroom + sanitize down to safe URL-ish chars.
+    ...(opts.clientReferenceId
+      ? { client_reference_id: opts.clientReferenceId.replace(/[^a-zA-Z0-9_:\-.]/g, '_').slice(0, 128) }
+      : {}),
   });
 
   return session.url;
@@ -327,6 +352,61 @@ export async function createBillingPortalSession(args: { customerId: string; ret
     }
     return null;
   }
+}
+
+/**
+ * Webhook handler for `checkout.session.completed` (ACTIVATION-PAYWALL-W1).
+ *
+ * Returns a structured payload that the index.ts switch case writes to
+ * `request_log` (license_tier promotion + UTM attribution). Idempotency is
+ * enforced UPSTREAM in index.ts via `tryClaimEvent(event.id)` — this function
+ * runs only when the event is the first observed delivery.
+ *
+ * The promotion writes a NEW `request_log` row with `tool_name='stripe_checkout_completed'`
+ * + `license_tier=<new tier>` + `session_id=<stripe session id>` to anchor
+ * the conversion event for future AC4-organic measurement. UTM tags are
+ * recovered from `event.data.object.metadata.utm_*` (set in `createCheckoutSession`).
+ */
+export interface CheckoutCompletedSummary {
+  sessionId: string;
+  tier: 'starter' | 'pro' | 'enterprise';
+  customerEmail: string | null;
+  amountTotal: number | null;
+  utmSource: string | null;
+  utmCampaign: string | null;
+  clientReferenceId: string | null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function summarizeCheckoutCompleted(event: any): CheckoutCompletedSummary | null {
+  const session = event?.data?.object;
+  if (!session || typeof session !== 'object') return null;
+  const sessionId = typeof session.id === 'string' ? session.id : null;
+  if (!sessionId) return null;
+
+  // Tier resolution: prefer the explicit metadata field set in
+  // createCheckoutSession; fall back to amount_total inspection for
+  // safety on legacy Checkout Sessions that pre-date this wave.
+  const metaTier = session.metadata?.tier;
+  let tier: 'starter' | 'pro' | 'enterprise';
+  if (metaTier === 'starter' || metaTier === 'pro' || metaTier === 'enterprise') {
+    tier = metaTier;
+  } else {
+    const amount = typeof session.amount_total === 'number' ? session.amount_total : 0;
+    if (amount >= 29900) tier = 'enterprise';
+    else if (amount >= 4900) tier = 'pro';
+    else tier = 'starter';
+  }
+
+  return {
+    sessionId,
+    tier,
+    customerEmail: session.customer_email ?? session.customer_details?.email ?? null,
+    amountTotal: typeof session.amount_total === 'number' ? session.amount_total : null,
+    utmSource: session.metadata?.utm_source ?? null,
+    utmCampaign: session.metadata?.utm_campaign ?? null,
+    clientReferenceId: session.client_reference_id ?? null,
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
