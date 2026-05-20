@@ -23,6 +23,7 @@ import { HTXAdapter } from './adapters/htx.js';
 import { WeexAdapter } from './adapters/weex.js';
 import { BitmartAdapter } from './adapters/bitmart.js';
 import { XtAdapter } from './adapters/xt.js';
+import { WhitebitAdapter } from './adapters/whitebit.js';
 
 const adapters = new Map<ExchangeId, ExchangeAdapter>();
 
@@ -75,6 +76,9 @@ export function getAdapter(exchange?: ExchangeId): ExchangeAdapter {
         break;
       case 'XT':
         adapter = new XtAdapter();
+        break;
+      case 'WHITEBIT':
+        adapter = new WhitebitAdapter();
         break;
       case 'HL':
       default:

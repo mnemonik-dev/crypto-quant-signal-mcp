@@ -94,6 +94,8 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   'BITMART': 300,
   // PILOT-ADAPTERS-W3B / C3 (2026-05-20): XT shadow venue. Lowercase btc_usdt; 8h cadence.
   'XT':      300,
+  // PILOT-ADAPTERS-W3B / C4 (2026-05-20): WHITEBIT shadow venue. _PERP suffix + 8h cadence; EU-regulated.
+  'WHITEBIT':300,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)

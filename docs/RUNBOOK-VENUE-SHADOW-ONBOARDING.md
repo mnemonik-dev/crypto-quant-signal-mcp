@@ -683,3 +683,192 @@ Lighter (PILOT-ADAPTERS-W1's third venue) is a DEX served via the
 nor the `venues` table. Pre-W3A state was **10 venues (5 promoted + 5
 shadow)**; post-W3A C3 is **13 venues (5 promoted + 8 shadow:
 ASTER/EDGEX/GATE/MEXC/KUCOIN/PHEMEX/BINGX/HTX)**.
+
+---
+
+## Wave 3B CEX adapter lessons (PILOT-ADAPTERS-W3B 2026-05-20)
+
+Four emerging-tier CEX adapters shipped sequentially: WEEX (C1) + Bitmart
+(C2) + XT.COM (C3) + WhiteBIT (C4). Final state: **17 venues** (5 promoted
++ 12 shadow). Below the lessons unique to W3B's batch.
+
+### Per-venue symbol convention (4 unique conventions)
+
+| Venue    | Convention             | Example          | Note |
+|----------|------------------------|------------------|------|
+| WEEX     | lowercase + cmt_ prefix | `cmt_btcusdt`   | Most-divergent of any AlgoVault adapter to date. The `cmt_` prefix is WEEX's contract-type marker. |
+| Bitmart  | concatenated           | `BTCUSDT`        | Binance-style; no separator. |
+| XT.COM   | lowercase + underscore | `btc_usdt`       | UNIQUE case-sensitivity (lowercase). |
+| WhiteBIT | underscore + _PERP     | `BTC_PERP`       | UNIQUE — settlement currency NOT encoded in symbol; 100% USDT-settled per Plan-Mode probe (filter is no-op safety belt). |
+
+### WEEX 4h funding cadence — FIRST non-8h venue in adapter fleet
+
+All 11 prior CEXes use 8h × 1095 annualization. WEEX uses **4h × 2190**
+per contract metadata `delivery: ["00:00:00", "04:00:00", "08:00:00",
+"12:00:00", "16:00:00", "20:00:00"]` = 6 settlements/day.
+
+Math: 4h × 2190 = 8760 = 1 year. Cross-venue scorer compares
+`fundingAnnualized` across venues, so getting the cadence right is
+critical. Failure mode if you assume 8h × 1095: annualized rate is OFF
+BY 2× → cross-venue funding-arb scorer ranks WEEX incorrectly.
+
+**Probe checklist for future venue onboarding**: every Plan-Mode adapter
+audit MUST inspect the contract metadata for an explicit `delivery` /
+`settlement_period` / `fundingInterval` field BEFORE assuming 8h cadence.
+Adapter fleet now has 1 precedent of non-8h (WEEX 4h).
+
+### WEEX no-public-funding workaround
+
+Plan-Mode probed 7 candidate paths — all 404 or auth-gated:
+- `/capi/v2/market/funding-rate?symbol=`
+- `/capi/v2/market/funding/funding-rate?symbol=`
+- `/capi/v2/market/funding/<symbol>`
+- `/capi/v2/market/fundingRate?symbol=`
+- `/capi/v1/market/funding-rate?symbol=`
+- `/capi/v2/contract/funding-rate?symbol=`
+- `/capi/v2/market/historyFundRate?symbol=` (returns "参数为空" — parameter empty; may be auth-gated)
+
+Adapter returns `getAssetContext.funding = 0` + `openInterest = 0` with
+comment, and `getFundingHistory()` + `getPredictedFundings()` return
+`[]`. Same fail-soft shape as W3A Q-4 shadow-venue pattern. Promotion
+criteria use PFE WR + sample count (not funding rate), so this doesn't
+block shadow→promoted.
+
+If WEEX exposes a public funding endpoint in a future API version, this
+adapter is the canonical place to wire it.
+
+### Bitmart kline `step` is a fixed minutes-ENUM (W3A-precedent trap)
+
+Bitmart's `/contract/public/kline` accepts `step` as **MINUTES ENUM
+{1, 3, 5, 15, 30, 60, 120, 240, 720}**. step=480 returns HTTP 400;
+step=1440 / 4320 / 10080 return 0 rows.
+
+Same shape as Phemex's kline limit ENUM `{5, 10, 50, 100, 500, 1000}`
+discovered in W3A C1 hotfix `c2b258c`. **This is now a recurring trap
+class**: intermediate values often fail when larger AND smaller values
+work, indicating the parameter is an ENUM not a free integer.
+
+Bitmart STEP_MAP includes fallbacks: 8h→240 (=4h), 1d→720 (=12h), 12h→720.
+
+**Plan-Mode probe pattern for any kline `step` / `limit` / `period`
+parameter**: probe `{1, 5, 11, 50, 100, 200, 500, 1000}` (or vendor max)
+— if intermediate values FAIL while smaller AND larger values PASS, the
+parameter is an ENUM. Document the valid set verbatim in the adapter
+docstring + INTERVAL_MAP comment.
+
+### Bitmart kline `limit` NOT honored — uses time window
+
+`limit` query param is silently ignored by Bitmart's `/contract/public/
+kline`. Adapter computes start_time + end_time window from desired
+candle count × interval-in-seconds. Same shape as Gate.io (W2 C1).
+
+### XT.COM endpoint-path correction — `/future/api/v1/` is FICTIONAL
+
+The W3B spec assumed `/future/api/v1/public/...` was the XT.COM API
+path. Plan-Mode probe revealed that path returns:
+
+```json
+{"returnCode":0,"msgInfo":"success","error":null,"result":{"openapiDocs":"https://doc.xt.com"}}
+```
+
+— a placeholder pointing to docs. The actual live API path family is
+`/future/market/v1/public/...`:
+- `/future/market/v1/public/symbol/list` — 943 contracts (filter
+  `contractType==PERPETUAL` → 893)
+- `/future/market/v1/public/q/kline?symbol=&interval=&limit=`
+- `/future/market/v1/public/q/agg-ticker?symbol=` (bundles mark + index
+  + last + bid + ask)
+- `/future/market/v1/public/q/funding-rate?symbol=` (returns
+  `{symbol, fundingRate, nextCollectionTime, collectionInternal: 8}`)
+
+OI endpoint NOT FOUND at `/q/open-interest` (404). Adapter uses 0.
+
+XT is the **2nd venue (after Phemex) with the REAL S&P 500 perp** —
+`sp500_usdt` = $7400.11 live-verified via semantic-fingerprint probe.
+venue-coverage.ts SP500 row extended to `['HL', 'PHEMEX', 'XT']` in
+same-commit per `adapter-tradfi-aliases-and-venue-coverage-matrix-are-
+coupled-pair` rule.
+
+### WhiteBIT v1 kline endpoint (NOT v4)
+
+WhiteBIT's documented `/api/v4/public/kline` is **empty**; the actual
+working kline endpoint is **`/api/v1/public/kline?market=&interval=&
+limit=`**. Interval is STRING family `1m`/`15m`/`30m`/`1h`/`4h`/`1d`
+(integers `60`/`3600` FAIL with "Invalid interval").
+
+Row shape is NON-STANDARD: `[ts_sec, open, CLOSE, HIGH, LOW, base_vol,
+quote_vol]` — OHLC ordering is open-close-high-low (NOT the canonical
+OHLC). Adapter parses indices 1/2/3/4 carefully.
+
+`/api/v4/public/futures` is a single all-in-one endpoint returning 315
+markets each with `{ticker_id, money_currency, last_price, money_volume,
+high, low, product_type: "Perpetual", open_interest, index_price,
+funding_rate, next_funding_rate_timestamp}` — bundles instruments +
+funding + OI + mark + 24h vol. Adapter uses last_price as mark proxy
+(no explicit mark_price field).
+
+### WhiteBIT mixed-settlement check — 100% USDT (filter is no-op safety belt)
+
+W3B Plan-Mode flagged WhiteBIT's `_PERP` suffix as a potential mixed-
+settlement risk (the suffix doesn't encode settlement currency, so
+hypothetically some markets could be USDC-/USD-/BTC-settled). Plan-Mode
+probe verified:
+
+```
+$ jq '[.result[].money_currency] | group_by(.) | map({currency: .[0], count: length})' < futures-response.json
+[{"currency": "USDT", "count": 315}]
+```
+
+**100% of WhiteBIT's perpetual markets are USDT-settled.** Adapter
+includes `money_currency === 'USDT'` filter as safety belt against
+future divergence (e.g. if WhiteBIT adds USDC perps).
+
+### WhiteBIT is the FIRST W3-batch venue WITHOUT SPX listing
+
+7 prior CEXes in the W3 batch (Phemex/BingX/HTX/WEEX/Bitmart/XT) all
+listed `SPX-USDT` / `cmt_spxusdt` / `spx_usdt` / `SPXUSDT` as the
+SPX6900 memecoin ($0.36 verified). WhiteBIT does NOT list SPX at all
+— first W3-batch venue without the memecoin-trap risk on SPX.
+
+WhiteBIT also does NOT list real SP500 (only Phemex + XT have that;
+WhiteBIT focused on metals + select stocks).
+
+### SPX6900 memecoin trap — 7th sighting (now a permanent class)
+
+WEEX (5th sighting) + Bitmart (6th) + XT.COM (7th) all confirmed.
+Cumulative tally: Binance + Bitget + KuCoin + Gate + Phemex + BingX +
+HTX + WEEX + Bitmart + XT = 10 venues across W0/W2/W3A/W3B where
+`SPX*` ticker = SPX6900 memecoin. ZERO venues where `SPX*` = real
+S&P 500.
+
+Real S&P 500 only routable via canonical key `SP500`:
+- Phemex (PILOT-ADAPTERS-W3A C1) — `SP500USDT` ✓
+- XT.COM (this wave C3) — `sp500_usdt` ✓
+
+`SPX → SP*` aliasing on ANY new venue should be flagged HALT-class in
+Plan-Mode probe; per `semantic-fingerprint-probe-before-alias-commit`
+skill, every TradFi alias candidate MUST be price-probed before commit.
+
+### `getPredictedFundings()` returns `[]` for all W3B shadow venues (W3B Q-3)
+
+WEEX: no public funding endpoint at all.
+Bitmart, XT, WhiteBIT: per-symbol funding endpoints exist but no batch
+endpoint. Same shape as W3A — cross-venue funding fanout fires only for
+promoted venues. Per-canonical-universe fetch deferred to follow-up
+waves when each venue clears promotion gates.
+
+### Identifier-diff: actual 13 → 17 venues (NOT spec's 14 → 18)
+
+Same off-by-one as W3A — Lighter is DEX-routed via Hyperliquid, not in
+the `ExchangeId` union nor the `venues` table. Spec's 14-venue baseline
+was off by 1; actual post-W3A state was 13; post-W3B C4 is 17 (5
+promoted + 12 shadow: ASTER + EDGEX + GATE + MEXC + KUCOIN + PHEMEX +
+BINGX + HTX + WEEX + BITMART + XT + WHITEBIT).
+
+### W3B-wave final tally — pilot batch COMPLETE
+
+12 shadow venues × asset-count × 10 = ~46,000 BUY/SELL signals needed
+for full cohort promotion gate. Day-15 cohort evaluation at ~2026-06-01
+± 3 days will cover all 12 simultaneously. evaluate-venues cron auto-
+detects + auto-extends shadow rows up to 30d before manual_required
+Telegram alert fires.

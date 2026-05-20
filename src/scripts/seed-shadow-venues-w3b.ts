@@ -45,8 +45,7 @@ const W3B_VENUES: ShadowVenueSeed[] = [
     exchangeId: 'WHITEBIT',
     assetCount: 315,
     notes: 'PILOT-ADAPTERS-W3B C4 (2026-05-20) — WhiteBIT USDT Perpetual (_PERP suffix); $4.62B OI / 315 USDT-settled perps (100% USDT — money_currency filter is no-op safety belt) / EU-regulated / up to 100x leverage / CoinGecko ~rank 14. Symbol BTC_PERP (UNIQUE — underscore + _PERP suffix; settlement currency implicit). Kline at /api/v1/public/kline (NOT v4); v4 /public/futures bundles instruments + funding + OI + mark + 24h vol in single call. FIRST W3-batch venue without SPX6900 memecoin trap.',
-    guardEnv: 'W3B_C4_ACTIVATED',
-  },
+      },
 ];
 
 async function main(): Promise<void> {
