@@ -69,10 +69,14 @@ const INTERVAL_MAP: Record<string, number> = {
   '1d':   86400,
 };
 
-// Phemex kline endpoint requires limit ≥ 10 (probed 2026-05-20).
-// Smaller values return `30000 "Please double check input arguments"`.
-// Adapter requests a generous window and lets callers downsample.
-const KLINE_LIMIT = 200;
+// Phemex kline endpoint accepts `limit` as a FIXED ENUM (probed 2026-05-20
+// post-deploy R7 verification gate):
+//   {5, 10, 50, 100, 500, 1000} → HTTP 200 OK
+//   any other value (11, 20, 30, 40, 60, 80, 150, 200, 250, 300, ...) → HTTP 400
+//     with `code:30000 "Please double check input arguments"`.
+// Adapter uses 1000 to fetch maximum history per call; downstream filters by
+// startTime and downsamples as needed.
+const KLINE_LIMIT = 1000;
 
 // AlgoVault-canonical → Phemex-native base symbol for TradFi assets
 // (per PILOT-ADAPTERS-W3A Plan-Mode semantic-fingerprint probe 2026-05-20).

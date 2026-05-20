@@ -192,13 +192,13 @@ describe('PhemexAdapter.getCandles', () => {
     expect(candles.map(c => c.time)).toEqual([1779000000000, 1779003600000]);
   });
 
-  it('passes resolution as INTEGER SECONDS (Phemex convention), limit=200', async () => {
+  it('passes resolution as INTEGER SECONDS (Phemex convention), limit=1000 (max of enum {5,10,50,100,500,1000})', async () => {
     setMock('/exchange/public/md/v2/kline/last', { status: 200, body: { code: 0, data: { rows: [] } } });
     await new PhemexAdapter().getCandles('BTC', '1h', 1779000000000);
     const call = fetchCalls.find(c => c.url.includes('kline'));
     expect(call?.url).toContain('symbol=BTCUSDT');
     expect(call?.url).toContain('resolution=3600');     // 1h = 3600 seconds (NOT '1h' string)
-    expect(call?.url).toContain('limit=200');           // ≥10 minimum (probed); 200 is generous default
+    expect(call?.url).toContain('limit=1000');          // Phemex limit is a FIXED ENUM {5,10,50,100,500,1000}; intermediate values return 400. Adapter uses 1000 for max history.
   });
 
   it('falls back to nearest available resolution for unsupported timeframes (3m → 5m=300, 2h → 1h=3600, 12h → 1d=86400)', async () => {
