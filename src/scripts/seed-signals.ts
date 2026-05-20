@@ -92,6 +92,8 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   'WEEX':    300,
   // PILOT-ADAPTERS-W3B / C2 (2026-05-20): BITMART shadow venue. Binance-style symbol BTCUSDT; 8h cadence.
   'BITMART': 300,
+  // PILOT-ADAPTERS-W3B / C3 (2026-05-20): XT shadow venue. Lowercase btc_usdt; 8h cadence.
+  'XT':      300,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)

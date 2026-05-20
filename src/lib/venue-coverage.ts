@@ -59,16 +59,16 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   // Existing promoted-CEX rows extended with GATE where Plan-Mode probe found a listing
   AMD:       ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
   BABA:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
-  COPPER:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART'],   // W2 C1 Gate XCU + C2 MEXC + C3 KuCoin literal; W3A C1 Phemex COPPER direct; W3A C3 HTX COPPER direct
+  COPPER:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART', 'XT'],   // W2 C1 Gate XCU + C2 MEXC + C3 KuCoin literal; W3A C1 Phemex COPPER direct; W3A C3 HTX COPPER direct
   COST:      ['HL', 'BINANCE', 'BITGET', 'GATE', 'KUCOIN'],
   CRWV:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
   GME:       ['HL', 'BINANCE', 'BITGET'],                  // not on Gate/MEXC/KuCoin
   HIMS:      ['HL', 'BITGET', 'GATE', 'KUCOIN'],
   LLY:       ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
-  NATGAS:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // Gate NG (alias) + KuCoin direct + W3A C1 Phemex NG (alias); W3A C3 HTX NATGAS direct
+  NATGAS:    ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'XT'],   // Gate NG (alias) + KuCoin direct + W3A C1 Phemex NG (alias); W3A C3 HTX NATGAS direct
   NFLX:      ['HL', 'BINANCE', 'BITGET', 'GATE', 'KUCOIN'],
-  PALLADIUM: ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART'],   // W2 Gate/MEXC/KuCoin XPD + W3A C1 Phemex XPD; W3A C3 HTX XPD
-  PLATINUM:  ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART'],   // W2 Gate/MEXC/KuCoin XPT + W3A C1 Phemex XPT; W3A C3 HTX XPT
+  PALLADIUM: ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART', 'XT'],   // W2 Gate/MEXC/KuCoin XPD + W3A C1 Phemex XPD; W3A C3 HTX XPD
+  PLATINUM:  ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART', 'XT'],   // W2 Gate/MEXC/KuCoin XPT + W3A C1 Phemex XPT; W3A C3 HTX XPT
   USAR:      ['HL', 'BINANCE', 'BITGET', 'OKX', 'GATE', 'KUCOIN'],
   XLE:       ['HL', 'BITGET', 'MEXC'],                      // C2 MEXC adds (not on Gate per Plan-Mode probe)
 
@@ -80,14 +80,14 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   BRENTOIL:  ['HL', 'MEXC', 'HTX'],                          // C2: MEXC has UKOIL_USDT (alias); W3A C3 HTX BRENTOIL direct
 
   // NEW rows: TradFi symbols that previously defaulted to ALL_5 but Gate.io adds shadow-venue coverage
-  GOLD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'BINGX', 'HTX', 'BITMART'],     // W2 Gate XAU + MEXC XAUT + KuCoin XAUT; W3A C1 Phemex XAU; W3A C2 BingX XAUT; W3A C3 HTX XAU
-  SILVER:    ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART'],     // W2 Gate XAG + MEXC literal + KuCoin XAG; W3A C1 Phemex XAG; W3A C3 HTX XAG
+  GOLD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'BINGX', 'HTX', 'BITMART', 'XT'],     // W2 Gate XAU + MEXC XAUT + KuCoin XAUT; W3A C1 Phemex XAU; W3A C2 BingX XAUT; W3A C3 HTX XAU
+  SILVER:    ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART', 'XT'],     // W2 Gate XAG + MEXC literal + KuCoin XAG; W3A C1 Phemex XAG; W3A C3 HTX XAG
   CL:        ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN', 'BITMART'],     // C1 Gate + C2 MEXC USOIL + C3 KuCoin CL direct
   EWJ:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN'],     // C1+C2+C3
   EWY:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'MEXC', 'KUCOIN'],     // C1+C2+C3
   INTC:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
   LITE:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
-  MSFT:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART'],   // W3A C1 Phemex MSFTUSDT direct; W3A C3 HTX MSFT-USDT direct
+  MSFT:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX', 'BITMART', 'XT'],   // W3A C1 Phemex MSFTUSDT direct; W3A C3 HTX MSFT-USDT direct
   MU:        ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
   SNDK:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
   TSM:       ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'GATE', 'KUCOIN'],
@@ -101,7 +101,7 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
   GOOGL:     ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C3 HTX GOOGL-USDT
   HOOD:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe; not on HTX per W3A C3 probe
   META:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C3 HTX META-USDT
-  MSTR:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'WEEX'],
+  MSTR:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'WEEX', 'XT'],
   NVDA:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN', 'PHEMEX', 'HTX', 'WEEX'],   // W3A C3 HTX NVDA-USDT
   ORCL:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe
   PLTR:      ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET', 'KUCOIN'],   // not on Phemex per W3A C1 probe
@@ -110,8 +110,8 @@ const PARTIAL_COVERAGE: Record<string, ExchangeId[]> = {
 
   // PILOT-ADAPTERS-W3A / C1 (2026-05-20): NEW rows for Phemex-unique TradFi
   // listings (SP500 moved out of HL_ONLY; USOIL was implicit ALL_5 default).
-  SP500:     ['HL', 'PHEMEX'],   // moved out of HL_ONLY; Phemex SP500USDT is the REAL S&P 500 ($7338)
-  USOIL:     ['HL', 'PHEMEX', 'HTX', 'WEEX', 'BITMART'],   // Phemex CLOUSDT (alias from USOIL via TRADFI_ALIASES); HTX USOIL-USDT direct
+  SP500:     ['HL', 'PHEMEX', 'XT'],   // moved out of HL_ONLY; Phemex SP500USDT is the REAL S&P 500 ($7338)
+  USOIL:     ['HL', 'PHEMEX', 'HTX', 'WEEX', 'BITMART', 'XT'],   // Phemex CLOUSDT (alias from USOIL via TRADFI_ALIASES); HTX USOIL-USDT direct
 };
 
 /**
@@ -152,4 +152,4 @@ export function isVenueSupportedFor(coin: string, exchange: ExchangeId): boolean
  * Probe-date marker — useful for future "is this matrix stale?" audits.
  * Update in lockstep with re-running the alias coverage CSV.
  */
-export const COVERAGE_PROBED_AT = '2026-05-20';   // PILOT-ADAPTERS-W3B / C2 (2026-05-20) — Bitmart added to 9 TradFi rows (GOLD/SILVER/PLATINUM/PALLADIUM/COPPER/CL/USOIL/MSFT/VIX). Bitmart has BOTH XAU + XAUT — adapter prefers XAU spot. SPX intentionally NOT aliased (memecoin trap; SPXUSDT=$0.37 verified).
+export const COVERAGE_PROBED_AT = '2026-05-20';   // PILOT-ADAPTERS-W3B / C3 (2026-05-20) — XT.COM added to 9 TradFi rows (GOLD/SILVER/PLATINUM/PALLADIUM/COPPER/NATGAS/USOIL/MSFT/MSTR) + SP500 EXTENDED to ['HL', 'PHEMEX', 'XT'] (XT is 2nd shadow CEX with REAL S&P 500 perp; sp500_usdt=$7400 live-verified). SPX intentionally NOT aliased (memecoin trap; spx_usdt=$0.37).

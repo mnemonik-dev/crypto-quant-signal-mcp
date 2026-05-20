@@ -40,8 +40,7 @@ const W3B_VENUES: ShadowVenueSeed[] = [
     exchangeId: 'XT',
     assetCount: 893,
     notes: 'PILOT-ADAPTERS-W3B C3 (2026-05-20) — XT.COM USDT-M Futures perpetual; $7.38B OI / 893 PERPETUAL contracts (943 total — 47 CURRENT_QUARTER + 3 NEXT_QUARTER dated futures filtered out) / mid-tier established / CoinGecko rank 11. Symbol btc_usdt (lowercase + underscore). Live API at /future/market/v1/public/... (NOT spec /future/api/v1/...). 2ND venue after Phemex with REAL S&P 500 perp (sp500_usdt = $7400 verified live; SP500 PARTIAL_COVERAGE extended to [HL, PHEMEX, XT]).',
-    guardEnv: 'W3B_C3_ACTIVATED',
-  },
+      },
   {
     exchangeId: 'WHITEBIT',
     assetCount: 315,

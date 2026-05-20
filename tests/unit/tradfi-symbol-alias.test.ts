@@ -141,7 +141,7 @@ describe('getVenuesSupporting — venue-coverage matrix', () => {
     expect(venues).toContain('HL');
   });
 
-  it('SP500 (S&P 500 index): HL + PHEMEX — Phemex uniquely lists real S&P 500 alongside the SPX memecoin', () => {
+  it('SP500 (S&P 500 index): HL + PHEMEX + XT — Phemex + XT both list the real S&P 500 perp ($7400)', () => {
     // The CEX `SPX` ticker is the SPX6900 memecoin (~$0.40), NOT the S&P 500 index
     // (~$7400 on HL). See audits/TRADFI-SYMBOL-ALIAS-W1-endpoint-truth.md §3.b.
     //
@@ -152,7 +152,7 @@ describe('getVenuesSupporting — venue-coverage matrix', () => {
     // shadow CEX with the real S&P 500 perp. Per `audits/PILOT-ADAPTERS-W3A-
     // endpoint-truth.md` §TradFi alias probe.
     const venues = getVenuesSupporting('SP500');
-    expect(venues).toEqual(['HL', 'PHEMEX']);
+    expect(venues).toEqual(['HL', 'PHEMEX', 'XT']);
   });
 
   it('TTF (Dutch natural gas): HL-only', () => {
