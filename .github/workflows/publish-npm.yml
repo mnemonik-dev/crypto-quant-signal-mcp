@@ -1,0 +1,63 @@
+name: Publish to npm
+
+# Auto-publish to npm on every `v*.*.*` tag push.
+#
+# Wired in NPM-PUBLISH-v1.17.0-W1 (2026-05-22) closing the long-standing manual
+# `npm publish` gap per yesterday's WIS bullet `publish-npm-yml-gha-workflow-promotion-candidate`.
+# Token: `algovault-crypto-quant-signal-mcp-publish-automation-token` minted 2026-05-22
+# (90-day TTL, scoped to crypto-quant-signal-mcp only, Bypass-2FA enabled).
+# Repo secret: `NPM_TOKEN`. Rotation due 2026-08-20 per NPM-TOKEN-ROTATION follow-up.
+#
+# Triggers ONLY on tag push (NOT on every commit to main) — keeps the release wave
+# in control of when npm gets a new version. The daily release-wave does
+# `npm version <bump>` + `git push --follow-tags` → this workflow fires.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write   # required for npm provenance attestation (Sigstore Rekor)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Compile TS
+        run: npm run build
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify dist-tag
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(jq -r .version package.json)
+          # npm registry replication lag — poll up to 3× at 20s
+          for i in 1 2 3; do
+            LIVE=$(curl -sS "https://registry.npmjs.org/crypto-quant-signal-mcp" | jq -r '.["dist-tags"].latest')
+            if [ "$LIVE" = "$PACKAGE_VERSION" ]; then
+              echo "DIST_TAG_OK: dist-tags.latest=$LIVE matches package.json.version=$PACKAGE_VERSION"
+              exit 0
+            fi
+            echo "Attempt $i: dist-tags.latest=$LIVE, expected $PACKAGE_VERSION (replication lag)"
+            sleep 20
+          done
+          echo "DIST_TAG_FAIL: dist-tags.latest still doesn't match after 60s"
+          exit 1
