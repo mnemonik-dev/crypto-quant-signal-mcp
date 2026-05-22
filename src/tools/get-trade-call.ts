@@ -3,7 +3,7 @@ import { rsi, emaLast, ema, hurstExponent, detectSqueeze } from '../lib/indicato
 import { canAccessCoin, canAccessTimeframe, freeGateMessage, isFreeTier, checkQuota, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId, daysUntilMonthReset, getMonthlyQuota } from '../lib/license.js';
 import { recordSignal, recordFunding, getFundingZScore, recordHoldCount } from '../lib/performance-db.js';
 import { hashSignal } from '../lib/merkle.js';
-import { getDexForCoin, classifyAsset, isMemeCoinLiquid, isKnownTradFi } from '../lib/asset-tiers.js';
+import { getDexForCoin, classifyAsset, isMemeCoinLiquid, isKnownTradFi, getTop20ByOI } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
 import { TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError } from '../lib/errors.js';
 import { withTierWarning, DEFAULT_UPGRADE_URL } from '../lib/tier-warning.js';
@@ -132,7 +132,17 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
   // gate now runs for ALL 17 ExchangeId values uniformly via per-exchange-AND
   // semantics in isMemeCoinLiquid. Shadow venues (12 of 17) short-circuit TRUE
   // at the gate level pending per-venue promotion to PUBLIC tier.
-  const tier = classifyAsset(coin, null);
+  //
+  // OPS-TIER4-CLASSIFY-W1 (2026-05-22): pass the actual top-20-by-HL-OI set
+  // (1h-cached via getTop20ByOI) instead of the hardcoded `null` that
+  // short-circuited the Tier-2 branch inside classifyAsset. Without this,
+  // every major-alt coin (anything not TIER_1/TradFi/MEME_KNOWN) defaulted
+  // to Tier 4 + routed through isMemeCoinLiquid — incorrectly rejecting
+  // top-20-by-OI coins (e.g. AVAX rank 16, LINK rank 17) as "illiquid
+  // micro-caps". Steady-state cost: 1h cache hit ≈ free. Cold-start path
+  // has static FALLBACK_TOP20 inside getTop20ByOI so this never blocks.
+  const top20 = await getTop20ByOI();
+  const tier = classifyAsset(coin, top20);
   if (tier === 4) {
     const liquid = await isMemeCoinLiquid(coin, exchange);
     if (!liquid) {
