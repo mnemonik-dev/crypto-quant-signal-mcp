@@ -5,7 +5,7 @@
  * Dynamically fetches tradeable universe per exchange (sorted by OI),
  * seeds signals via getTradeSignal(), and stores results in performance DB.
  *
- * Supports --timeframe, --top, and --exchange flags:
+ * Supports --timeframe, --top, --exchange, and --exchange-list flags:
  *   --timeframe 5m   (idempotency window: 4 min)
  *   --timeframe 15m  (default, idempotency window: 14 min)
  *   --timeframe 30m  (idempotency window: 28 min)
@@ -16,18 +16,30 @@
  *   --timeframe 12h  (idempotency window: 11h 50min)
  *   --timeframe 1d   (idempotency window: 23h)
  *   --top 50         (limit to top N by open interest, default: all)
- *   --exchange HL       (Hyperliquid only)
+ *   --exchange HL       (Hyperliquid only — single-venue shorthand for 5 PROMOTED venues)
  *   --exchange BINANCE  (Binance only)
  *   --exchange BYBIT    (Bybit only)
  *   --exchange OKX      (OKX only)
  *   --exchange BITGET   (Bitget only)
- *   --exchange ALL      (all 5 exchanges, default)
+ *   --exchange ALL      (all 5 PROMOTED venues, default)
+ *   --exchange-list <EX1,EX2,...> (OPS-3M-EXPAND-W2-PART-A 2026-05-22):
+ *                       comma-separated subset of the 17-value ExchangeId
+ *                       union. Mutually exclusive with --exchange. Accepts
+ *                       both PROMOTED (HL/BINANCE/BYBIT/OKX/BITGET) and
+ *                       SHADOW (ASTER/EDGEX/GATE/MEXC/KUCOIN/PHEMEX/BINGX/
+ *                       HTX/WEEX/BITMART/XT/WHITEBIT) venues — the
+ *                       meme-liquidity gate handles shadow venues via
+ *                       SHADOW_VENUE_PERMISSIVE_PASS short-circuit. Designed
+ *                       for staggered cron entries that scope to a venue
+ *                       subset (e.g. CEX-only top-50 line alongside an HL-
+ *                       only line on a different schedule).
  *
  * Usage:
  *   npx tsx src/scripts/seed-signals.ts                         (15m default, all exchanges)
  *   npx tsx src/scripts/seed-signals.ts --timeframe 4h
  *   npx tsx src/scripts/seed-signals.ts --exchange BINANCE --timeframe 1h
  *   npx tsx src/scripts/seed-signals.ts --timeframe 5m --top 20
+ *   npx tsx src/scripts/seed-signals.ts --exchange-list BINANCE,BYBIT,OKX,BITGET --timeframe 3m --top 50
  *   node dist/scripts/seed-signals.js --timeframe 1d
  */
 
@@ -138,8 +150,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
-function parseArgs(): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number } {
-  const args = process.argv.slice(2);
+/**
+ * Canonical list of all 17 ExchangeId values for `--exchange-list` validation.
+ * Mirrors `src/types.ts:95`. Updated when ExchangeId widens (e.g. when a new
+ * SHADOW venue is added via a PILOT-ADAPTERS wave).
+ *
+ * Includes both PROMOTED (5) and SHADOW (12) venues — the meme-liquidity gate
+ * in `asset-tiers.ts::isMemeCoinLiquid` short-circuits TRUE for shadow venues
+ * via SHADOW_VENUE_PERMISSIVE_PASS, so `--exchange-list ASTER,EDGEX` is valid
+ * input from the parseArgs perspective.
+ */
+export const ALL_EXCHANGE_IDS: ExchangeId[] = [
+  'HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET',
+  'ASTER', 'EDGEX', 'GATE', 'MEXC', 'KUCOIN', 'PHEMEX',
+  'BINGX', 'HTX', 'WEEX', 'BITMART', 'XT', 'WHITEBIT',
+];
+
+/**
+ * Parse seed-signals CLI args.
+ *
+ * @param argv  Optional argv slice (defaults to `process.argv.slice(2)`).
+ *              Exposed for testability (vitest passes synthetic argv to
+ *              `tests/seed-signals-parse-args.test.ts`).
+ */
+export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number } {
+  const args = argv;
 
   let timeframe = '15m';
   const tfIdx = args.indexOf('--timeframe');
@@ -181,6 +216,17 @@ function parseArgs(): { timeframe: string; top: number; exchanges: ExchangeId[];
 
   let exchanges: ExchangeId[] = ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET'];
   const exIdx = args.indexOf('--exchange');
+  const exListIdx = args.indexOf('--exchange-list');
+
+  // OPS-3M-EXPAND-W2-PART-A (2026-05-22): mutual-exclusion guard between
+  // --exchange (single-venue or ALL shorthand) and --exchange-list (subset
+  // of the 17-value ExchangeId union). Mixing both is operator error;
+  // surface immediately with an explicit message.
+  if (exIdx !== -1 && exListIdx !== -1) {
+    console.error('Error: --exchange and --exchange-list are mutually exclusive. Use one or the other.');
+    process.exit(1);
+  }
+
   if (exIdx !== -1 && args[exIdx + 1]) {
     const ex = args[exIdx + 1].toUpperCase();
     const validSingle: Record<string, ExchangeId> = {
@@ -194,6 +240,30 @@ function parseArgs(): { timeframe: string; top: number; exchanges: ExchangeId[];
       console.error(`Invalid exchange: ${ex}. Use HL, BINANCE, BYBIT, OKX, BITGET, or ALL.`);
       process.exit(1);
     }
+  } else if (exListIdx !== -1 && args[exListIdx + 1]) {
+    // OPS-3M-EXPAND-W2-PART-A (2026-05-22): --exchange-list <CSV> — accepts a
+    // comma-separated subset of the 17-value ExchangeId union. Designed for
+    // staggered cron entries that scope to a venue subset (e.g. CEX-only
+    // top-50 line alongside an HL-only line on a different schedule).
+    //
+    // Validates each entry against ALL_EXCHANGE_IDS. HALTs on any unknown
+    // value with the full valid set printed for operator clarity. Note that
+    // 'ALL' is NOT a valid --exchange-list entry (it's --exchange shorthand);
+    // operators wanting all 5 promoted venues should use --exchange ALL.
+    const raw = args[exListIdx + 1];
+    const list = raw.split(',').map((s) => s.trim().toUpperCase());
+    if (list.length === 0 || list.some((s) => s.length === 0)) {
+      console.error(`Invalid --exchange-list value: "${raw}". Expected comma-separated ExchangeId values (e.g. BINANCE,BYBIT,OKX,BITGET).`);
+      process.exit(1);
+    }
+    const validSet = new Set<string>(ALL_EXCHANGE_IDS);
+    for (const ex of list) {
+      if (!validSet.has(ex)) {
+        console.error(`Invalid exchange in --exchange-list: ${ex}. Valid values: ${ALL_EXCHANGE_IDS.join(', ')}.`);
+        process.exit(1);
+      }
+    }
+    exchanges = list as ExchangeId[];
   }
 
   return { timeframe, top, exchanges, restrictedUniverse };
