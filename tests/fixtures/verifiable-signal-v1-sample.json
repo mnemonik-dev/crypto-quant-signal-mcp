@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "signal_id": "e3a83395-0ea3-4671-9eed-7ee4710ce93d",
+  "emitted_at": "2026-05-22T16:11:21Z",
+  "market": "crypto",
+  "action": "hold",
+  "symbol": "BTC",
+  "price": 76742.4,
+  "quantity": null,
+  "timeframe": "5m",
+  "executed_at": null,
+  "content": "Trending regime, downward bias. Funding pressure mild. Compression building, breakout setup pending. Trend persistence elevated; momentum structure. Conditions mixed; better setups likely available elsewhere.",
+  "composite_verdict": {
+    "verdict": "hold",
+    "confidence": 0.52
+  },
+  "merkle_proof": null,
+  "cross_venue_metadata": null
+}

@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlgoVaultLabs/crypto-quant-signal-mcp/main/schemas/verifiable-signal-v1.json",
+  "title": "AlgoVault Verifiable-Signal v1.0",
+  "description": "Canonical wire format for verifiable trading signals emitted by an AlgoVault-Verifiable-Signal-compliant emitter and consumed by downstream agents, bots, and execution engines. Authored by AlgoVault Labs; emitter-neutral.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "version",
+    "signal_id",
+    "emitted_at",
+    "market",
+    "action",
+    "symbol",
+    "composite_verdict"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Spec version this payload conforms to. Conformant emitters SHALL set this to the major.minor version of the schema used to produce the payload.",
+      "pattern": "^[1-9][0-9]*\\.[0-9]+$",
+      "examples": ["1.0"]
+    },
+    "signal_id": {
+      "type": "string",
+      "description": "Globally-unique identifier for this signal emission. Conformant emitters SHALL produce a value that is collision-free across the emitter's signal corpus (e.g., UUID v4, ULID, or a deterministic content-addressed hash).",
+      "minLength": 1,
+      "maxLength": 128,
+      "examples": ["a1b2c3d4-e5f6-4789-a012-3456789abcde"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp at which the emitter generated this signal. Conformant emitters SHALL use UTC and SHOULD include sub-second precision when available.",
+      "examples": ["2026-05-22T13:25:00Z"]
+    },
+    "market": {
+      "type": "string",
+      "description": "The asset class the signal applies to. Consumers MAY route on this field to select a downstream execution venue.",
+      "enum": ["crypto", "us-stock", "polymarket", "forex", "options", "futures", "fx", "commodity"]
+    },
+    "action": {
+      "type": "string",
+      "description": "The directional verdict. `hold` is a first-class verdict for spec-compliant emitters whose calibration may decline to act.",
+      "enum": ["buy", "sell", "short", "cover", "hold"]
+    },
+    "symbol": {
+      "type": "string",
+      "description": "The market-symbol identifier (venue-native or canonical-form per emitter convention). Consumers SHOULD treat this as opaque and look up venue-specific routing externally.",
+      "minLength": 1,
+      "maxLength": 64,
+      "examples": ["BTC", "AAPL", "EUR/USD"]
+    },
+    "price": {
+      "type": ["number", "null"],
+      "description": "Reference price at the moment of signal emission, in the symbol's quote currency. MAY be null when the verdict is `hold` or when the emitter does not publish a reference price.",
+      "minimum": 0
+    },
+    "quantity": {
+      "type": ["number", "null"],
+      "description": "Suggested position size, in base-asset units. MAY be null when the emitter does not prescribe sizing (consumers SHOULD size positions per their own risk policy).",
+      "minimum": 0
+    },
+    "timeframe": {
+      "type": "string",
+      "description": "The bar-density / horizon the signal was generated against. Conformant emitters SHOULD use one of the standard intervals; consumers MAY treat unknown values as opaque.",
+      "examples": ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d"]
+    },
+    "executed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Optional ISO-8601 UTC timestamp at which the signal was acted upon (when re-emitting a signal as a post-execution record). MAY be null for forward-looking signals."
+    },
+    "content": {
+      "type": ["string", "null"],
+      "description": "Optional free-form rationale text. Consumers MAY surface this to end users; emitters SHALL NOT place machine-readable state here that consumers are expected to parse.",
+      "maxLength": 8192
+    },
+    "composite_verdict": {
+      "$ref": "#/$defs/CompositeVerdict"
+    },
+    "merkle_proof": {
+      "anyOf": [
+        {"$ref": "#/$defs/MerkleProof"},
+        {"type": "null"}
+      ],
+      "description": "Optional cryptographic anchor binding this signal to a published commitment (e.g., an on-chain Merkle root). When present, conformant consumers MAY independently verify the proof against the cited root."
+    },
+    "cross_venue_metadata": {
+      "anyOf": [
+        {"$ref": "#/$defs/CrossVenueMetadata"},
+        {"type": "null"}
+      ],
+      "description": "Optional cross-venue derivation metadata documenting which venues were consulted in producing the verdict and how they agreed. Enables consumers to audit cross-venue intelligence claims."
+    }
+  },
+  "$defs": {
+    "CompositeVerdict": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["verdict", "confidence"],
+      "description": "Structured representation of the emitter's directional verdict together with calibrated confidence and (optionally) the weighted factor decomposition that produced it.",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["buy", "sell", "short", "cover", "hold"],
+          "description": "Same enum as top-level `action`. Conformant emitters SHALL keep `composite_verdict.verdict` and top-level `action` synchronized; a mismatch is an emitter bug."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "A floating-point value in [0.0, 1.0] representing the emitter's calibrated confidence in the verdict. Emitters SHOULD calibrate against historical outcomes; consumers MAY threshold on this value (e.g., ignore verdicts below 0.6)."
+        },
+        "factor_weights": {
+          "type": "object",
+          "additionalProperties": {"type": "number"},
+          "description": "Optional map of factor-name → contribution-weight (signed scalar) documenting which sub-factors drove the verdict and by how much. Sum of absolute weights is emitter-defined (need not equal 1.0). Consumers MAY surface this for explainability without depending on a fixed factor taxonomy."
+        }
+      }
+    },
+    "MerkleProof": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["leaf", "root", "path"],
+      "description": "A Merkle inclusion proof binding `leaf` (the signal's content-hash) to a published `root` via a sequence of sibling hashes along `path`. Conformant emitters SHOULD also include `published_at` and `anchor_url` so consumers can fetch the root from a public source.",
+      "properties": {
+        "leaf": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]+$",
+          "description": "Hex-encoded leaf hash (typically `sha256` or `keccak256` of the canonical-form signal payload)."
+        },
+        "root": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]+$",
+          "description": "Hex-encoded Merkle root the leaf is proved against."
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sibling", "position"],
+            "properties": {
+              "sibling": {"type": "string", "pattern": "^0x[0-9a-fA-F]+$"},
+              "position": {"type": "string", "enum": ["left", "right"]}
+            }
+          },
+          "description": "Ordered list of sibling hashes from leaf to root. Each entry's `position` indicates whether the sibling is the left or right child relative to the current node when recomputing the parent."
+        },
+        "hash_algo": {
+          "type": "string",
+          "enum": ["sha256", "keccak256", "blake3"],
+          "description": "Hash function used to derive `leaf` and to recompute parent nodes from `path`. Defaults to `sha256` if omitted."
+        },
+        "published_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Optional ISO-8601 UTC timestamp the root was first published."
+        },
+        "anchor_url": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "Optional URL where consumers can independently fetch the published root for verification (e.g., a block-explorer URL for an on-chain commitment, or an HTTP endpoint returning the root)."
+        }
+      }
+    },
+    "CrossVenueMetadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["venues_consulted"],
+      "description": "Documents which venues were consulted when deriving the verdict, how they agreed, and (optionally) per-venue contribution scores. Enables consumers to audit cross-venue intelligence claims.",
+      "properties": {
+        "venues_consulted": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "description": "List of venue identifiers (emitter-defined; typically uppercase short codes like `HL`, `BINANCE`, `BYBIT`)."
+        },
+        "venue_agreement_score": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "A floating-point value in [0.0, 1.0] representing the fraction of consulted venues whose individual sub-verdicts agreed with the composite. 1.0 = unanimous; 0.5 = split. Consumers MAY threshold for higher-confidence signal selection."
+        },
+        "per_venue_verdicts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["buy", "sell", "short", "cover", "hold"]
+          },
+          "description": "Optional map of venue-id → that venue's individual sub-verdict, for explainability. Keys SHALL be drawn from `venues_consulted`."
+        }
+      }
+    }
+  }
+}
