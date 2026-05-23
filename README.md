@@ -97,13 +97,21 @@ Each demo is runnable as `python examples/<framework>/demo.py BTC 4h` — gets a
 
 ---
 
-## What's new in v1.17.0
+## What's new in v1.18.0
 
-Live since 2026-05-21:
+Live since 2026-05-23:
 
-- **📊 Free-tier quota visibility.** MCP tool responses surface usage progress at 75% and 90% of the monthly quota. At 100% the tool returns a structured error (`TIER_LIMIT_REACHED`) with an upgrade link. Existing 100-call monthly quota unchanged.
-- **💳 Stripe webhook idempotency.** `checkout.session.completed` events are processed exactly once; UTM tags round-trip through Stripe metadata for paid-conversion attribution.
-- **📦 TensorBlock listing.** AlgoVault now listed in TensorBlock's awesome-mcp-servers catalog (5th external discovery channel alongside npm registry, MCP Registry, LobeHub, and Claude Desktop DXT manifest).
+- **⏱️ 3-minute timeframe goes LIVE on the public Live Track Record.** The 3m card and Methodology > Evaluation Windows row are now visible at [algovault.com/track-record](https://algovault.com/track-record). The 9th evaluated timeframe is live. (The `3m` key shipped to `/api/performance-public.byTimeframe` in v1.16.0; v1.18.0 completes the dashboard-display chain.)
+- **🔌 Platform integration examples.** New public repo at [github.com/AlgoVaultLabs/algovault-integrations](https://github.com/AlgoVaultLabs/algovault-integrations) ships reference implementations of the Verifiable-Signal v1.0 spec (introduced in v1.17.0). Three platforms in this release:
+  - **AI4Trade** (TypeScript) — REST POST with token-in-body auth.
+  - **Nautilus Trader** (Python) — Subclass of Nautilus's `Data` abstract base.
+  - **3Commas** (TypeScript) — Signal Bot webhook via per-bot curry-pattern factory.
+
+### v1.17.0 highlights (recap)
+
+- **📊 Free-tier quota visibility.** MCP tool responses surface usage progress at 75% and 90% of the monthly quota. At 100% the tool returns a structured error (`TIER_LIMIT_REACHED`) with an upgrade link.
+- **💳 Stripe webhook idempotency.** `checkout.session.completed` events processed exactly once; UTM tags round-trip through Stripe metadata.
+- **📦 TensorBlock listing.** 5th external discovery channel alongside npm registry, MCP Registry, LobeHub, and Claude Desktop DXT.
 
 ### v1.16.0 highlights (recap)
 
