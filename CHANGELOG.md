@@ -5,6 +5,17 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-05-23
+
+### Added — 3-minute timeframe goes live on the public Live Track Record
+- The 3-minute timeframe card and Methodology > Evaluation Windows row are now visible at algovault.com/track-record. The 9th evaluated timeframe is live. (The `3m` key shipped to `/api/performance-public.byTimeframe` in v1.16.0; v1.18.0 completes the dashboard-display chain.)
+
+### Added — Platform integration examples
+- New public repo at github.com/AlgoVaultLabs/algovault-integrations ships reference implementations of the Verifiable-Signal v1.0 spec (introduced in v1.17.0). Three platforms in this release:
+  - **AI4Trade** (TypeScript) — REST POST with token-in-body auth.
+  - **Nautilus Trader** (Python) — Subclass of Nautilus's `Data` abstract base.
+  - **3Commas** (TypeScript) — Signal Bot webhook via per-bot curry-pattern factory.
+
 ## [1.17.0] - 2026-05-21
 
 ### Added
