@@ -2503,17 +2503,21 @@ tailwind.config = {
     </div>
   </div>
 
-  <!-- DESIGN-W4 / C3 + DESIGN-W8-FIX (2026-05-11): Performance by Timeframe
-       canonical bar chart — translated from track-record-2.jsx TimeframeSection.
-       8 evaluated timeframes (5m / 15m / 30m / 1h / 2h / 4h / 8h / 12h).
-       1m / 3m / 1d trimmed per Mr.1 directive — 1m/3m have insufficient signal
-       count for meaningful WR; 1d shows wide variance due to small n.
+  <!-- DESIGN-W4 / C3 + DESIGN-W8-FIX (2026-05-11) + OPS-DASHBOARD-3M-DISPLAY-W1
+       (2026-05-23): Performance by Timeframe canonical bar chart — translated
+       from track-record-2.jsx TimeframeSection.
+       9 evaluated timeframes (3m / 5m / 15m / 30m / 1h / 2h / 4h / 8h / 12h).
+       1m / 1d trimmed per Mr.1 directive — 1m stays shadow pending sample-
+       density accrual; 1d shows wide variance due to small n. 3m joined
+       the dashboard on 2026-05-23 (slot #3 best by PFE) after clearing
+       shadow-mode decision gates per SHADOW-REVEAL-3M-W1 (2026-05-19).
        Hydrated from /api/performance-public.byTimeframe on page load. The
        "11 TIMEFRAMES" marketing claim is preserved verbatim across landing /
        signup / faq / docs (claim of SUPPORTED TF count via the get_trade_call
-       MCP tool, distinct from the 8-row evaluated-WR chart granularity). -->
+       MCP tool, distinct from the 9-row evaluated-WR chart granularity). -->
   <div class="section"><h2>Performance by Timeframe</h2>
     <div class="tf-bar-chart" id="tf-bar-chart">
+      <div class="tf-bar-row" data-tf="3m"><span class="tf-bar-label">3m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-3m"></div></div><span class="tf-bar-value" data-tr-field="tf_3m_wr">&mdash;</span></div>
       <div class="tf-bar-row" data-tf="5m"><span class="tf-bar-label">5m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-5m"></div></div><span class="tf-bar-value" data-tr-field="tf_5m_wr">&mdash;</span></div>
       <div class="tf-bar-row" data-tf="15m"><span class="tf-bar-label">15m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-15m"></div></div><span class="tf-bar-value" data-tr-field="tf_15m_wr">&mdash;</span></div>
       <div class="tf-bar-row" data-tf="30m"><span class="tf-bar-label">30m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-30m"></div></div><span class="tf-bar-value" data-tr-field="tf_30m_wr">&mdash;</span></div>
@@ -2807,14 +2811,17 @@ function renderAll() {
     if (nEl)  nEl.textContent  = (exData.count != null) ? exData.count.toLocaleString() : '—';
   });
 
-  // DESIGN-W4 / C3 + DESIGN-W8-FIX (2026-05-11): hydrate canonical .tf-bar-chart
-  // from /api/performance-public.byTimeframe. Page-load only. Renders 8 evaluated
-  // TFs (5m/15m/30m/1h/2h/4h/8h/12h); 1m/3m/1d trimmed per Mr.1 directive
-  // (insufficient signal count for meaningful WR on 1m/3m; 1d high variance).
+  // DESIGN-W4 / C3 + DESIGN-W8-FIX (2026-05-11) + OPS-DASHBOARD-3M-DISPLAY-W1
+  // (2026-05-23): hydrate canonical .tf-bar-chart from
+  // /api/performance-public.byTimeframe. Page-load only. Renders 9 evaluated
+  // TFs (3m/5m/15m/30m/1h/2h/4h/8h/12h); 1m/1d trimmed per Mr.1 directive
+  // (1m stays shadow pending sample-density accrual; 1d high variance).
+  // 3m joined 2026-05-23 (slot #3 best by PFE) after clearing shadow-mode
+  // gates per SHADOW-REVEAL-3M-W1 (2026-05-19).
   // "11 TIMEFRAMES" marketing claim preserved elsewhere — refers to SUPPORTED
   // TF count via get_trade_call MCP tool, not evaluated-WR chart granularity.
   var byTF = d.byTimeframe || {};
-  ['5m','15m','30m','1h','2h','4h','8h','12h'].forEach(function(tf){
+  ['3m','5m','15m','30m','1h','2h','4h','8h','12h'].forEach(function(tf){
     var row = document.querySelector('[data-tf="' + tf + '"]');
     if (!row) return;
     var tfData = byTF[tf] || { pfeWinRate: null };
