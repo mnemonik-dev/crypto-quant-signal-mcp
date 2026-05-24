@@ -32,6 +32,15 @@ const ALTER_BOT_INTERNAL_SQL = `
   ALTER TABLE request_log ADD COLUMN IF NOT EXISTS is_bot_internal ${process.env.DATABASE_URL ? 'BOOLEAN' : 'INTEGER'} DEFAULT ${process.env.DATABASE_URL ? 'FALSE' : '0'};
 `;
 
+// DASH-EXTERNAL-ONLY-W1, 2026-05-24: partial index for external-only reads.
+// Speeds the 24h/7d/all-time tiles in getUsageStats() + getToolLatencyStats(),
+// which all carry `WHERE is_bot_internal = FALSE` + time-window. Partial index
+// stays small (~6% of rows at install — 980/15130 external/total). Index name
+// matches the AC3 verification probe (`\di idx_request_log_external_ts`).
+const CREATE_REQUEST_LOG_EXTERNAL_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_request_log_external_ts ON request_log(timestamp) WHERE is_bot_internal = ${process.env.DATABASE_URL ? 'FALSE' : '0'};
+`;
+
 // C6 (algovault-skills SKILLS-W1): per-Skill attribution.
 // Populated when MCP request carries the X-AlgoVault-Skill-Slug header.
 // Public surface: src/resources/skills-analytics.ts + landing/analytics/skills.html
@@ -61,6 +70,14 @@ export function initAnalytics(): void {
     // Older PG (<9.6) / SQLite (<3.35) — column may already exist or syntax
     // differs. Best-effort; the column has DEFAULT 0/FALSE so old rows remain
     // queryable.
+  }
+  // DASH-EXTERNAL-ONLY-W1: partial index on (timestamp) WHERE NOT is_bot_internal.
+  // Idempotent CREATE INDEX IF NOT EXISTS; safe to fire on fresh deploy + existing PG.
+  try {
+    dbExec(CREATE_REQUEST_LOG_EXTERNAL_INDEX_SQL);
+  } catch {
+    // Best-effort — partial indexes are PG-only on older SQLite; the query
+    // planner falls back to seq scan on the read path, no correctness loss.
   }
   dbExec(CREATE_SKILL_INVOCATIONS_SQL);
   dbExec(CREATE_SKILL_INVOCATIONS_INDEX_SLUG_SQL);
@@ -242,14 +259,27 @@ export interface ToolLatencyStats {
   insufficient_data: boolean;  // true iff n < 5
 }
 
-export async function getToolLatencyStats(windowMs: number = 7 * 86_400_000): Promise<ToolLatencyStats[]> {
+export async function getToolLatencyStats(
+  windowMs: number = 7 * 86_400_000,
+  opts?: { externalOnly?: boolean },
+): Promise<ToolLatencyStats[]> {
   const since = new Date(Date.now() - windowMs).toISOString();
+  // DASH-EXTERNAL-ONLY-W1: default external-only; opts.externalOnly=false keeps
+  // backward-compat seam for any future caller that wants both. Cross-DB boolean
+  // encoding mirrors logRequest at line 96-98.
+  const externalOnly = opts?.externalOnly ?? true;
+  const BOT_FALSE = process.env.DATABASE_URL ? false : 0;
   // Pull (tool_name, response_time_ms) rows ordered ascending so per-tool slices
   // are already sorted — saves a per-tool sort pass.
-  const rows = await dbQuery<{ tool_name: string; response_time_ms: number }>(
-    'SELECT tool_name, response_time_ms FROM request_log WHERE timestamp >= ? ORDER BY tool_name ASC, response_time_ms ASC LIMIT 100000',
-    [since],
-  );
+  const rows = externalOnly
+    ? await dbQuery<{ tool_name: string; response_time_ms: number }>(
+        'SELECT tool_name, response_time_ms FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? ORDER BY tool_name ASC, response_time_ms ASC LIMIT 100000',
+        [since, BOT_FALSE],
+      )
+    : await dbQuery<{ tool_name: string; response_time_ms: number }>(
+        'SELECT tool_name, response_time_ms FROM request_log WHERE timestamp >= ? ORDER BY tool_name ASC, response_time_ms ASC LIMIT 100000',
+        [since],
+      );
   // Bucket per tool (rows are already sorted by tool_name then ms — single pass).
   const byTool = new Map<string, number[]>();
   for (const r of rows) {
@@ -307,20 +337,28 @@ export async function getUsageStats(): Promise<Record<string, unknown>> {
     internalCalls24h,
     externalSessions24h,
   ] = await Promise.all([
-    dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log'),
-    dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ?', [dayAgo]),
-    dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ?', [weekAgo]),
-    dbQuery<{ tool_name: string; count: string }>('SELECT tool_name, COUNT(*) as count FROM request_log GROUP BY tool_name ORDER BY count DESC'),
-    dbQuery<{ license_tier: string; count: string }>('SELECT license_tier, COUNT(*) as count FROM request_log GROUP BY license_tier ORDER BY count DESC'),
-    dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL', [dayAgo]),
-    dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL', [weekAgo]),
-    dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE session_id IS NOT NULL'),
+    // DASH-EXTERNAL-ONLY-W1: every dashboard tile / breakdown counts EXTERNAL
+    // calls only (internal loopback like algovault-bot excluded). Per CLAUDE.md
+    // "Fix at the generator, not the lane" — filter cascades from these 9
+    // queries into all consumers (/dashboard, /analytics, analytics-summary
+    // MCP resource). Additive externalCalls24h / internalCalls24h /
+    // externalSessions24h fields below preserve the split for callers that
+    // need it (monitor.ts daily digest).
+    dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE is_bot_internal = ?', [BOT_FALSE]),
+    dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ?', [dayAgo, BOT_FALSE]),
+    dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ?', [weekAgo, BOT_FALSE]),
+    dbQuery<{ tool_name: string; count: string }>('SELECT tool_name, COUNT(*) as count FROM request_log WHERE is_bot_internal = ? GROUP BY tool_name ORDER BY count DESC', [BOT_FALSE]),
+    dbQuery<{ license_tier: string; count: string }>('SELECT license_tier, COUNT(*) as count FROM request_log WHERE is_bot_internal = ? GROUP BY license_tier ORDER BY count DESC', [BOT_FALSE]),
+    dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL AND is_bot_internal = ?', [dayAgo, BOT_FALSE]),
+    dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL AND is_bot_internal = ?', [weekAgo, BOT_FALSE]),
+    dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE session_id IS NOT NULL AND is_bot_internal = ?', [BOT_FALSE]),
     // Top assets — 24h window so the digest reflects today's activity, not all-time.
-    dbQuery<{ asset: string; count: string }>('SELECT asset, COUNT(*) as count FROM request_log WHERE asset IS NOT NULL AND timestamp >= ? GROUP BY asset ORDER BY count DESC LIMIT 10', [dayAgo]),
-    getToolLatencyStats(),  // last 7d window, app-layer percentiles
+    dbQuery<{ asset: string; count: string }>('SELECT asset, COUNT(*) as count FROM request_log WHERE asset IS NOT NULL AND timestamp >= ? AND is_bot_internal = ? GROUP BY asset ORDER BY count DESC LIMIT 10', [dayAgo, BOT_FALSE]),
+    getToolLatencyStats(),  // last 7d window, app-layer percentiles; external-only by default (DASH-EXTERNAL-ONLY-W1)
     // External vs internal split — driven by is_bot_internal column (BOT-W1 / D1-C).
     // Used by monitor.ts daily digest to distinguish algovault-bot self-traffic from
-    // organic external MCP-client traffic. ~99% of current traffic is bot-internal.
+    // organic external MCP-client traffic. Preserved as additive fields even though
+    // the main tiles are now external-only (DASH-EXTERNAL-ONLY-W1).
     dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ?', [dayAgo, BOT_FALSE]),
     dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ?', [dayAgo, BOT_TRUE]),
     dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL AND is_bot_internal = ?', [dayAgo, BOT_FALSE]),

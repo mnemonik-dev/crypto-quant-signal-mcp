@@ -1935,11 +1935,11 @@ function getDashboardHtml(): string {
 </style>
 </head>
 <body>
-<div class="logo"><span>&#x1f4ca;</span><div><h1>AlgoVault Analytics</h1><div class="subtitle">crypto-quant-signal-mcp</div></div></div>
+<div class="logo"><span>&#x1f4ca;</span><div><h1>AlgoVault Analytics</h1><div class="subtitle">crypto-quant-signal-mcp &middot; external calls only</div></div></div>
 <div id="loading">Loading analytics...</div>
 <div id="content" style="display:none">
   <div class="grid">
-    <div class="card"><div class="label">Total Calls (All Time)</div><div class="value" id="total-all"></div></div>
+    <div class="card"><div class="label">Total Calls (All Time)</div><div class="value" id="total-all"></div><div style="color:#6e7681;font-size:11px;margin-top:8px">Excludes internal loopback (e.g. algovault-bot)</div></div>
     <div class="card"><div class="label">Last 24 Hours</div><div class="value green" id="total-24h"></div></div>
     <div class="card"><div class="label">Last 7 Days</div><div class="value purple" id="total-7d"></div></div>
     <div class="card"><div class="label">Unique Sessions (All Time)</div><div class="value" id="sessions-all"></div></div>
