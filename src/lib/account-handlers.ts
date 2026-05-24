@@ -89,13 +89,13 @@ const ACCOUNT_NAV_HTML = `<nav class="fixed top-0 w-full z-50 border-b border-wh
       <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
     </a>
     <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
-      <a href="/track-record" class="hover:text-white transition">Track Record</a>
+      <a href="https://algovault.com/track-record" class="hover:text-white transition">Track Record</a>
       <a href="https://algovault.com/how-it-works" class="hover:text-white transition">How it works</a>
-      <a href="/#pricing" class="hover:text-white transition">Pricing</a>
-      <a href="/integrations" class="hover:text-white transition">Integrations</a>
-      <a href="/skills" class="hover:text-white transition">Skills</a>
-      <a href="/docs.html" class="hover:text-white transition">Docs</a>
-      <a href="/verify" class="hover:text-white transition">Verify</a>
+      <a href="https://algovault.com/#pricing" class="hover:text-white transition">Pricing</a>
+      <a href="https://algovault.com/integrations" class="hover:text-white transition">Integrations</a>
+      <a href="https://algovault.com/skills" class="hover:text-white transition">Skills</a>
+      <a href="https://algovault.com/docs.html" class="hover:text-white transition">Docs</a>
+      <a href="https://algovault.com/verify" class="hover:text-white transition">Verify</a>
       <a href="https://api.algovault.com/account" class="text-mint-400 font-medium">Account</a>
       <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
     </div>
@@ -111,8 +111,8 @@ const ACCOUNT_FOOTER_HTML = `<footer style="padding:44px 80px 56px;border-top:1p
   <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
     <a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">GitHub</a>
     <a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">X / Twitter</a>
-    <a href="/signup" style="color:var(--fg-3);text-decoration:none">Signup</a>
-    <a href="/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a>
+    <a href="https://api.algovault.com/signup" style="color:var(--fg-3);text-decoration:none">Signup</a>
+    <a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a>
   </div>
 </footer>`;
 
