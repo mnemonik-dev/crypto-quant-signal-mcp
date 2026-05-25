@@ -1,0 +1,211 @@
+{
+  "_comment": "OPS-LANDING-AUTO-ALIGN-W1 (2026-05-25) snapshot manifest. Architect-ratified at Plan-Mode R1. Defines per-claim find/replace rules applied to landing/*.html on every Hetzner deploy. Script: scripts/snapshot-landing-data.mjs. Adding a new claim = manifest row, no code change.",
+  "sot_endpoints": {
+    "performance": "https://api.algovault.com/api/performance-public",
+    "merkle": "https://api.algovault.com/api/merkle-batches"
+  },
+  "fetch_timeout_ms": 10000,
+  "log_path": "/var/log/algovault-snapshot-landing.log",
+  "claims": [
+    {
+      "id": "dtrf-call-count",
+      "find_pattern": "(data-tr-field=\"call_count\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "totalCalls",
+      "format": "integer_with_commas",
+      "apply_to_files": ["landing/index.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-exchange-count",
+      "find_pattern": "(data-tr-field=\"exchange_count\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "exchange_count",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-hold-rate",
+      "find_pattern": "(data-tr-field=\"hold_rate\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}%$2",
+      "sot": "performance",
+      "accessor": "hold_rate",
+      "format": "float_1dp",
+      "apply_to_files": ["landing/index.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-merkle-batch-count",
+      "find_pattern": "(data-tr-field=\"merkle_batch_count\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "merkle",
+      "accessor": "batches.length",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/how-it-works.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-batch-count",
+      "find_pattern": "(data-tr-field=\"batch_count\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "merkle",
+      "accessor": "batches.length",
+      "format": "integer",
+      "apply_to_files": ["landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-pfe-wr",
+      "find_pattern": "(data-tr-field=\"pfe_wr\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}%$2",
+      "sot": "performance",
+      "accessor": "overall.pfeWinRate*100",
+      "format": "float_1dp",
+      "apply_to_files": ["landing/index.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-timeframe-count",
+      "find_pattern": "(data-tr-field=\"timeframe_count\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "timeframe_count",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/how-it-works.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-asset-count",
+      "find_pattern": "(data-tr-field=\"asset_count\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "asset_count_rounded_to_10",
+      "format": "integer",
+      "apply_to_files": ["landing/how-it-works.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-total-calls-executed",
+      "find_pattern": "(data-tr-field=\"total_calls_executed\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "totalCalls+totalHolds",
+      "format": "integer_with_commas",
+      "apply_to_files": ["landing/index.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-latest-batch-at",
+      "find_pattern": "(data-tr-field=\"latest_batch_at\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "merkle",
+      "accessor": "batches.latest.published_at",
+      "format": "iso_to_human",
+      "apply_to_files": ["landing/verify.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-latest-batch-n",
+      "find_pattern": "(data-tr-field=\"latest_batch_n\"[^>]*>)[^<]+(<)",
+      "replace_template": "$1{value}$2",
+      "sot": "merkle",
+      "accessor": "batches.latest.batch_id",
+      "format": "integer",
+      "apply_to_files": ["landing/verify.html"],
+      "replace_all": true
+    },
+    {
+      "id": "dtrf-latest-batch-hash-n",
+      "find_pattern": "(data-tr-field=\"latest_batch\"[^>]*>)#?[^<]+(<)",
+      "replace_template": "$1#{value}$2",
+      "sot": "merkle",
+      "accessor": "batches.latest.batch_id",
+      "format": "integer",
+      "apply_to_files": ["landing/verify.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-rating-count",
+      "find_pattern": "(\"ratingCount\":\\s*\")\\d+(\")",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "totalCalls",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-verified-trade-calls",
+      "find_pattern": "(\"name\":\\s*\"Verified trade calls\",\\s*\"value\":\\s*\")\\d+(\")",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "totalCalls",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-asset-count",
+      "find_pattern": "(\"name\":\\s*\"Asset count\",\\s*\"value\":\\s*\")\\d+(\")",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "asset_count",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-exchange-count",
+      "find_pattern": "(\"name\":\\s*\"Exchange count\",\\s*\"value\":\\s*\")\\d+(\")",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "exchange_count",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-timeframe-count",
+      "find_pattern": "(\"name\":\\s*\"Timeframe count \\(API\\)\",\\s*\"value\":\\s*\")\\d+(\")",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "timeframe_count",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-merkle-batches",
+      "find_pattern": "(\"name\":\\s*\"Merkle batches on Base L2\",\\s*\"value\":\\s*\")\\d+(\")",
+      "replace_template": "$1{value}$2",
+      "sot": "merkle",
+      "accessor": "batches.length",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-description-verified-calls",
+      "find_pattern": "(across\\s+)\\d+(\\s+verified\\s+calls)",
+      "replace_template": "$1{value}$2",
+      "sot": "performance",
+      "accessor": "totalCalls",
+      "format": "integer",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    },
+    {
+      "id": "jsonld-description-pfe-rate",
+      "find_pattern": "(\\d+\\.\\d)(%\\s+PFE\\s+win\\s+rate)",
+      "replace_template": "{value}$2",
+      "sot": "performance",
+      "accessor": "overall.pfeWinRate*100",
+      "format": "float_1dp",
+      "apply_to_files": ["landing/index.html", "landing/verify.html", "landing/how-it-works.html", "landing/skills.html"],
+      "replace_all": true
+    }
+  ]
+}

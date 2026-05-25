@@ -79,6 +79,19 @@ jobs:
             git reset --hard origin/main
             git clean -fd
 
+            # OPS-LANDING-AUTO-ALIGN-W1 (2026-05-25): build-time SoT snapshot injection.
+            # Runs AFTER git pull, BEFORE Caddy sync + container restart. Fetches
+            # /api/performance-public + /api/merkle-batches once; rewrites data-tr-field
+            # span fallbacks + matched JSON-LD literals in landing/*.html per
+            # scripts/snapshot-landing-manifest.json. Idempotent (snapshot-deterministic:
+            # same SoT in -> same files out within one fetch). Fail-open (script exits 0
+            # on SoT fetch failure / any error EXCEPT >=50% claim-match drop -> deploy
+            # continues with previous-deploy fallbacks; canary catches eventually).
+            # Closes the "static fallback freezes for N days" drift class permanently.
+            # See audits/OPS-LANDING-AUTO-ALIGN-W1-endpoint-truth.md. Logrotate config
+            # at /etc/logrotate.d/algovault-snapshot-landing (installed one-time at R3).
+            node scripts/snapshot-landing-data.mjs >> /var/log/algovault-snapshot-landing.log 2>&1 || echo "snapshot-landing failed; continuing fail-open"
+
             # Sync static landing pages + assets to Caddy serve path.
             # WEBSITE-REFRESH-W1 C1 added landing/js/ for the live track-record
             # proxy; the mkdir + cp -r line ensures any future landing/<subdir>/
