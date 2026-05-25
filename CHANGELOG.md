@@ -5,6 +5,17 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2] - 2026-05-25
+
+### Added
+- Two new platform integration examples in [github.com/AlgoVaultLabs/algovault-integrations](https://github.com/AlgoVaultLabs/algovault-integrations):
+  - **QuantDinger** — reference architecture doc for cross-MCP IDE-mediated orchestration. No transform code; AlgoVault MCP and QuantDinger MCP connect through the user's IDE.
+  - **Cryptohopper** — Signaler webhook with HMAC-sha512 signed payloads. First HMAC-authed transport in the integrations repo.
+- New "Connect Your Trading Platform" section on [algovault.com/integrations](https://algovault.com/integrations) with tiles for the 5 platform integration examples.
+
+### Internal
+- Postgres-CPU autopilot state machine + monitoring wrapper template resolver + canary primitives + build-time landing-page SoT injection + admin dashboard external-only filtering. No public surface delta.
+
 ## [1.18.1] - 2026-05-23
 
 ### Fixed
