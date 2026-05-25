@@ -164,6 +164,32 @@
     fetchJson(MERKLE_URL).then(function (data) {
       var n = data && Array.isArray(data.batches) ? data.batches.length : null;
       setField('batch_count', formatCount(n));
+      // OPS-WEBSITE-COPY-DRIFT-CLEANUP-W1 (2026-05-25): pages use BOTH `batch_count`
+      // and `merkle_batch_count` span keys (per OPS-DASHBOARD-DRIFT-CANARY-W1 first-fire
+      // surfacing). Populate both for backward compat; canary expects `merkle_batch_count`
+      // on / and /how-it-works. Without this, those Class A spans never hydrate.
+      setField('merkle_batch_count', formatCount(n));
+      // OPS-WEBSITE-COPY-DRIFT-CLEANUP-W1: verify-page latest-batch hydration.
+      // Closes VERIFY_LATEST_BATCH_FRESH drift (static fallback "2026-05-09 18:00 UTC"
+      // was 16d stale because no hydrator existed for these keys).
+      if (data && Array.isArray(data.batches) && data.batches.length > 0) {
+        var sorted = data.batches.slice().sort(function (a, b) {
+          return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
+        });
+        var latest = sorted[0];
+        if (latest && latest.published_at) {
+          var d = new Date(latest.published_at);
+          if (!isNaN(d.getTime())) {
+            var pad = function (x) { return x < 10 ? '0' + x : String(x); };
+            // Match verify-page static fallback shape "YYYY-MM-DD HH:MM UTC".
+            var ymd = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+            var hm = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ' UTC';
+            setField('latest_batch_at', ymd + ' ' + hm);
+          }
+        }
+        setField('latest_batch_n', formatCount(n));        // batch count (same as batch_count, different span key)
+        setField('latest_batch', '#' + formatCount(n));    // batch number with # prefix (matches verify-page "#N" shape)
+      }
     }).catch(function (err) {
       if (typeof console !== 'undefined' && console.debug) {
         console.debug('[track-record-proxy] merkle fetch failed:', err.message || err);
