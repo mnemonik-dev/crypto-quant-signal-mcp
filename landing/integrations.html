@@ -524,15 +524,83 @@ tailwind.config = {
   </div>
 </section>
 
+<!-- Section 4: Connect Your Trading Platform (OPS-INTEGRATIONS-PAGE-W1) -->
+<section id="connect-trading-platform" class="py-12 px-6 border-t border-white/5">
+  <div class="max-w-6xl mx-auto">
+    <h2 class="text-2xl font-bold text-white text-center mb-2">Connect Your Trading Platform</h2>
+    <p class="text-gray-500 text-sm text-center mb-10">Already running a downstream trading platform? AlgoVault verdicts plug in via reference examples. Each ships with code or a documented integration pattern.</p>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-2 gap-4">
+<!-- BUILD:INTEGRATIONS_INDEX_TRADING_PLATFORMS:start -->
+      <a href="https://github.com/AlgoVaultLabs/algovault-integrations/tree/main/examples/ai4trade?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-ai4trade"
+         target="_blank" rel="noopener"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'trading-platform',slug:'ai4trade',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">AI-Trader (ai4trade.ai)</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Agent-native trading marketplace. POST AlgoVault verdicts to your AI-Trader signal feed.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">examples/ai4trade/transform.ts</code></p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+        </div>
+      </a>
+      <a href="https://github.com/AlgoVaultLabs/algovault-integrations/tree/main/examples/nautilus_trader?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-nautilus_trader"
+         target="_blank" rel="noopener"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'trading-platform',slug:'nautilus_trader',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">Nautilus Trader</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Production-grade Python algo engine. Subscribe to AlgoVault verdicts as in-process Data objects.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">examples/nautilus_trader/transform.py</code></p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+        </div>
+      </a>
+      <a href="https://github.com/AlgoVaultLabs/algovault-integrations/tree/main/examples/3commas?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-3commas"
+         target="_blank" rel="noopener"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'trading-platform',slug:'3commas',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">3Commas</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Hosted crypto bot platform. Webhook AlgoVault verdicts into your Signal Bot.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">examples/3commas/transform.ts</code></p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+        </div>
+      </a>
+      <a href="https://github.com/AlgoVaultLabs/algovault-integrations/tree/main/examples/quantdinger?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-quantdinger"
+         target="_blank" rel="noopener"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'trading-platform',slug:'quantdinger',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">QuantDinger</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Self-hosted AI quant OS. Cross-MCP orchestration pattern for agents bound to both.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">examples/quantdinger/README.md</code></p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+        </div>
+      </a>
+<!-- BUILD:INTEGRATIONS_INDEX_TRADING_PLATFORMS:end -->
+    </div>
+  </div>
+</section>
+
 <!-- Why pair? (kept per Q-WHY-PAIR-BODY=KEEP) -->
 <section class="py-16 px-6 border-t border-white/5">
   <div class="max-w-3xl mx-auto">
-    <h2 class="text-2xl font-bold text-white text-center mb-8">Why pair AlgoVault with an exchange kit?</h2>
+    <h2 class="text-2xl font-bold text-white text-center mb-8">Why integrate with AlgoVault?</h2>
     <ul class="space-y-3 text-gray-300 text-sm">
       <li class="flex items-start gap-3"><span class="text-mint-400 mt-1">&diams;</span><span><strong class="text-white">Composite verdict, not raw indicators.</strong> One JSON response replaces 26-indicator vote-counting in your agent code.</span></li>
       <li class="flex items-start gap-3"><span class="text-mint-400 mt-1">&diams;</span><span><strong class="text-white">Cross-venue intelligence.</strong> Funding spreads, regime, and sentiment fused across <span data-tr-field="exchange_count">5</span> exchanges &mdash; not derivable from any single-venue API.</span></li>
-      <li class="flex items-start gap-3"><span class="text-mint-400 mt-1">&diams;</span><span><strong class="text-white">Merkle-verified.</strong> Every signal anchored to Base L2 via on-chain Merkle proof. <span data-tr-field="call_count">56,375</span>+ calls, <span data-tr-field="batch_count">16</span>+ batches at last snapshot.</span></li>
-      <li class="flex items-start gap-3"><span class="text-mint-400 mt-1">&diams;</span><span><strong class="text-white">Add a new exchange = manifest entry.</strong> Adding a 5th/6th/Nth exchange is a 1-line edit to <code>algovault-skills/integrations/manifest.json</code> &mdash; this index page auto-rebuilds.</span></li>
+      <li class="flex items-start gap-3"><span class="text-mint-400 mt-1">&diams;</span><span><strong class="text-white">Merkle-verified.</strong> Every signal anchored to Base L2 via on-chain Merkle proof. <span data-tr-field="call_count">115,194</span>+ calls, <span data-tr-field="batch_count">45</span>+ batches at last snapshot.</span></li>
+      <li class="flex items-start gap-3"><span class="text-mint-400 mt-1">&diams;</span><span><strong class="text-white">Extensible by design.</strong> Adding a new exchange, MCP client, agent framework, or trading platform is an additive change &mdash; index pages auto-rebuild.</span></li>
     </ul>
 
     <div class="mt-10 grid sm:grid-cols-2 gap-4 text-center">
