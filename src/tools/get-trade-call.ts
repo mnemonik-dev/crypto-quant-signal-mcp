@@ -18,6 +18,7 @@ import {
 } from '../lib/indicator-buckets.js';
 import { logConfidenceBucket } from '../lib/confidence-bucket-logger.js';
 import { getThresholdForTF } from '../lib/pertf-thresholds.js';
+import { getR4Thresholds } from '../lib/r4-relax-flag.js';
 
 interface TradeSignalInput {
   coin: string;
@@ -290,19 +291,23 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
     volumeScore * WEIGHTS.volume;
 
   // ── Funding Z-Score gate (v1.4 — replaces raw funding confirmation gate) ──
+  // OPS-TRADE-CALL-CLUSTER-W1 CH2 — R4 RELAX 2-flag firewall (ENABLE_R4_RELAX + R4_RELAX_DIRECTION).
+  // Both unset → fallback to current R4-on thresholds {buyPenaltyZ: 2.5, sellSofteningZ: -2.0}.
+  // Architect flips via follow-up OPS-TRADE-CALL-R4-ROLLOUT-W<N> wave.
+  const r4Thresholds = getR4Thresholds();
   const scoreAdjustments: string[] = [];
   if (fundingZScore !== null) {
     // Z-Score available: use statistical extremity for crowd-positioning gate
     // R4: inverted per audit — BUY edge +10-14pp WR. BUY penalty threshold made stricter
     // (2.0 → 2.5) so BUY is penalized less often, while SELL softening threshold is made
     // looser (-2.5 → -2.0) so SELL is softened more often. Net: favors BUY direction.
-    if (rawScore > 0 && fundingZScore > 2.5) {  // R4: inverted per audit — BUY edge +10-14pp WR
+    if (rawScore > 0 && fundingZScore > r4Thresholds.buyPenaltyZ) {  // R4 firewall: penalty threshold from getR4Thresholds()
       rawScore -= 20;
-      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (>+2.5) — extreme crowded longs. BUY penalized 20 pts.`);
+      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (>+${r4Thresholds.buyPenaltyZ}) — extreme crowded longs. BUY penalized 20 pts.`);
     }
-    if (rawScore < 0 && fundingZScore < -2.0) {  // R4: inverted per audit — BUY edge +10-14pp WR
+    if (rawScore < 0 && fundingZScore < r4Thresholds.sellSofteningZ) {  // R4 firewall: softening threshold from getR4Thresholds()
       rawScore += 20;
-      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (<-2.0) — extreme short crowding. SELL softened 20 pts.`);
+      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (<${r4Thresholds.sellSofteningZ}) — extreme short crowding. SELL softened 20 pts.`);
     }
     if (rawScore > 0 && fundingZScore < -1.5) {
       rawScore += 10;
