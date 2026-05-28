@@ -247,6 +247,11 @@ interface BinanceTicker24hr {
   quoteVolume: string;
   lastPrice: string;
   prevClosePrice: string;
+  // OPS-TRADE-CALL-CLUSTER-W1 CH3: Binance Futures /fapi/v1/ticker/24hr does NOT
+  // populate prevClosePrice for futures (spot-only field); openPrice IS present
+  // and represents the 24h-rolling open. Use openPrice for prevDayPx mapping to
+  // get a non-zero priceChange / oi_change_pct in the verdict output.
+  openPrice: string;
 }
 
 export class BinanceAdapter implements ExchangeAdapter {
@@ -308,7 +313,15 @@ export class BinanceAdapter implements ExchangeAdapter {
       funding: fundingRaw,
       fundingAnnualized: fundingRaw * 1095,
       openInterest: parseFloat(oi.openInterest || '0'),
-      prevDayPx: parseFloat(ticker.prevClosePrice || '0'),
+      // OPS-TRADE-CALL-CLUSTER-W1 CH3 (OPS-BOT-NO-TRADE-CALLS-AUDIT-W1 surfaced
+      // indicators.oi_change_pct: 0 on every BINANCE probe; Plan-Mode #1 root-cause
+      // = Path (a)): Binance Futures `prevClosePrice` field is undefined on
+      // /fapi/v1/ticker/24hr (spot-only); falls through to '0' default → 0.
+      // `openPrice` IS present + is the 24h-rolling open; using it yields a
+      // non-zero priceChange / oi_change_pct matching the API's priceChangePercent
+      // field exactly. BYBIT/OKX/BITGET adapters use their own per-venue 24h-prev
+      // fields that already work correctly (BYBIT uses prevPrice24h).
+      prevDayPx: parseFloat(ticker.openPrice || ticker.prevClosePrice || '0'),
       volume24h: parseFloat(ticker.quoteVolume || '0'),
       oraclePx: parseFloat(premiumIndex.markPrice || '0'),
       markPx: parseFloat(premiumIndex.markPrice || '0'),
