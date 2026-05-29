@@ -55,6 +55,11 @@ COPY scripts/fetchers/ ./scripts/fetchers/
 # atomically. Required at runtime (NOT build time — pages: [] starts empty
 # per Path A; cron populates).
 COPY scripts/refresh-knowledge-pages.mjs ./scripts/refresh-knowledge-pages.mjs
+# OPS-TRACK-TOKEN-STDIO-CLIENT-WRAPPER-W1 (R2, 2026-05-29) — read-only channel-
+# attribution report. Run on demand via `docker exec ... node
+# /app/scripts/funnel-by-channel.mjs` (Path α; reads funnel_events via the
+# container's DATABASE_URL). Stage 2 only — never invoked at build time.
+COPY scripts/funnel-by-channel.mjs ./scripts/funnel-by-channel.mjs
 EXPOSE 3000
 ENV TRANSPORT=http
 USER node

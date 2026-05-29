@@ -11,6 +11,13 @@
  * Normalization: collapse any run of whitespace (spaces, tabs, newlines)
  * to a single space; trim leading/trailing. Order of tags, attributes,
  * and text content is preserved.
+ *
+ * FIXTURE MAINTENANCE — OPS-TRACK-TOKEN-STDIO-CLIENT-WRAPPER-W1 (2026-05-29):
+ * the fixture was deliberately regenerated to absorb the additive
+ * `X-AlgoVault-Track-Token:chan-docs` headers embedded in the MCP-client
+ * snippets (architect-approved public-copy edit). The canary still guards
+ * against *accidental* drift from this new baseline; any future intentional
+ * snippet edit must regenerate the fixture in the same commit.
  */
 
 import { describe, it, expect } from 'vitest';

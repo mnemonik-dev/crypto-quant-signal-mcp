@@ -149,7 +149,7 @@ export function getWelcomePageHtml(
   "mcpServers": {
     "algovault": {
       "url": "https://api.algovault.com/mcp",
-      "headers": { "Authorization": "Bearer ${apiKey || 'YOUR_API_KEY'}" }
+      "headers": { "Authorization": "Bearer ${apiKey || 'YOUR_API_KEY'}", "X-AlgoVault-Track-Token": "chan-welcome" }
     }
   }
 }</pre>

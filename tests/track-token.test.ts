@@ -157,3 +157,44 @@ describe('shouldEmitForRequest', () => {
     expect(shouldEmitForRequest(null, 'token1')).toBe(true);
   });
 });
+
+describe('OPS-TRACK-TOKEN-STDIO-CLIENT-WRAPPER-W1 — embedded channel slugs record via the header path', () => {
+  // The ratified per-surface slug set embedded in the public install snippets.
+  const WAVE_SLUGS = [
+    'chan-docs',
+    'chan-email',
+    'chan-welcome',
+    'chan-readme',
+    'int-claude-desktop',
+    'int-claude-code',
+    'int-cursor',
+    'int-cline',
+  ];
+
+  it.each(WAVE_SLUGS)(
+    'slug "%s" is read back by extractHeaderTrackToken (≥8 chars → records)',
+    (slug) => {
+      expect(slug.length).toBeGreaterThanOrEqual(8);
+      expect(slug).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+      expect(extractHeaderTrackToken({ 'x-algovault-track-token': slug })).toBe(slug);
+    },
+  );
+
+  // R0 finding regression guard: the pre-ratification short slugs would have
+  // been SILENTLY dropped by the {8,64} TOKEN_RE (recorded nothing at all).
+  it.each(['docs', 'landing', 'email', 'readme', 'int-okx', 'int-maf'])(
+    'pre-ratification short slug "%s" would be SILENTLY rejected (records nothing)',
+    (shortSlug) => {
+      expect(shortSlug.length).toBeLessThan(8);
+      expect(extractHeaderTrackToken({ 'x-algovault-track-token': shortSlug })).toBeNull();
+    },
+  );
+
+  it('records on the tools/call header path: value resolves and the first emit fires (idempotent)', () => {
+    const headers = { 'x-algovault-track-token': 'chan-docs' };
+    expect(resolveTrackTokenForRequest(headers)).toBe('chan-docs');
+    // First tools/call per (session, token) → emit; duplicate → suppressed.
+    expect(shouldEmitForRequest('sess-track-w1', 'chan-docs')).toBe(true);
+    expect(shouldEmitForRequest('sess-track-w1', 'chan-docs')).toBe(false);
+  });
+});

@@ -167,12 +167,13 @@ tailwind.config = {
     &quot;algovault&quot;: {
       &quot;command&quot;: &quot;npx&quot;,
       &quot;args&quot;: [&quot;-y&quot;, &quot;mcp-remote&quot;, &quot;https://api.algovault.com/mcp&quot;,
-               &quot;--header&quot;, &quot;Authorization: Bearer ${AV_API_KEY}&quot;]
+               &quot;--header&quot;, &quot;Authorization: Bearer ${AV_API_KEY}&quot;,
+               &quot;--header&quot;, &quot;X-AlgoVault-Track-Token:int-claude-desktop&quot;]
     }
   }
 }
 </code></pre>
-<p>Set <code>AV_API_KEY</code> in the env block or your shell. Free tier: drop the <code>--header</code> args entirely.</p></div>
+<p>Set <code>AV_API_KEY</code> in the env block or your shell. Free tier: drop the <code>Authorization</code> header, but keep the <code>X-AlgoVault-Track-Token</code> header.</p></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Example: get a BTC trade call</h2>
 <p>Ask Claude: <em>“Get me a trade call for BTC on the 1h timeframe.”</em> The tool indicator appears bottom-right of the input box during the call. Claude returns the parsed verdict (call, confidence, regime, indicators) without you seeing raw API JSON.</p>
 <blockquote>

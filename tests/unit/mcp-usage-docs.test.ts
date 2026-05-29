@@ -66,3 +66,26 @@ describe('MCP_USAGE_HTML — structural invariants', () => {
     expect(MCP_USAGE_HTML).toMatch(/100 calls\/month|capped at 100/i);
   });
 });
+
+describe('MCP_USAGE_HTML — channel-attribution track token (OPS-TRACK-TOKEN-STDIO-CLIENT-WRAPPER-W1)', () => {
+  it('embeds the no-space mcp-remote args form X-AlgoVault-Track-Token:chan-docs', () => {
+    // No space after the colon — dodges the Claude-Desktop/Cursor Windows
+    // npx arg-mangling bug (geelen/mcp-remote README).
+    expect(MCP_USAGE_HTML).toContain('"--header", "X-AlgoVault-Track-Token:chan-docs"');
+  });
+
+  it('embeds the headers-object JSON form "X-AlgoVault-Track-Token": "chan-docs"', () => {
+    expect(MCP_USAGE_HTML).toContain('"X-AlgoVault-Track-Token": "chan-docs"');
+  });
+
+  it('uses a chan-docs slug that satisfies the C6 reader TOKEN_RE (8–64) so it actually records', () => {
+    // Guards the R0 finding: a slug < 8 chars (e.g. the original "docs") is
+    // SILENTLY rejected by extractHeaderTrackToken → zero attribution.
+    expect('chan-docs').toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+  });
+
+  it('rewrites the free-tier prose to keep the tracking header (auth dropped, tracking kept)', () => {
+    expect(MCP_USAGE_HTML).not.toContain('drop the <code class="text-xs">--header</code> args entirely');
+    expect(MCP_USAGE_HTML).toContain('keep the <code class="text-xs">X-AlgoVault-Track-Token</code> header');
+  });
+});

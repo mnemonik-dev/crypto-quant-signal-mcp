@@ -50,12 +50,13 @@ const MCP_CLIENTS: SurfaceModule = {
     "algovault": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp",
-               "--header", "Authorization: Bearer \${AV_API_KEY}"]
+               "--header", "Authorization: Bearer \${AV_API_KEY}",
+               "--header", "X-AlgoVault-Track-Token:chan-docs"]
     }
   }
 }</code></pre>
       </div>
-      <p>Set <code class="text-xs bg-navy-800 px-1 rounded">AV_API_KEY</code> in the env block or your shell. Free tier: drop the <code class="text-xs">--header</code> args entirely.</p>
+      <p>Set <code class="text-xs bg-navy-800 px-1 rounded">AV_API_KEY</code> in the env block or your shell. Free tier: drop the <code class="text-xs">Authorization</code> header, but keep the <code class="text-xs">X-AlgoVault-Track-Token</code> header.</p>
       <p><strong>Verify:</strong> ask Claude <em>"Get me a trade call for BTC on the 1h timeframe"</em>. Tool indicator appears bottom-right of the input box.</p>`,
       fullTutorialUrl: '/integrations/claude-desktop',
       hasDedicatedPage: true,
@@ -75,7 +76,8 @@ const MCP_CLIENTS: SurfaceModule = {
     "algovault": {
       "url": "https://api.algovault.com/mcp",
       "headers": {
-        "Authorization": "Bearer \${env:AV_API_KEY}"
+        "Authorization": "Bearer \${env:AV_API_KEY}",
+        "X-AlgoVault-Track-Token": "chan-docs"
       }
     }
   }
@@ -100,7 +102,8 @@ const MCP_CLIENTS: SurfaceModule = {
       "type": "streamableHttp",
       "url": "https://api.algovault.com/mcp",
       "headers": {
-        "Authorization": "Bearer \${env:AV_API_KEY}"
+        "Authorization": "Bearer \${env:AV_API_KEY}",
+        "X-AlgoVault-Track-Token": "chan-docs"
       },
       "disabled": false,
       "autoApprove": []
@@ -123,7 +126,8 @@ const MCP_CLIENTS: SurfaceModule = {
       walkthroughHtml: `      <p><strong>One-liner (recommended):</strong></p>
       <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
         <pre><code class="text-xs text-gray-300">claude mcp add --transport http --scope project algovault https://api.algovault.com/mcp \\
-  --header "Authorization: Bearer \$AV_API_KEY"</code></pre>
+  --header "Authorization: Bearer \$AV_API_KEY" \\
+  --header "X-AlgoVault-Track-Token:chan-docs"</code></pre>
       </div>
       <p>This writes a <code class="text-xs bg-navy-800 px-1 rounded">.mcp.json</code> in your repo root which you can commit so every teammate gets the same MCP config:</p>
       <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
@@ -133,7 +137,8 @@ const MCP_CLIENTS: SurfaceModule = {
       "type": "http",
       "url": "https://api.algovault.com/mcp",
       "headers": {
-        "Authorization": "Bearer \${AV_API_KEY}"
+        "Authorization": "Bearer \${AV_API_KEY}",
+        "X-AlgoVault-Track-Token": "chan-docs"
       }
     }
   }

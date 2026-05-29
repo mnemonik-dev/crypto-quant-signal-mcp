@@ -165,7 +165,8 @@ tailwind.config = {
     &quot;algovault&quot;: {
       &quot;url&quot;: &quot;https://api.algovault.com/mcp&quot;,
       &quot;headers&quot;: {
-        &quot;Authorization&quot;: &quot;Bearer ${env:AV_API_KEY}&quot;
+        &quot;Authorization&quot;: &quot;Bearer ${env:AV_API_KEY}&quot;,
+        &quot;X-AlgoVault-Track-Token&quot;: &quot;int-cursor&quot;
       }
     }
   }

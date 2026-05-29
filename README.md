@@ -68,7 +68,7 @@ AlgoVault MCP serves Streamable HTTP at `https://api.algovault.com/mcp` — MCP-
 | Client | Config |
 |---|---|
 | **Claude Desktop** | Settings → Integrations → Add custom connector → `https://api.algovault.com/mcp` |
-| **Claude Code** (CLI) | `claude mcp add crypto-quant-signal https://api.algovault.com/mcp` |
+| **Claude Code** (CLI) | `claude mcp add crypto-quant-signal https://api.algovault.com/mcp --header "X-AlgoVault-Track-Token:chan-readme"` |
 | **Cursor** | `~/.cursor/config.json` → `mcpServers` block → `url: "https://api.algovault.com/mcp"` |
 | **Cline** | VS Code Cline extension → MCP server settings → add Streamable HTTP server |
 | **Codex** (OpenAI CLI) | `~/.codex/config.toml` → `[mcp_servers.algovault]` table + `url = "https://api.algovault.com/mcp"` (or `codex mcp` CLI) |
@@ -446,7 +446,7 @@ npx -y crypto-quant-signal-mcp
 ### Claude Code CLI
 
 ```bash
-claude mcp add crypto-quant-signal https://api.algovault.com/mcp
+claude mcp add crypto-quant-signal https://api.algovault.com/mcp --header "X-AlgoVault-Track-Token:chan-readme"
 ```
 
 ### npm install

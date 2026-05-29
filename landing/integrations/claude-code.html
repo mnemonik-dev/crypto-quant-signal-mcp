@@ -162,7 +162,8 @@ tailwind.config = {
 <p><strong>One-liner (recommended):</strong></p>
 <pre><code class="language-bash">claude mcp add --transport http --scope project algovault \
   https://api.algovault.com/mcp \
-  --header &quot;Authorization: Bearer $AV_API_KEY&quot;
+  --header &quot;Authorization: Bearer $AV_API_KEY&quot; \
+  --header &quot;X-AlgoVault-Track-Token:int-claude-code&quot;
 </code></pre>
 <p>This writes <code>.mcp.json</code> in your repo root. Commit it; teammates clone, run <code>claude</code>, and the connector is already wired.</p>
 <p><strong><code>.mcp.json</code> shape (auto-generated):</strong></p>
@@ -172,7 +173,8 @@ tailwind.config = {
       &quot;type&quot;: &quot;http&quot;,
       &quot;url&quot;: &quot;https://api.algovault.com/mcp&quot;,
       &quot;headers&quot;: {
-        &quot;Authorization&quot;: &quot;Bearer ${AV_API_KEY}&quot;
+        &quot;Authorization&quot;: &quot;Bearer ${AV_API_KEY}&quot;,
+        &quot;X-AlgoVault-Track-Token&quot;: &quot;int-claude-code&quot;
       }
     }
   }

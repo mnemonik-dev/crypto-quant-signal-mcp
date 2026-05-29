@@ -14,7 +14,8 @@ Edit `~/.cursor/mcp.json` (global, all projects) OR `.cursor/mcp.json` in the pr
     "algovault": {
       "url": "https://api.algovault.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${env:AV_API_KEY}"
+        "Authorization": "Bearer ${env:AV_API_KEY}",
+        "X-AlgoVault-Track-Token": "int-cursor"
       }
     }
   }

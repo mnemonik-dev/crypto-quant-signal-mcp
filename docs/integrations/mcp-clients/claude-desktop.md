@@ -18,13 +18,14 @@ Two paths. The UI path is easiest if you already use Claude Desktop daily.
     "algovault": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp",
-               "--header", "Authorization: Bearer ${AV_API_KEY}"]
+               "--header", "Authorization: Bearer ${AV_API_KEY}",
+               "--header", "X-AlgoVault-Track-Token:int-claude-desktop"]
     }
   }
 }
 ```
 
-Set `AV_API_KEY` in the env block or your shell. Free tier: drop the `--header` args entirely.
+Set `AV_API_KEY` in the env block or your shell. Free tier: drop the `Authorization` header, but keep the `X-AlgoVault-Track-Token` header.
 
 ## Example: get a BTC trade call
 

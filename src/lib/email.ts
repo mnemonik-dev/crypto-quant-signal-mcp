@@ -237,7 +237,7 @@ function renderEmailHtml({ heading, intro, apiKey, tier }: RenderArgs): string {
   "mcpServers": {
     "algovault": {
       "url": "https://api.algovault.com/mcp",
-      "headers": { "Authorization": "Bearer ${apiKey}" }
+      "headers": { "Authorization": "Bearer ${apiKey}", "X-AlgoVault-Track-Token": "chan-email" }
     }
   }
 }</pre>
@@ -273,7 +273,7 @@ Use it in Claude Desktop, Cursor, or Claude Code by adding this to your MCP-clie
   "mcpServers": {
     "algovault": {
       "url": "https://api.algovault.com/mcp",
-      "headers": { "Authorization": "Bearer ${apiKey}" }
+      "headers": { "Authorization": "Bearer ${apiKey}", "X-AlgoVault-Track-Token": "chan-email" }
     }
   }
 }

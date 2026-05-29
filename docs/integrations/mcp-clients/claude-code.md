@@ -11,7 +11,8 @@ Wire AlgoVault into your Claude Code CLI as a project-scoped MCP server. Commit 
 ```bash
 claude mcp add --transport http --scope project algovault \
   https://api.algovault.com/mcp \
-  --header "Authorization: Bearer $AV_API_KEY"
+  --header "Authorization: Bearer $AV_API_KEY" \
+  --header "X-AlgoVault-Track-Token:int-claude-code"
 ```
 
 This writes `.mcp.json` in your repo root. Commit it; teammates clone, run `claude`, and the connector is already wired.
@@ -25,7 +26,8 @@ This writes `.mcp.json` in your repo root. Commit it; teammates clone, run `clau
       "type": "http",
       "url": "https://api.algovault.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${AV_API_KEY}"
+        "Authorization": "Bearer ${AV_API_KEY}",
+        "X-AlgoVault-Track-Token": "int-claude-code"
       }
     }
   }
