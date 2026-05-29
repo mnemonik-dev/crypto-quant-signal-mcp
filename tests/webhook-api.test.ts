@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-const ORIGINAL = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DATABASE_URL: process.env.DATABASE_URL, CQS_API_KEY: process.env.CQS_API_KEY };
+const ORIGINAL = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DATABASE_URL: process.env.DATABASE_URL, CQS_API_KEY: process.env.CQS_API_KEY, SSRF: process.env.WEBHOOK_SSRF_ALLOW_LOOPBACK };
 
 let tempHome: string;
 let perfDb: typeof import('../src/lib/performance-db.js');
@@ -34,6 +34,7 @@ beforeEach(async () => {
   delete process.env.DATABASE_URL;
   delete process.env.CQS_API_KEY; // ensure the Bearer header (not env) drives auth
   delete process.env.WEBHOOK_DELIVERY_ENABLED;
+  process.env.WEBHOOK_SSRF_ALLOW_LOOPBACK = '1'; // local http://127.0.0.1 sink (W1 test seam)
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cqs-webhook-api-'));
   process.env.HOME = tempHome;
   process.env.USERPROFILE = tempHome;
@@ -76,6 +77,7 @@ afterEach(async () => {
   if (ORIGINAL.USERPROFILE !== undefined) process.env.USERPROFILE = ORIGINAL.USERPROFILE; else delete process.env.USERPROFILE;
   if (ORIGINAL.DATABASE_URL !== undefined) process.env.DATABASE_URL = ORIGINAL.DATABASE_URL;
   if (ORIGINAL.CQS_API_KEY !== undefined) process.env.CQS_API_KEY = ORIGINAL.CQS_API_KEY;
+  if (ORIGINAL.SSRF !== undefined) process.env.WEBHOOK_SSRF_ALLOW_LOOPBACK = ORIGINAL.SSRF; else delete process.env.WEBHOOK_SSRF_ALLOW_LOOPBACK;
 });
 
 async function createSub(key: string, overrides: Record<string, unknown> = {}) {
@@ -144,6 +146,16 @@ describe('/api/webhooks: CRUD lifecycle', () => {
     const badEvents = await fetch(`${baseUrl}/api/webhooks`, { method: 'POST', headers: authHeaders(STARTER_KEY), body: JSON.stringify({ url: sinkUrl, events: ['nope'] }) });
     expect(badEvents.status).toBe(400);
     expect((await badEvents.json() as any).code).toBe('invalid_events');
+  });
+
+  it('rejects SSRF/internal registration URLs at the API (invalid_url)', async () => {
+    // Seam is ON in this suite (loopback allowed for the local sink), but
+    // non-loopback internal targets + http + embedded creds are still blocked.
+    for (const url of ['http://10.0.0.1/x', 'https://169.254.169.254/latest/meta-data', 'http://hooks.public.com/x', 'https://user:pass@hooks.public.com/x', 'ftp://hooks.public.com/x']) {
+      const res = await fetch(`${baseUrl}/api/webhooks`, { method: 'POST', headers: authHeaders(STARTER_KEY), body: JSON.stringify({ url, events: ['trade_call'] }) });
+      expect(res.status, url).toBe(400);
+      expect((await res.json() as any).code, url).toBe('invalid_url');
+    }
   });
 });
 

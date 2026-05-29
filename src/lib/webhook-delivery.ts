@@ -18,6 +18,7 @@
 import crypto from 'crypto';
 import { PKG_VERSION } from './pkg-version.js';
 import { checkQuotaByKey, trackCallByKey } from './license.js';
+import { resolveAndAssertEgress, EgressBlockedError, type ResolveEgressOpts } from './webhook-ssrf.js';
 import type { LicenseTier } from '../types.js';
 import {
   pendingDeliveries,
@@ -140,6 +141,8 @@ export function loadDeliveryConfig(): DeliveryConfig {
 export interface DeliveryDeps {
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** Injectable DNS resolver for the SSRF egress guard (default dns.promises.lookup). */
+  lookup?: ResolveEgressOpts['lookup'];
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -163,7 +166,9 @@ async function postWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(url, { method: 'POST', headers, body, signal: controller.signal });
+    // redirect:'error' — a 3xx to an internal target must NOT bypass the egress
+    // guard via fetch's default redirect-follow (WEBHOOK-HARDENING-W1 C2).
+    const res = await fetchImpl(url, { method: 'POST', headers, body, signal: controller.signal, redirect: 'error' });
     return { ok: res.ok, status: res.status };
   } finally {
     clearTimeout(timer);
@@ -194,6 +199,26 @@ export async function deliverOne(
       subscriptionDisabled: !!sub && !sub.active,
       suggested_action: sub ? 'subscription is disabled; re-enable or recreate it' : 'subscription no longer exists',
     };
+  }
+
+  // SSRF egress guard (WEBHOOK-HARDENING-W1 C2): resolve sub.url and block any
+  // disallowed/internal target (DNS-rebind defense) BEFORE the retry loop. On
+  // block: mark the delivery dead — do NOT charge quota, do NOT burn retries.
+  try {
+    await resolveAndAssertEgress(sub.url, { lookup: deps.lookup });
+  } catch (err) {
+    if (err instanceof EgressBlockedError) {
+      await markDelivery(delivery.id, 'dead', { attempts: delivery.attempts, responseCode: null });
+      return {
+        deliveryId: delivery.id,
+        status: 'dead',
+        attempts: delivery.attempts,
+        responseCode: null,
+        subscriptionDisabled: false,
+        suggested_action: `url resolves to a disallowed/internal address (${err.reason}); use a public https endpoint`,
+      };
+    }
+    throw err;
   }
 
   // Quota gate (Mr.1/Cowork-ratified): each delivered event draws down the

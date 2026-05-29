@@ -11,7 +11,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import crypto from 'node:crypto';
 
-const ORIGINAL = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DATABASE_URL: process.env.DATABASE_URL };
+const ORIGINAL = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DATABASE_URL: process.env.DATABASE_URL, SSRF: process.env.WEBHOOK_SSRF_ALLOW_LOOPBACK };
+
+// WEBHOOK-HARDENING-W1: inject a benign public-IP resolver so the SSRF egress
+// guard passes for the mock-fetch fake hostnames (no real DNS) — keeps these
+// tests hermetic. (The api suite uses a real loopback sink + the seam instead.)
+const okLookup = async (): Promise<{ address: string; family: number }[]> => [{ address: '93.184.216.34', family: 4 }];
 
 let tempHome: string;
 let perfDb: typeof import('../src/lib/performance-db.js');
@@ -114,7 +119,7 @@ describe('deliverOne: delivery, retry, idempotency, auto-disable', () => {
   it('200 → delivered; sink receives POST with valid HMAC + headers; success resets failures', async () => {
     const { sub, d } = await seedDelivery();
     const { impl, calls } = mockFetch([200]);
-    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep });
+    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup });
 
     expect(res.status).toBe('delivered');
     expect(res.attempts).toBe(1);
@@ -138,7 +143,7 @@ describe('deliverOne: delivery, retry, idempotency, auto-disable', () => {
   it('500-then-200 → retries and ends delivered (attempts=2)', async () => {
     const { d } = await seedDelivery();
     const { impl, calls } = mockFetch([500, 200]);
-    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep });
+    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup });
     expect(res.status).toBe('delivered');
     expect(res.attempts).toBe(2);
     expect(calls.length).toBe(2);
@@ -148,14 +153,14 @@ describe('deliverOne: delivery, retry, idempotency, auto-disable', () => {
     const { d } = await seedDelivery();
     const cfg = { maxAttempts: 3, timeoutMs: 1000, disableAfter: 20, baseBackoffMs: 0 };
     const { impl, calls } = mockFetch([500]);
-    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep }, cfg);
+    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup }, cfg);
     expect(res.status).toBe('failed');
     expect(res.attempts).toBe(3);
     expect(res.responseCode).toBe(500);
     expect(res.suggested_action).toBeTruthy();
     // Idempotency: a subsequent drain finds nothing pending (status='failed').
     const before = calls.length;
-    const drained = await delivery.deliverPending(10, { fetchImpl: impl, sleep: noopSleep }, cfg);
+    const drained = await delivery.deliverPending(10, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup }, cfg);
     expect(drained.length).toBe(0);
     expect(calls.length).toBe(before);
   });
@@ -165,7 +170,7 @@ describe('deliverOne: delivery, retry, idempotency, auto-disable', () => {
     const cfg = { maxAttempts: 2, timeoutMs: 1000, disableAfter: 20, baseBackoffMs: 0 };
     let n = 0;
     const impl = (async () => { n += 1; throw new Error('ECONNRESET'); }) as unknown as typeof fetch;
-    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep }, cfg);
+    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup }, cfg);
     expect(res.status).toBe('failed');
     expect(res.attempts).toBe(2);
     expect(res.responseCode).toBeNull();
@@ -180,12 +185,12 @@ describe('deliverOne: delivery, retry, idempotency, auto-disable', () => {
     // Two distinct failing deliveries → two consecutive failures → disabled on the 2nd.
     const e1 = await store.enqueueDelivery({ subscriptionId: sub.id, eventId: 'call:a', eventType: 'trade_call', eventData: eventData() });
     const d1 = (await store.pendingDeliveries(10)).find(x => x.id === e1.deliveryId)!;
-    const r1 = await delivery.deliverOne(d1, { fetchImpl: impl, sleep: noopSleep }, cfg);
+    const r1 = await delivery.deliverOne(d1, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup }, cfg);
     expect(r1.subscriptionDisabled).toBe(false);
 
     const e2 = await store.enqueueDelivery({ subscriptionId: sub.id, eventId: 'call:b', eventType: 'trade_call', eventData: eventData() });
     const d2 = (await store.pendingDeliveries(10)).find(x => x.id === e2.deliveryId)!;
-    const r2 = await delivery.deliverOne(d2, { fetchImpl: impl, sleep: noopSleep }, cfg);
+    const r2 = await delivery.deliverOne(d2, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup }, cfg);
     expect(r2.subscriptionDisabled).toBe(true);
     expect(r2.suggested_action).toMatch(/auto-disabled/);
 
@@ -198,7 +203,7 @@ describe('deliverOne: delivery, retry, idempotency, auto-disable', () => {
     const { deliveryId } = await store.enqueueDelivery({ subscriptionId: sub.id, eventId: 'call:c', eventType: 'trade_call', eventData: eventData() });
     const d = (await store.pendingDeliveries(10)).find(x => x.id === deliveryId)!;
     const { impl, calls } = mockFetch([200]);
-    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep });
+    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup });
     expect(res.status).toBe('dead');
     expect(calls.length).toBe(0); // no HTTP attempt for a disabled sub
   });
@@ -216,7 +221,7 @@ describe('quota gate', () => {
     const d = (await store.pendingDeliveries(10)).find(x => x.id === deliveryId)!;
 
     const { impl, calls } = mockFetch([200]);
-    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep });
+    const res = await delivery.deliverOne(d, { fetchImpl: impl, sleep: noopSleep, lookup: okLookup });
     expect(res.status).toBe('pending');         // paused
     expect(calls.length).toBe(0);                // no HTTP attempt
     expect(res.suggested_action).toMatch(/quota exhausted/);
@@ -227,7 +232,7 @@ describe('quota gate', () => {
     const e2 = await store.enqueueDelivery({ subscriptionId: ok.id, eventId: 'call:y', eventType: 'trade_call', eventData: eventData() });
     const d2 = (await store.pendingDeliveries(10)).find(x => x.id === e2.deliveryId)!;
     const before = license.checkQuotaByKey('free:fresh', 'free').used;
-    const r2 = await delivery.deliverOne(d2, { fetchImpl: mockFetch([200]).impl, sleep: noopSleep });
+    const r2 = await delivery.deliverOne(d2, { fetchImpl: mockFetch([200]).impl, sleep: noopSleep, lookup: okLookup });
     expect(r2.status).toBe('delivered');
     expect(license.checkQuotaByKey('free:fresh', 'free').used).toBe(before + 1);
   });

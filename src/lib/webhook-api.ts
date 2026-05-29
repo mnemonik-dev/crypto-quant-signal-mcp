@@ -25,6 +25,7 @@ import {
   type WebhookDelivery,
 } from './webhooks-store.js';
 import { deliverOne } from './webhook-delivery.js';
+import { assertEgressAllowed, EgressBlockedError } from './webhook-ssrf.js';
 
 const VALID_EVENTS: WebhookEventType[] = ['trade_call', 'regime_shift'];
 const MAX_URL_LEN = 2048;
@@ -50,13 +51,19 @@ function authRequired(res: Response): Response {
   });
 }
 
-function isValidWebhookUrl(url: string): boolean {
-  if (!url || url.length > MAX_URL_LEN) return false;
+/**
+ * Returns null if the URL is an allowed egress target, else a human reason
+ * string. WEBHOOK-HARDENING-W1 C2: the SSRF sync guard (https-only,
+ * no internal/literal-IP, no embedded creds) replaces the old proto-only check.
+ */
+function webhookUrlBlockReason(url: string): string | null {
+  if (!url || url.length > MAX_URL_LEN) return 'url is empty or exceeds 2048 chars';
   try {
-    const u = new URL(url);
-    return u.protocol === 'https:' || u.protocol === 'http:';
-  } catch {
-    return false;
+    assertEgressAllowed(url);
+    return null;
+  } catch (err) {
+    if (err instanceof EgressBlockedError) return err.reason;
+    return 'invalid url';
   }
 }
 
@@ -105,8 +112,9 @@ export function registerWebhookRoutes(app: Express): void {
 
       const body = (req.body ?? {}) as Record<string, unknown>;
       const url = typeof body.url === 'string' ? body.url.trim() : '';
-      if (!isValidWebhookUrl(url)) {
-        return res.status(400).json({ ok: false, code: 'invalid_url', error: 'url must be a valid http(s) URL ≤ 2048 chars', suggested_action: 'Provide an https endpoint that returns a 2xx response.' });
+      const urlBlock = webhookUrlBlockReason(url);
+      if (urlBlock) {
+        return res.status(400).json({ ok: false, code: 'invalid_url', error: `url rejected: ${urlBlock}`, suggested_action: 'Provide a public https endpoint (no internal/private/loopback addresses, no embedded credentials) that returns a 2xx response.' });
       }
       const events = parseEvents(body.events);
       if (!events) {
