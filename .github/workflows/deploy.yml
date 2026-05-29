@@ -7,6 +7,10 @@ on:
       - 'activation-funnel/snapshots/**'
       - 'activation-funnel/README.md'
       - 'ops/systemd/**'
+      # X402-CDP-BAZAAR-DISCOVERY-W1: host-side monitoring canaries (installed to
+      # /opt/algovault-monitoring/ via SSH, NOT shipped in the container image) —
+      # editing them must not trigger a prod image rebuild/restart.
+      - 'ops/monitoring/**'
 
 jobs:
   deploy:
@@ -153,6 +157,21 @@ jobs:
             # follow-up OPS-TRADE-CALL-R4-ROLLOUT-W<N> wave once
             # [seed-confidence-bucket] evidence confirms behavior shift.
             for KV in 'ENABLE_R4_RELAX=0' 'R4_RELAX_DIRECTION=sell-revert'; do
+              KEY="${KV%%=*}"
+              if ! grep -q "^${KEY}=" /opt/crypto-quant-signal-mcp/.env 2>/dev/null; then
+                echo "$KV" >> /opt/crypto-quant-signal-mcp/.env
+                echo "$KV appended to /opt/crypto-quant-signal-mcp/.env"
+              fi
+            done
+
+            # X402-CDP-BAZAAR-DISCOVERY-W1 (2026-05-29) — FacilitatorAdapter two-flag firewall.
+            # Default-safe: legacy facilitator (self-hosted sidecar) + Bazaar discovery OFF
+            # (byte-identical to pre-wave behavior on a fresh .env). CDP keys
+            # (CDP_API_KEY_ID / CDP_API_KEY_SECRET) live in host .env mode 600, installed
+            # manually (NOT GH secrets). Architect flips X402_FACILITATOR=cdp +
+            # BAZAAR_DISCOVERABLE=true via the post-Sepolia rollout; the grep-guard preserves
+            # the flipped values (only appends when the key is absent).
+            for KV in 'X402_FACILITATOR=legacy' 'BAZAAR_DISCOVERABLE=false'; do
               KEY="${KV%%=*}"
               if ! grep -q "^${KEY}=" /opt/crypto-quant-signal-mcp/.env 2>/dev/null; then
                 echo "$KV" >> /opt/crypto-quant-signal-mcp/.env

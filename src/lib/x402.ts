@@ -14,14 +14,20 @@
  * Graceful degradation: if X402_WALLET_ADDRESS is not set, x402 tier is
  * skipped entirely and the server falls through to API key / free tiers.
  */
-import { HTTPFacilitatorClient, x402ResourceServer } from '@x402/core/server';
+import { x402ResourceServer } from '@x402/core/server';
+import { bazaarResourceServerExtension } from '@x402/extensions/bazaar';
 import type { X402ToolPricing } from '../types.js';
+import { createFacilitatorClient, resolveFacilitatorFromEnv } from './x402-facilitator.js';
+import { declareBazaarRoute } from './x402-bazaar.js';
 
 // ── Configuration ──
 
 const WALLET_ADDRESS = process.env.X402_WALLET_ADDRESS || '';
 const NETWORK = process.env.X402_NETWORK || 'base-mainnet';
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || undefined; // default: https://x402.org/facilitator
+// Facilitator target (legacy self-hosted sidecar vs CDP) is resolved by the
+// FacilitatorAdapter from X402_FACILITATOR / X402_FACILITATOR_URL / CDP_API_KEY_*.
+// NOTE: prod's legacy facilitator is the self-hosted sidecar (X402_FACILITATOR_URL=
+// http://facilitator:4022), NOT the public x402.org facilitator (live-probed 2026-05-29).
 
 // CAIP-2 chain IDs
 const CAIP2: Record<string, string> = {
@@ -84,14 +90,29 @@ export async function initX402(): Promise<void> {
   if (!isX402Configured()) return;
   if (initialized) return;
 
-  let facilitator: HTTPFacilitatorClient;
+  // FacilitatorAdapter: two-flag firewall (X402_FACILITATOR / BAZAAR_DISCOVERABLE),
+  // stub-first fallback to legacy when CDP keys are absent. Default = legacy
+  // (self-hosted sidecar), byte-identical to pre-wave behavior.
+  const resolvedFacilitator = resolveFacilitatorFromEnv();
+  let facilitator;
   try {
-    facilitator = new HTTPFacilitatorClient(FACILITATOR_URL ? { url: FACILITATOR_URL } : undefined);
+    facilitator = createFacilitatorClient(resolvedFacilitator);
   } catch (err) {
     console.warn('x402: Failed to create facilitator client:', err instanceof Error ? err.message : err);
     return;
   }
   resourceServer = new x402ResourceServer(facilitator);
+
+  // Register the CDP Bazaar discovery extension only on the cdp + discoverable path.
+  // Earns the Bazaar listing when a real settle completes through CDP carrying the
+  // discovery metadata (the EXTENSION-RESPONSES header confirms acceptance).
+  if (resolvedFacilitator.discoveryEnabled) {
+    try {
+      resourceServer.registerExtension(bazaarResourceServerExtension);
+    } catch (err) {
+      console.warn('x402: Failed to register Bazaar discovery extension:', err instanceof Error ? err.message : err);
+    }
+  }
 
   // Register a server-side scheme for USDC price parsing on the target network.
   // The facilitator handles actual cryptographic verification — the server scheme
@@ -142,13 +163,21 @@ export async function initX402(): Promise<void> {
   // Pre-build payment requirements for each tool
   try {
     for (const [tool, price] of Object.entries(TOOL_PRICING)) {
-      const reqs = await resourceServer.buildPaymentRequirements({
+      const resourceConfig: Parameters<typeof resourceServer.buildPaymentRequirements>[0] = {
         scheme: 'exact',
         network: caip2,
         payTo: WALLET_ADDRESS,
         price: `$${price}`,
         extra: { name: 'USDC', version: '2' },
-      });
+      };
+      // Attach CDP Bazaar discovery metadata so a real settle earns the listing.
+      if (resolvedFacilitator.discoveryEnabled) {
+        const extensions = declareBazaarRoute(tool);
+        if (Object.keys(extensions).length > 0) {
+          (resourceConfig as { extensions?: Record<string, unknown> }).extensions = extensions;
+        }
+      }
+      const reqs = await resourceServer.buildPaymentRequirements(resourceConfig);
       toolRequirements.set(tool, reqs);
     }
   } catch (err) {
@@ -159,7 +188,10 @@ export async function initX402(): Promise<void> {
   }
 
   initialized = true;
-  console.log(`x402 initialized: network=${NETWORK} wallet=${WALLET_ADDRESS.slice(0, 6)}...`);
+  console.log(
+    `x402 initialized: network=${NETWORK} facilitator=${resolvedFacilitator.effectiveChoice} ` +
+    `discovery=${resolvedFacilitator.discoveryEnabled} wallet=${WALLET_ADDRESS.slice(0, 6)}...`,
+  );
 }
 
 // ── Verification ──
