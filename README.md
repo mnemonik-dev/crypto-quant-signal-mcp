@@ -97,9 +97,15 @@ Each demo is runnable as `python examples/<framework>/demo.py BTC 4h` — gets a
 
 ---
 
-## What's new in v1.18.2
+## What's new in v1.19.0
 
-Live since 2026-05-25:
+Live since 2026-05-30:
+
+- **🔔 Webhook Delivery Service.** Subscribe a URL; receive `trade_call` and `regime_shift` events as push, not poll. Payloads are HMAC-SHA256 signed, retried, and idempotent. Manage over HTTP: `POST` / `GET` / `DELETE /api/webhooks`, plus `POST /api/webhooks/:id/test` for a live test fire. API key required.
+- **🔗 One-call signal verification.** Every webhook payload carries a `verify_url`. Resolve it at `GET /api/verify-signal?hash=<signal_hash>` for that call's public, on-chain-anchored record.
+- **🔌 Two more platform integration examples.** The `algovault-integrations` mono-repo now ships 7 reference implementations — Hummingbot and FreqTrade join the existing five. New tiles on [algovault.com/integrations](https://algovault.com/integrations).
+
+### v1.18.2 highlights (recap)
 
 - **🔌 Two new platform integration examples.** The `algovault-integrations` mono-repo now ships 5 reference implementations total (was 3 at v1.18.0):
   - **QuantDinger** (reference-architecture doc) — cross-MCP IDE-mediated orchestration. AlgoVault MCP and QuantDinger MCP connect through the user's IDE (Claude Desktop / Cursor / Codex CLI); no transformer code.
@@ -155,7 +161,7 @@ Live since 2026-05-25:
 - **🪪 ERC-8004 Verified Agent on Base.** AlgoVault MCP is registered on the canonical ERC-8004 Identity Registry at [`0x8004A169...e539a432`](https://basescan.org/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432). Each call traces back to a portable, censorship-resistant agent identity on Base L2. agentId [`44544`](https://basescan.org/token/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432?a=44544) on Basescan. Same on-chain track record; new verified agent handle that AI orchestrators can resolve.
 - **🔌 `/api/erc-8004-reputation` endpoint.** Read-only JSON aggregator exposing agentId, identity registry address, registration timestamp, and Basescan link. Cached 5 minutes. `curl -s api.algovault.com/api/erc-8004-reputation | jq`.
 
-> **Upgrading from v1.13.x or earlier?** The MCP tool surface is unchanged structurally — `get_trade_call`, `scan_funding_arb`, `get_market_regime` keep their parameter shapes. v1.14.0 only adds the Framework integrations cross-links; no tool schema change. If you upgraded across v1.13.2 you already picked up the refreshed tool descriptions — MCP clients cache `tools/list` at session start, so toggle the connector off/on if you haven't restarted since v1.13.2.
+> **Upgrading from v1.18.x or earlier?** The MCP tool surface is unchanged structurally — `get_trade_call`, `scan_funding_arb`, `get_market_regime`, `search_knowledge`, `chat_knowledge` keep their parameter shapes. v1.19.0 adds an OPTIONAL outbound webhook HTTP API (`POST` / `GET` / `DELETE /api/webhooks` + `POST /api/webhooks/:id/test`) and a `GET /api/verify-signal?hash=` resolver, plus two more platform integration examples — but the MCP tool contract is untouched. MCP clients (Claude Desktop, Cursor, Cline) cache `tools/list` at session start — no toggle needed for this release since no tool descriptions changed.
 
 ---
 
@@ -249,7 +255,7 @@ Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also
     { "coin": "SOL", "timeframe": "15m", "confidence": 73 }
   ],
   "_algovault": {
-    "version": "1.14.0",
+    "version": "1.19.0",
     "tool": "get_trade_call",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }
