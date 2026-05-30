@@ -8,9 +8,8 @@ shifts for an asset you care about.
 Built for T2 desks running FreqTrade / Hummingbot / 3Commas / Cryptohopper /
 Nautilus. Every delivery is HMAC-signed, idempotent, retried, and self-healing.
 
-> Status: ships behind a server flag (`WEBHOOK_DELIVERY_ENABLED`). Registration
-> is open; delivery turns on when AlgoVault enables the flag. You can register
-> and `/test` your endpoint now.
+> Status: **Live.** Register an HTTPS endpoint to receive signed events in real
+> time: a new Trade Call, or a regime shift on an asset you track.
 
 ---
 

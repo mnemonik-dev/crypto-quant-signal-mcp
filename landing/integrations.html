@@ -634,6 +634,27 @@ tailwind.config = {
   </div>
 </section>
 
+<!-- Section: Webhooks — live push capability (WEBHOOK-DOCS-WEBSITE-W1) -->
+<section id="webhooks" class="py-12 px-6 border-t border-white/5">
+  <div class="max-w-4xl mx-auto">
+    <p class="text-mint-400 text-xs font-semibold tracking-wider text-center mb-3">WEBHOOKS</p>
+    <h2 class="text-2xl font-bold text-white text-center mb-3">React the moment the regime turns.</h2>
+    <p class="text-gray-400 text-sm text-center max-w-2xl mx-auto mb-1">Register an endpoint. We POST a signed event the instant a Trade Call fires or the regime shifts.</p>
+    <p class="text-gray-400 text-sm text-center max-w-2xl mx-auto mb-8">Your bot flattens or widens stops before the drawdown.</p>
+    <div class="bg-navy-700 border border-white/5 rounded-xl p-6 max-w-3xl mx-auto">
+      <p class="text-gray-300 text-sm mb-4 flex items-start gap-2"><span class="text-mint-400 mt-1" aria-hidden="true">&diams;</span><span>Every event carries an on-chain verify link. Verify, don&rsquo;t trust.</span></p>
+      <pre class="bg-navy-800 rounded-lg p-4 overflow-x-auto text-xs leading-relaxed text-gray-300 mb-5"><code>curl -s -X POST https://api.algovault.com/api/webhooks \
+  -H "Authorization: Bearer $ALGOVAULT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://yourbot.example.com/hook","events":["trade_call","regime_shift"]}'</code></pre>
+      <div class="flex flex-wrap items-center gap-4 text-sm">
+        <a href="https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp/blob/main/docs/WEBHOOKS.md" target="_blank" rel="noopener noreferrer" class="text-mint-400 font-semibold hover:underline">Read the webhook docs &rarr;</a>
+        <a href="https://api.algovault.com/signup" class="text-mint-400 font-semibold hover:underline">Start free &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- Why pair? (kept per Q-WHY-PAIR-BODY=KEEP) -->
 <section class="py-16 px-6 border-t border-white/5">
   <div class="max-w-3xl mx-auto">
