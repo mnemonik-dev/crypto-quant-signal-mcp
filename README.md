@@ -35,7 +35,7 @@
 ## 📊 Live Track Record
 
 <p align="center">
-  <strong><span data-tr-field="pfe_wr">90.5%</span> PFE Win Rate</strong> · <strong><span data-tr-field="total_calls">96,898</span> trade calls</strong> · <strong><span data-tr-field="merkle_batches">38</span> on-chain batches</strong> · <strong><span data-tr-field="hold_rate">99%</span> HOLD rate</strong> <!-- SNAPSHOT-LINE -->
+  <strong><span data-tr-field="pfe_wr">91.3%</span> PFE Win Rate</strong> · <strong><span data-tr-field="total_calls">134,276</span> trade calls</strong> · <strong><span data-tr-field="merkle_batches">50</span> on-chain batches</strong> · <strong><span data-tr-field="hold_rate">99%</span> HOLD rate</strong> <!-- SNAPSHOT-LINE -->
 </p>
 
 <p align="center">
@@ -68,7 +68,7 @@ AlgoVault MCP serves Streamable HTTP at `https://api.algovault.com/mcp` — MCP-
 | Client | Config |
 |---|---|
 | **Claude Desktop** | Settings → Integrations → Add custom connector → `https://api.algovault.com/mcp` |
-| **Claude Code** (CLI) | `claude mcp add crypto-quant-signal https://api.algovault.com/mcp --header "X-AlgoVault-Track-Token:chan-readme"` |
+| **Claude Code** (CLI) | `claude mcp add crypto-quant-signal https://api.algovault.com/mcp` |
 | **Cursor** | `~/.cursor/config.json` → `mcpServers` block → `url: "https://api.algovault.com/mcp"` |
 | **Cline** | VS Code Cline extension → MCP server settings → add Streamable HTTP server |
 | **Codex** (OpenAI CLI) | `~/.codex/config.toml` → `[mcp_servers.algovault]` table + `url = "https://api.algovault.com/mcp"` (or `codex mcp` CLI) |
@@ -88,10 +88,10 @@ Drop-in tutorials for the major Python agent frameworks. Each tutorial pairs Alg
 
 | Framework | Tutorial | Runnable demo | Mirror |
 |---|---|---|---|
-| **LangChain** | [`docs/integrations/langchain.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/langchain.md) | [`examples/langchain/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/langchain/demo.py) | [algovault.com/docs/integrations/langchain](https://algovault.com/docs/integrations/langchain) |
-| **LlamaIndex** | [`docs/integrations/llamaindex.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/llamaindex.md) | [`examples/llamaindex/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/llamaindex/demo.py) | [algovault.com/docs/integrations/llamaindex](https://algovault.com/docs/integrations/llamaindex) |
-| **Microsoft Agent Framework** | [`docs/integrations/maf.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/maf.md) | [`examples/maf/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/maf/demo.py) | [algovault.com/docs/integrations/maf](https://algovault.com/docs/integrations/maf) |
-| **CrewAI** | [`docs/integrations/crewai.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/crewai.md) | [`examples/crewai/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/crewai/demo.py) | [algovault.com/docs/integrations/crewai](https://algovault.com/docs/integrations/crewai) |
+| **LangChain** | [`docs/integrations/langchain.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/langchain.md) | [`examples/langchain/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/langchain/demo.py) | [algovault.com/integrations/langchain](https://algovault.com/integrations/langchain) |
+| **LlamaIndex** | [`docs/integrations/llamaindex.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/llamaindex.md) | [`examples/llamaindex/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/llamaindex/demo.py) | [algovault.com/integrations/llamaindex](https://algovault.com/integrations/llamaindex) |
+| **Microsoft Agent Framework** | [`docs/integrations/maf.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/maf.md) | [`examples/maf/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/maf/demo.py) | [algovault.com/integrations/maf](https://algovault.com/integrations/maf) |
+| **CrewAI** | [`docs/integrations/crewai.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/crewai.md) | [`examples/crewai/demo.py`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/crewai/demo.py) | [algovault.com/integrations/crewai](https://algovault.com/integrations/crewai) |
 
 Each demo is runnable as `python examples/<framework>/demo.py BTC 4h` — gets a real BUY/SELL/HOLD verdict from `api.algovault.com/mcp`, prints it. ≤5 minutes to first call.
 
@@ -341,10 +341,10 @@ End-to-end tutorials pairing AlgoVault with each major exchange's Agent Trade Ki
 <!-- BUILD:README_INTEGRATIONS_TABLE -->
 | # | Exchange | Tutorial | Demo | Mirror |
 |---|---|---|---|---|
-| 01 | Binance | [`docs/integrations/binance.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/binance.md) | [`examples/binance/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/binance/demo.mjs) | [algovault.com/docs/integrations/binance](https://algovault.com/docs/integrations/binance) |
-| 02 | OKX | [`docs/integrations/okx.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/okx.md) | [`examples/okx/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/okx/demo.mjs) | [algovault.com/docs/integrations/okx](https://algovault.com/docs/integrations/okx) |
-| 03 | Bybit | [`docs/integrations/bybit.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bybit.md) | [`examples/bybit/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bybit/demo.mjs) | [algovault.com/docs/integrations/bybit](https://algovault.com/docs/integrations/bybit) |
-| 04 | Bitget | [`docs/integrations/bitget.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bitget.md) | [`examples/bitget/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bitget/demo.mjs) | [algovault.com/docs/integrations/bitget](https://algovault.com/docs/integrations/bitget) |
+| 01 | Binance | [`docs/integrations/binance.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/binance.md) | [`examples/binance/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/binance/demo.mjs) | [algovault.com/integrations/binance](https://algovault.com/integrations/binance) |
+| 02 | OKX | [`docs/integrations/okx.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/okx.md) | [`examples/okx/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/okx/demo.mjs) | [algovault.com/integrations/okx](https://algovault.com/integrations/okx) |
+| 03 | Bybit | [`docs/integrations/bybit.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bybit.md) | [`examples/bybit/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bybit/demo.mjs) | [algovault.com/integrations/bybit](https://algovault.com/integrations/bybit) |
+| 04 | Bitget | [`docs/integrations/bitget.md`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/docs/integrations/bitget.md) | [`examples/bitget/demo.mjs`](https://github.com/AlgoVaultLabs/algovault-skills/blob/main/examples/bitget/demo.mjs) | [algovault.com/integrations/bitget](https://algovault.com/integrations/bitget) |
 <!-- /BUILD:README_INTEGRATIONS_TABLE -->
 
 ---
@@ -452,7 +452,7 @@ npx -y crypto-quant-signal-mcp
 ### Claude Code CLI
 
 ```bash
-claude mcp add crypto-quant-signal https://api.algovault.com/mcp --header "X-AlgoVault-Track-Token:chan-readme"
+claude mcp add crypto-quant-signal https://api.algovault.com/mcp
 ```
 
 ### npm install
