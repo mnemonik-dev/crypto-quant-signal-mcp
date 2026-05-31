@@ -109,6 +109,8 @@ Live since 2026-05-30:
 - **🔗 One-call signal verification.** Every webhook payload carries a `verify_url`. Resolve it at `GET /api/verify-signal?hash=<signal_hash>` for that call's public, on-chain-anchored record.
 - **🔌 Two more platform integration examples.** The `algovault-integrations` mono-repo now ships 7 reference implementations — Hummingbot and FreqTrade join the existing five. New tiles on [algovault.com/integrations](https://algovault.com/integrations).
 
+**→ Set up a webhook:** [algovault.com/integrations#webhooks](https://algovault.com/integrations#webhooks) · **Webhook docs:** [docs/WEBHOOKS.md](https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp/blob/main/docs/WEBHOOKS.md)
+
 ### v1.18.2 highlights (recap)
 
 - **🔌 Two new platform integration examples.** The `algovault-integrations` mono-repo now ships 5 reference implementations total (was 3 at v1.18.0):
