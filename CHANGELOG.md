@@ -5,6 +5,12 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.1] - 2026-05-31
+
+### Docs
+- Ship the v1.19.0 "What's new" (Webhook Delivery Service) to the npm registry README. v1.19.0's README was frozen at v1.18.2 because the release tag pointed at the bare `npm version` commit (which precedes the doc commits) and `publish-npm.yml` checks out the tag tree — so the published tarball carried the pre-v1.19.0 README. This patch re-publishes with the tag placed on the final commit.
+- Add a webhook CTA to the README and to the v1.19.0 release announcement: set one up at algovault.com/integrations#webhooks; full docs at docs/WEBHOOKS.md.
+
 ## [1.19.0] - 2026-05-30
 
 ### Added — Webhook Delivery Service
