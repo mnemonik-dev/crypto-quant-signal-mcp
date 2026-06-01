@@ -47,7 +47,8 @@ import { getTradeSignal } from '../tools/get-trade-call.js';
 import { hasRecentSignalAsync, closeDb, bulkWarmFundingCache } from '../lib/performance-db.js';
 import { classifyAsset, warmTierCaches, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getTicker24hrFullCoalesced } from '../lib/adapters/binance.js';
-import type { LicenseInfo, ExchangeId } from '../types.js';
+import type { LicenseInfo, ExchangeId, VenueStatus } from '../types.js';
+import { listVenues } from '../lib/venue-store.js';
 
 // Internal license bypasses free-tier gating
 const INTERNAL_LICENSE: LicenseInfo = { tier: 'pro', key: 'internal-seed' };
@@ -182,7 +183,7 @@ export const ALL_EXCHANGE_IDS: ExchangeId[] = [
  *              Exposed for testability (vitest passes synthetic argv to
  *              `tests/seed-signals-parse-args.test.ts`).
  */
-export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number } {
+export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number; statusFilter: VenueStatus | 'all' | null; explicitExchanges: boolean } {
   const args = argv;
 
   let timeframe = '15m';
@@ -275,7 +276,26 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: 
     exchanges = list as ExchangeId[];
   }
 
-  return { timeframe, top, exchanges, restrictedUniverse };
+  // OPS-SHADOW-PIPELINE-W1/C1: --status <shadow|promoted|all> selects venues
+  // from the `venues` table when NO explicit --exchange/--exchange-list override
+  // is given. `explicitExchanges` records whether an override was passed, so
+  // main() can choose: override → the (byte-equivalent) venue list; else →
+  // table-driven selection (the generator fix). An explicit override always
+  // wins over --status.
+  let statusFilter: VenueStatus | 'all' | null = null;
+  const statusIdx = args.indexOf('--status');
+  if (statusIdx !== -1 && args[statusIdx + 1]) {
+    const s = args[statusIdx + 1].toLowerCase();
+    if (s === 'shadow' || s === 'promoted' || s === 'all') {
+      statusFilter = s as VenueStatus | 'all';
+    } else {
+      console.error(`Invalid --status: ${args[statusIdx + 1]}. Use shadow, promoted, or all.`);
+      process.exit(1);
+    }
+  }
+  const explicitExchanges = exIdx !== -1 || exListIdx !== -1;
+
+  return { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges };
 }
 
 /**
@@ -476,6 +496,54 @@ async function fetchBitgetCoins(topN: number): Promise<string[]> {
   return limited.map(t => t.symbol.replace(/USDT$/, ''));
 }
 
+/**
+ * OPS-SHADOW-PIPELINE-W1 / C1 — venue-table-driven universe registry (the
+ * generator fix). Maps each ExchangeId → a `(topN) => Promise<coin[]>` resolver.
+ * `Record<ExchangeId, …>` is exhaustive: tsc fails if a venue is added without a
+ * fetcher. The 5 promoted venues route through their EXISTING fetchers, so an
+ * `--exchange <PROMOTED>` invocation is byte-equivalent to the prior hardcoded
+ * main() block (HL keeps its warmTierCaches + Top-20-TradFi limiting, wrapped
+ * here so the per-venue loop is uniform). The 12 shadow venues are stubs until
+ * C2 — they return [] (the loop skips them cleanly), so C1 ships safely and a
+ * table-driven run seeds only the 5 promoted venues until C2 lands.
+ */
+const shadowStub = (venue: ExchangeId) => async (): Promise<string[]> => {
+  console.warn(`[${ts()}] [${venue}] UNIVERSE_FETCHERS stub — not implemented until OPS-SHADOW-PIPELINE-W1/C2; venue skipped.`);
+  return [];
+};
+
+export const UNIVERSE_FETCHERS: Record<ExchangeId, (topN: number) => Promise<string[]>> = {
+  HL: async (topN: number): Promise<string[]> => {
+    // Byte-equivalent to the prior HL main() block: warm caches, fetch by OI,
+    // then limit TradFi (xyz) perps to Top-20 by OI.
+    await warmTierCaches();
+    let coins = await fetchHLCoins(topN);
+    const allTradFi = coins.filter(c => isKnownTradFi(c));
+    if (allTradFi.length > 20) {
+      const topTradFi = new Set(allTradFi.slice(0, 20));
+      coins = coins.filter(c => !isKnownTradFi(c) || topTradFi.has(c));
+    }
+    return coins;
+  },
+  BINANCE: fetchBinanceCoins,
+  BYBIT:   fetchBybitCoins,
+  OKX:     fetchOKXCoins,
+  BITGET:  fetchBitgetCoins,
+  // ── 12 shadow venues — stubs until C2 fills each with a top-N-by-OI/vol fetcher ──
+  ASTER:    shadowStub('ASTER'),
+  EDGEX:    shadowStub('EDGEX'),
+  GATE:     shadowStub('GATE'),
+  MEXC:     shadowStub('MEXC'),
+  KUCOIN:   shadowStub('KUCOIN'),
+  PHEMEX:   shadowStub('PHEMEX'),
+  BINGX:    shadowStub('BINGX'),
+  HTX:      shadowStub('HTX'),
+  WEEX:     shadowStub('WEEX'),
+  BITMART:  shadowStub('BITMART'),
+  XT:       shadowStub('XT'),
+  WHITEBIT: shadowStub('WHITEBIT'),
+};
+
 async function seedExchange(
   exchangeId: ExchangeId,
   coins: string[],
@@ -524,7 +592,7 @@ async function seedExchange(
 }
 
 async function main() {
-  const { timeframe, top, exchanges, restrictedUniverse } = parseArgs();
+  const { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges } = parseArgs();
   const idempotencyWindow = IDEMPOTENCY_WINDOWS[timeframe] || 50 * 60;
 
   const totals = { seeded: 0, skipped: 0, errors: 0 };
@@ -544,90 +612,56 @@ async function main() {
     );
   }
 
-  // ── Seed Hyperliquid ──
-  if (exchanges.includes('HL')) {
+  // OPS-SHADOW-PIPELINE-W1/C1 — venue selection is DATA-DRIVEN off the `venues`
+  // table (the generator fix). An explicit --exchange/--exchange-list override
+  // wins and routes through UNIVERSE_FETCHERS byte-equivalently to the prior
+  // hardcoded blocks; otherwise the venue set is read from the table:
+  // `--status shadow|promoted|all`, or (no flag) every non-retired venue
+  // (promoted + shadow). "A venue in the table is seeded by construction" →
+  // promotion becomes a single status flip.
+  let venuesToSeed: ExchangeId[];
+  if (explicitExchanges) {
+    venuesToSeed = exchanges;
+  } else {
+    const wanted: VenueStatus | undefined = statusFilter && statusFilter !== 'all' ? statusFilter : undefined;
+    const rows = await listVenues(wanted);
+    venuesToSeed = rows
+      .filter(v => v.status !== 'retired')
+      .map(v => v.exchange_id as ExchangeId);
+    console.log(`[${ts()}] Venue-table-driven selection (${statusFilter ?? 'promoted+shadow'}): [${venuesToSeed.join(', ')}]`);
+  }
+
+  // Uniform per-venue seed loop (replaces the 5 hardcoded blocks). ONE venue at
+  // a time → peak CPU is bounded to a single venue's seedExchange (this serial
+  // execution IS the staggering primitive for the 2-vCPU box). Fail-soft: a
+  // venue whose universe fetch throws or returns [] is skipped without aborting
+  // the run or starving the other venues. HL's warmTierCaches + Top-20-TradFi
+  // limiting live inside UNIVERSE_FETCHERS.HL, so --exchange HL stays byte-
+  // equivalent. The --restricted-universe path is preserved (shared coin list).
+  for (const venueId of venuesToSeed) {
     let coins: string[];
     if (restrictedCoins) {
       coins = restrictedCoins;
     } else {
-      console.log(`[${ts()}] Warming tier caches (xyz symbols, OI rankings)...`);
-      await warmTierCaches();
-
-      console.log(`[${ts()}] Fetching Hyperliquid universe (standard + TradFi)...`);
-      coins = await fetchHLCoins(top);
-
-      // TradFi: always limit to top 20 by OI (xyz perps have lower liquidity)
-      const allTradFi = coins.filter(c => isKnownTradFi(c));
-      if (allTradFi.length > 20) {
-        const topTradFi = new Set(allTradFi.slice(0, 20));
-        const beforeCount = coins.length;
-        coins = coins.filter(c => !isKnownTradFi(c) || topTradFi.has(c));
-        console.log(`[${ts()}] TradFi: limiting to Top 20 by OI (dropped ${beforeCount - coins.length} of ${allTradFi.length} TradFi assets)`);
-      } else if (allTradFi.length > 0) {
-        console.log(`[${ts()}] TradFi: ${allTradFi.length} assets (all within Top 20 limit)`);
+      try {
+        coins = await UNIVERSE_FETCHERS[venueId](top);
+      } catch (err) {
+        console.error(`[${ts()}] [${venueId}] universe fetch failed: ${err instanceof Error ? err.message : err} — skipping venue.`);
+        continue;
       }
     }
+    if (!coins || coins.length === 0) {
+      console.warn(`[${ts()}] [${venueId}] empty universe — skipping.`);
+      continue;
+    }
 
-    console.log(`[${ts()}] Starting ${timeframe} HL signal seed for ${coins.length} assets${restrictedCoins ? ` (restricted)` : top ? ` (top ${top} by OI)` : ''}...`);
-    // OPTIMIZE-FUNDING-CACHE-CRON-W1: bulk-warm cache before per-coin loop.
-    // Fail-soft: a batch-query failure falls back to per-coin path inside
-    // seedExchange, so the cron fire still succeeds (just slower).
+    console.log(`[${ts()}] Starting ${timeframe} ${venueId} signal seed for ${coins.length} assets${restrictedCoins ? ` (restricted)` : top ? ` (top ${top})` : ''} (delay: ${DELAY_PER_EXCHANGE[venueId]}ms)...`);
+    // OPTIMIZE-FUNDING-CACHE-CRON-W1: bulk-warm cache before per-coin loop
+    // (fail-soft → per-coin fallback inside seedExchange).
     try { await bulkWarmFundingCache(coins); }
     catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
-    const result = await seedExchange('HL', coins, timeframe, idempotencyWindow);
-    console.log(`[${ts()}] HL seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
-    totals.seeded += result.seeded;
-    totals.skipped += result.skipped;
-    totals.errors += result.errors;
-  }
-
-  // ── Seed Binance ──
-  if (exchanges.includes('BINANCE')) {
-    const binCoins = restrictedCoins ?? await fetchBinanceCoins(top);
-    console.log(`[${ts()}] Starting ${timeframe} BINANCE signal seed for ${binCoins.length} assets${restrictedCoins ? ` (restricted)` : ''} (delay: ${DELAY_PER_EXCHANGE.BINANCE}ms)...`);
-    try { await bulkWarmFundingCache(binCoins); }
-    catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
-    const result = await seedExchange('BINANCE', binCoins, timeframe, idempotencyWindow);
-    console.log(`[${ts()}] BINANCE seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
-    totals.seeded += result.seeded;
-    totals.skipped += result.skipped;
-    totals.errors += result.errors;
-  }
-
-  // ── Seed Bybit ──
-  if (exchanges.includes('BYBIT')) {
-    const bybitCoins = restrictedCoins ?? await fetchBybitCoins(top);
-    console.log(`[${ts()}] Starting ${timeframe} BYBIT signal seed for ${bybitCoins.length} assets${restrictedCoins ? ` (restricted)` : ''} (delay: ${DELAY_PER_EXCHANGE.BYBIT}ms)...`);
-    try { await bulkWarmFundingCache(bybitCoins); }
-    catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
-    const result = await seedExchange('BYBIT', bybitCoins, timeframe, idempotencyWindow);
-    console.log(`[${ts()}] BYBIT seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
-    totals.seeded += result.seeded;
-    totals.skipped += result.skipped;
-    totals.errors += result.errors;
-  }
-
-  // ── Seed OKX ──
-  if (exchanges.includes('OKX')) {
-    const okxCoins = restrictedCoins ?? await fetchOKXCoins(top);
-    console.log(`[${ts()}] Starting ${timeframe} OKX signal seed for ${okxCoins.length} assets${restrictedCoins ? ` (restricted)` : ''} (delay: ${DELAY_PER_EXCHANGE.OKX}ms)...`);
-    try { await bulkWarmFundingCache(okxCoins); }
-    catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
-    const result = await seedExchange('OKX', okxCoins, timeframe, idempotencyWindow);
-    console.log(`[${ts()}] OKX seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
-    totals.seeded += result.seeded;
-    totals.skipped += result.skipped;
-    totals.errors += result.errors;
-  }
-
-  // ── Seed Bitget ──
-  if (exchanges.includes('BITGET')) {
-    const bitgetCoins = restrictedCoins ?? await fetchBitgetCoins(top);
-    console.log(`[${ts()}] Starting ${timeframe} BITGET signal seed for ${bitgetCoins.length} assets${restrictedCoins ? ` (restricted)` : ''} (delay: ${DELAY_PER_EXCHANGE.BITGET}ms)...`);
-    try { await bulkWarmFundingCache(bitgetCoins); }
-    catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
-    const result = await seedExchange('BITGET', bitgetCoins, timeframe, idempotencyWindow);
-    console.log(`[${ts()}] BITGET seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
+    const result = await seedExchange(venueId, coins, timeframe, idempotencyWindow);
+    console.log(`[${ts()}] ${venueId} seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
     totals.seeded += result.seeded;
     totals.skipped += result.skipped;
     totals.errors += result.errors;
@@ -637,8 +671,17 @@ async function main() {
   console.log(`[${ts()}] All exchanges done [${timeframe}]: ${totals.seeded} seeded, ${totals.skipped} skipped, ${totals.errors} errors.`);
 }
 
-main().catch((err) => {
-  console.error('Fatal:', err);
-  closeDb();
-  process.exit(1);
-});
+// Auto-run only when invoked as a script (`node dist/scripts/seed-signals.js`),
+// NOT when imported by tests. CJS heuristic mirrors evaluate-venues.ts.
+// OPS-SHADOW-PIPELINE-W1/C1: without this guard, importing the module (e.g. for
+// parseArgs / UNIVERSE_FETCHERS unit tests) fires main() on load — and the new
+// venue-table-driven selection would hit the DB at import time. Production cron
+// invokes it directly, so require.main === module holds and behavior is
+// unchanged.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('Fatal:', err);
+    closeDb();
+    process.exit(1);
+  });
+}
