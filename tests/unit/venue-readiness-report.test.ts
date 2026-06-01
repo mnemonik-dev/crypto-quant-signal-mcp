@@ -47,6 +47,8 @@ describe('venueVerdict — per-state glyphs (C5)', () => {
   it('classifies every readiness state', () => {
     expect(venueVerdict(v('A', 'promoted'), { pfe_wr: null, buy_sell_count: 0, days_since: 0 }).line).toContain('already live');
     expect(venueVerdict(v('B', 'shadow'), { pfe_wr: null, buy_sell_count: 0, days_since: 0 }).line).toContain('no pipeline yet');
+    // seeding_started_at set + 0 BUY/SELL → actively seeding, HOLDs only (NOT "no pipeline")
+    expect(venueVerdict(v('B2', 'shadow', 500, { seeding_started_at: '2026-06-01T08:45:00Z' }), { pfe_wr: null, buy_sell_count: 0, days_since: 0 }).line).toContain('seeding, sample 0/500');
     expect(venueVerdict(v('C', 'shadow'), { pfe_wr: null, buy_sell_count: 50, days_since: 3 }).line).toContain('within initial window');
     expect(venueVerdict(v('D', 'shadow'), { pfe_wr: null, buy_sell_count: 50, days_since: 20 }).line).toContain('WR n/a');
     expect(venueVerdict(v('E', 'shadow'), { pfe_wr: 0.9, buy_sell_count: 400, days_since: 20 }).line).toContain('need 100 more');
