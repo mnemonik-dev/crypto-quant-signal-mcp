@@ -44,8 +44,13 @@ Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Last 10 min of journal output:
 ${JOURNAL}
 
-Action: dispatch OPS-FUNNEL-SNAPSHOT-CRON-FIX-W{NEXT} via Cowork → Claude Code
-Audit shape: audits/ACTIVATION-FUNNEL-AUDIT-W1-endpoint-truth.md
+Meaning: since OPS-FUNNEL-SNAPSHOT-CRON-FIX-W1, exit 3 fires ONLY after the
+bounded fetch+rebase+retry is exhausted — i.e. a GENUINE stuck push (origin
+unreachable, auth/ref-lock, or repeated rebase conflict), NOT the transient
+non-fast-forward race (which now self-heals silently). Investigate host
+git/network first; the local commit is intact and re-runnable.
+Action: dispatch OPS-FUNNEL-SNAPSHOT-CRON-FIX-W{NEXT} via Cowork → Claude Code (only if a code defect)
+Audit shape: audits/OPS-FUNNEL-SNAPSHOT-CRON-FIX-W1-endpoint-truth.md
 Source unit: ${UNIT_NAME}
 EOF
 )

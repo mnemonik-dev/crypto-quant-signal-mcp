@@ -9,7 +9,8 @@
 # Exit codes:
 #   0  — success (either new snapshot committed + pushed, or nothing to do)
 #   2  — DATABASE_URL missing (see ops/systemd/README.md for the env file)
-#   3  — git push failed (snapshot files left in place for manual recovery)
+#   3  — git push still failed after bounded fetch+rebase+retry (commit left
+#         intact for manual recovery; fires the OnFailure Telegram alert)
 #   *  — any other error propagates via `set -e`
 #
 # Invocation: the systemd unit sets WorkingDirectory=/opt/crypto-quant-signal-mcp,
@@ -102,15 +103,61 @@ COMMIT_MSG="chore(funnel): auto-snapshot $(date -u +%Y-%m-%d)"
 echo "[commit-funnel-snapshot] committing: ${COMMIT_MSG}"
 git -C "${REPO_ROOT}" commit -m "${COMMIT_MSG}"
 
-# ── 7. Push. If this fails, we deliberately leave the local commit in place
-# so a human can push it manually — reverting would throw away the snapshot.
-# The VPS deploy key is set up by .github/workflows/deploy.yml's checkout
-# step, but may not have push access. See BLOCKER-3 in README.md.
-echo "[commit-funnel-snapshot] pushing to origin main"
-if ! git -C "${REPO_ROOT}" push origin main; then
-  echo "[commit-funnel-snapshot] ERROR: git push origin main failed." >&2
-  echo "[commit-funnel-snapshot] Local commit is intact; run 'git push origin main' manually." >&2
-  echo "[commit-funnel-snapshot] See ops/systemd/README.md BLOCKER-3 (deploy-key push access)." >&2
+# ── 8. Sync-then-push with bounded retry. origin/main advances constantly
+# (daily releases + code waves + paths-ignored commits that move origin WITHOUT
+# redeploying this host), so by the time the weekly snapshot commits, the host
+# checkout is routinely behind — a plain `git push` then races into a
+# non-fast-forward rejection. Per CLAUDE.md Automation-first recovery
+# (Detect → Recover → Alert → Escalate): detect the rejection, recover by
+# fetch+rebase of our snapshot commit onto origin/main and retry with backoff,
+# and escalate to the OnFailure Telegram alert (exit 3) ONLY after the retry
+# budget is exhausted — i.e. a GENUINE stuck push, not the transient race that
+# self-heals here.
+#
+# Self-contained on purpose: this is currently the only host-side commit-and-push
+# cron, so per the CLAUDE.md 3-example-threshold rule we do NOT pre-extract a
+# shared safe-git-push.sh — but the routine is written extraction-ready for when
+# a 2nd/3rd host-side pusher appears (WIS-flagged).
+push_with_resync() {
+  local backoffs=(5 15 45) attempt
+  for attempt in 0 1 2; do
+    if [ "${attempt}" -gt 0 ]; then
+      echo "[commit-funnel-snapshot] resync+push retry ${attempt} (after ${backoffs[$((attempt-1))]}s)"
+      sleep "${backoffs[$((attempt-1))]}"
+    fi
+    # Discard the ephemeral deploy-injected working-tree edits (README.md +
+    # landing/*.html, rewritten on every deploy by scripts/snapshot-landing-data.mjs;
+    # deploy.yml does `git reset --hard origin/main` before re-injecting, so the
+    # tree is disposable by construction, and Caddy serves a SEPARATE copy under
+    # /var/www/algovault/ that this cron never touches). A clean tree means the
+    # rebase has nothing to autostash → it can NEVER leave conflict markers in the
+    # served landing/*.html.
+    git -C "${REPO_ROOT}" checkout -- . 2>/dev/null || true
+    # Fetch origin/main + rebase our snapshot commit onto it, atomically. Same
+    # remote ("origin" = the github-funnel: SSH alias) as the push below, so auth
+    # is identical. --autostash is a belt-and-suspenders no-op on the now-clean
+    # tree. On any rebase conflict: abort + log + retry from a clean fetch rather
+    # than leaving a half-rebased state.
+    if ! git -C "${REPO_ROOT}" pull --rebase --autostash origin main; then
+      echo "[commit-funnel-snapshot] WARN: pull --rebase failed/conflicted — aborting this attempt" >&2
+      git -C "${REPO_ROOT}" rebase --abort 2>/dev/null || true
+      continue
+    fi
+    if git -C "${REPO_ROOT}" push origin main; then
+      return 0
+    fi
+    echo "[commit-funnel-snapshot] WARN: push rejected (origin advanced mid-run) — re-syncing" >&2
+  done
+  return 1
+}
+
+echo "[commit-funnel-snapshot] pushing to origin main (resync-aware)"
+if ! push_with_resync; then
+  echo "[commit-funnel-snapshot] ERROR: push failed after bounded fetch+rebase+retry." >&2
+  echo "[commit-funnel-snapshot] Local commit is intact — this is a GENUINE stuck push" >&2
+  echo "[commit-funnel-snapshot] (origin unreachable, auth/ref-lock, or repeated rebase conflict)," >&2
+  echo "[commit-funnel-snapshot] not the transient non-ff race. Investigate host git/network, then" >&2
+  echo "[commit-funnel-snapshot] re-run the unit or push manually once origin is reachable." >&2
   EXIT_STATUS=3
   exit 3
 fi
