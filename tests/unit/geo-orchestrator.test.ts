@@ -215,4 +215,23 @@ describe('geo-orchestrator: runWeeklyProbe (multi-engine × samples)', () => {
     expect(engineIds).toEqual([]);
     expect(mockRecord).not.toHaveBeenCalled();
   });
+
+  it('extracts with the judgeProvider (Anthropic), NEVER the engine provider', async () => {
+    // Regression: a Perplexity engine provider can't run the Claude-pinned
+    // extractor model — the judge must be a separate Anthropic-shaped provider.
+    const judge = new StubProvider();
+    const engine = stubEngine();
+    await runWeeklyProbe({
+      engines: [engine],
+      samples: 1,
+      yamlPath: YAML_PATH,
+      interQueryDelayMs: 0,
+      judgeProvider: judge,
+    });
+    expect(mockExtract).toHaveBeenCalledTimes(15);
+    for (const call of mockExtract.mock.calls) {
+      expect(call[0]).toBe(judge); // judge provider
+      expect(call[0]).not.toBe(engine.provider); // never the engine's provider
+    }
+  });
 });

@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   getRetrievalEngines,
+  getLLMProvider,
   type LLMProvider,
   type RetrievalEngine,
   type Citation,
@@ -189,6 +190,13 @@ export async function runWeeklyProbe(opts?: {
   yamlPath?: string;
   /** Delay between engine calls in ms. Default 15s. Set to 0 in tests. */
   interQueryDelayMs?: number;
+  /**
+   * The extractor's LLM judge — ALWAYS Anthropic (the extractor pins a Claude
+   * Haiku model), independent of which retrieval engine produced the answer.
+   * Must NOT be the per-engine provider (a PerplexityProvider can't run the
+   * Claude judge model). Defaults to `getLLMProvider()` (Anthropic in prod).
+   */
+  judgeProvider?: LLMProvider;
 }): Promise<{
   runId: string;
   engineIds: string[];
@@ -199,6 +207,7 @@ export async function runWeeklyProbe(opts?: {
   const runId = randomUUID();
   const queries = loadQueries(opts?.yamlPath);
   const engines = opts?.engines ?? getRetrievalEngines();
+  const judgeProvider = opts?.judgeProvider ?? getLLMProvider();
   const samples =
     opts?.samples ?? (Number(process.env.GEO_SAMPLES_PER_QUERY) || DEFAULT_GEO_SAMPLES_PER_QUERY);
   const delay = opts?.interQueryDelayMs ?? 15_000;
@@ -224,9 +233,11 @@ export async function runWeeklyProbe(opts?: {
         resultCount++;
         if (result.error_code) errorCount++;
 
+        // Judge with Anthropic (judgeProvider), NOT engine.provider — the
+        // extractor pins a Claude model; a Perplexity provider would 400.
         const mentions: GeoMentions = result.error_code
           ? { ...SAFE_DEFAULTS }
-          : await extractMentions(engine.provider, query, result, citations);
+          : await extractMentions(judgeProvider, query, result, citations);
 
         await recordGeoRun(result, mentions, { retrieval: true, query_tier: tier, sample_idx: sample });
         if (!result.error_code) {

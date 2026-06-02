@@ -99,6 +99,8 @@ describe('GEO-MEASUREMENT-W2: multi-engine end-to-end flow', () => {
       samples: 1,
       yamlPath: YAML_PATH,
       interQueryDelayMs: 0,
+      // Judge is Anthropic-shaped (returns canned extractor JSON), NOT the engine.
+      judgeProvider: new DualBehaviorProvider(),
     });
 
     expect(resultCount).toBe(30); // 15 × 2 × 1
