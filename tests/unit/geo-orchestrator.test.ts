@@ -19,9 +19,15 @@ vi.mock('../../src/lib/geo-storage.js', () => ({
   ensureGeoSchema: (...args: unknown[]) => mockEnsure(...args),
 }));
 
-vi.mock('../../src/lib/geo-extractor.js', () => ({
-  extractMentions: (...args: unknown[]) => mockExtract(...args),
-}));
+// Keep real SAFE_DEFAULTS (the orchestrator error-path spreads it as of W2 C2);
+// override only extractMentions.
+vi.mock('../../src/lib/geo-extractor.js', async (importActual) => {
+  const actual = await importActual<typeof import('../../src/lib/geo-extractor.js')>();
+  return {
+    ...actual,
+    extractMentions: (...args: unknown[]) => mockExtract(...args),
+  };
+});
 
 // Import AFTER vi.mock declarations
 import {

@@ -5,8 +5,8 @@
  * defaults on every failure path, system prompt marked cacheable.
  */
 import { describe, it, expect, vi } from 'vitest';
-import type { LLMProvider, LLMCompletion } from '../../src/lib/llm-provider.js';
-import { extractMentions } from '../../src/lib/geo-extractor.js';
+import type { LLMProvider, LLMCompletion, Citation } from '../../src/lib/llm-provider.js';
+import { extractMentions, mapSourceCitations } from '../../src/lib/geo-extractor.js';
 import type { GeoQuery, GeoQueryResult } from '../../src/lib/geo-orchestrator.js';
 
 const Q: GeoQuery = {
@@ -116,5 +116,74 @@ describe('geo-extractor: extractMentions', () => {
     expect((provider.lastOpts as { systemPromptCacheable: boolean }).systemPromptCacheable).toBe(true);
     expect((provider.lastOpts as { systemPrompt: string }).systemPrompt).toContain('AlgoVault');
     expect((provider.lastOpts as { temperature: number }).temperature).toBe(0.0);
+  });
+});
+
+describe('geo-extractor: W2 retrieval dimensions (extractMentions)', () => {
+  const SIX = {
+    mention_found: true,
+    mention_count: 1,
+    mention_position: 1,
+    mention_context: 'AlgoVault',
+    competitors_mentioned: ['vectorbt'],
+    sentiment_score: 0.5,
+  };
+
+  it('parses + clamps share_of_voice and derives cited/cited_url from citations', async () => {
+    const provider = new CannedProvider(JSON.stringify({ ...SIX, share_of_voice: 0.25 }));
+    const cites: Citation[] = [
+      { url: 'https://algovault.com/faq' },
+      { url: 'https://github.com/polakowo/vectorbt' },
+    ];
+    const m = await extractMentions(provider, Q, RESULT, cites);
+    expect(m.share_of_voice).toBe(0.25);
+    expect(m.cited).toBe(true);
+    expect(m.cited_url).toBe('https://algovault.com/faq');
+  });
+
+  it('clamps out-of-range share_of_voice into [0,1]', async () => {
+    const provider = new CannedProvider(JSON.stringify({ ...SIX, share_of_voice: 4 }));
+    const m = await extractMentions(provider, Q, RESULT, []);
+    expect(m.share_of_voice).toBe(1);
+  });
+
+  it('defaults share_of_voice to 0 when absent — W1 JSON (no SoV) still parses', async () => {
+    const provider = new CannedProvider(JSON.stringify(SIX)); // no share_of_voice
+    const m = await extractMentions(provider, Q, RESULT);
+    expect(m.mention_found).toBe(true);
+    expect(m.share_of_voice).toBe(0);
+    expect(m.cited).toBe(false);
+    expect(m.cited_url).toBeNull();
+  });
+
+  it('preserves cited/cited_url even on LLM failure (deterministic from citations)', async () => {
+    const provider = new CannedProvider(() => {
+      throw new Error('LLM down');
+    });
+    const m = await extractMentions(provider, Q, RESULT, [{ url: 'https://docs.algovault.com/x' }]);
+    expect(m.mention_found).toBe(false); // safe defaults
+    expect(m.cited).toBe(true); // but citation facts survive
+    expect(m.cited_url).toBe('https://docs.algovault.com/x');
+  });
+});
+
+describe('geo-extractor: mapSourceCitations (source-citation map)', () => {
+  it('classifies algovault.com -> algovault, vectorbt -> competitor, else neutral; ranks in order', () => {
+    const cites: Citation[] = [
+      { url: 'https://algovault.com/faq', title: 'FAQ' },
+      { url: 'https://github.com/polakowo/vectorbt', title: 'vectorbt' },
+      { url: 'https://example.com/random-blog' },
+    ];
+    const mapped = mapSourceCitations(Q, cites); // Q.competitor_terms = ['vectorbt','ccxt']
+    expect(mapped).toHaveLength(3);
+    expect(mapped[0]).toMatchObject({ attributed_to: 'algovault', source_domain: 'algovault.com', rank: 1 });
+    expect(mapped[1]).toMatchObject({ attributed_to: 'competitor', competitor_name: 'vectorbt', rank: 2 });
+    expect(mapped[2]).toMatchObject({ attributed_to: 'neutral', competitor_name: null, rank: 3 });
+  });
+
+  it('skips citations without a url', () => {
+    const mapped = mapSourceCitations(Q, [{ url: '' }, { url: 'https://algovault.com' }] as Citation[]);
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0].attributed_to).toBe('algovault');
   });
 });

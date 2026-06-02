@@ -15,7 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { LLMProvider } from './llm-provider.js';
-import { extractMentions, type GeoMentions } from './geo-extractor.js';
+import { extractMentions, SAFE_DEFAULTS, type GeoMentions } from './geo-extractor.js';
 import { recordGeoRun } from './geo-storage.js';
 
 export interface GeoQuery {
@@ -124,15 +124,11 @@ export async function runWeeklyProbe(opts: {
     if (result.error_code) errorCount++;
     else successCount++;
 
+    // GEO-MEASUREMENT-W2 (C2 forced-touch): error-path mentions = the
+    // extractor's SAFE_DEFAULTS (single source) so future GeoMentions fields
+    // never re-break this literal. Citation-threading + ctx arrive in C5.
     const mentions: GeoMentions = result.error_code
-      ? {
-          mention_found: false,
-          mention_count: 0,
-          mention_position: null,
-          mention_context: null,
-          competitors_mentioned: [],
-          sentiment_score: 0,
-        }
+      ? { ...SAFE_DEFAULTS }
       : await extractMentions(opts.provider, query, result);
 
     await recordGeoRun(result, mentions);
