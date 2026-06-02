@@ -672,7 +672,9 @@ export interface RetrievalEngine {
   model: string;
 }
 
-const DEFAULT_GEO_ENGINES = 'claude-web,perplexity';
+// GEO-MEASUREMENT-W3 (C2): default to all 4 engines. chatgpt/gemini are
+// skip-in-prod until their keys land (Q-2-C) — no [STUB] rows persisted.
+const DEFAULT_GEO_ENGINES = 'claude-web,perplexity,chatgpt,gemini';
 
 /**
  * Q-2-C: stubs are TEST-ONLY. In prod a key-less engine is SKIPPED entirely so

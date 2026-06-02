@@ -181,12 +181,14 @@ describe('getRetrievalEngines() factory', () => {
     expect(engines[0].model).toBe('claude-haiku-4-5-20251001');
   });
 
-  it('defaults to claude-web,perplexity when GEO_ENGINES unset', () => {
+  it('W3: defaults to all 4 engines when GEO_ENGINES unset', () => {
     delete process.env.GEO_ENGINES;
     process.env.ANTHROPIC_API_KEY = 'sk-ant-fake';
     process.env.PERPLEXITY_API_KEY = 'pk-fake';
+    process.env.OPENAI_API_KEY = 'sk-openai-fake';
+    process.env.GEMINI_API_KEY = 'gm-fake';
     const engines = getRetrievalEngines();
-    expect(engines.map((e) => e.engineId)).toEqual(['claude-web', 'perplexity']);
+    expect(engines.map((e) => e.engineId)).toEqual(['claude-web', 'perplexity', 'chatgpt', 'gemini']);
   });
 
   it('W3: builds OpenAIProvider/GeminiProvider for chatgpt/gemini when keyed', () => {

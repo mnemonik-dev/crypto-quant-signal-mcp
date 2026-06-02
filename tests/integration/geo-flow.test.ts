@@ -87,11 +87,13 @@ beforeEach(() => {
   recordedCitations.length = 0;
 });
 
-describe('GEO-MEASUREMENT-W2: multi-engine end-to-end flow', () => {
-  it('runs 2 engines × 1 sample over 15 queries; ctx + citations flow through', async () => {
+describe('GEO-MEASUREMENT-W3: 4-engine end-to-end flow', () => {
+  it('runs 4 engines × 1 sample over 15 queries; ctx + citations flow through (zero logic change)', async () => {
     const engines: RetrievalEngine[] = [
       { engineId: 'claude-web', provider: new DualBehaviorProvider(), model: 'claude-haiku-4-5-20251001' },
       { engineId: 'perplexity', provider: new DualBehaviorProvider(), model: 'sonar' },
+      { engineId: 'chatgpt', provider: new DualBehaviorProvider(), model: 'gpt-4.1-mini' },
+      { engineId: 'gemini', provider: new DualBehaviorProvider(), model: 'gemini-2.5-flash' },
     ];
 
     const { runId, resultCount, errorCount, engineIds } = await runWeeklyProbe({
@@ -103,15 +105,15 @@ describe('GEO-MEASUREMENT-W2: multi-engine end-to-end flow', () => {
       judgeProvider: new DualBehaviorProvider(),
     });
 
-    expect(resultCount).toBe(30); // 15 × 2 × 1
+    expect(resultCount).toBe(60); // 15 × 4 × 1
     expect(errorCount).toBe(0);
-    expect(engineIds).toEqual(['claude-web', 'perplexity']);
-    expect(recordedRuns).toHaveLength(30);
-    expect(recordedCitations).toHaveLength(30); // one source-map per ok run
+    expect(engineIds).toEqual(['claude-web', 'perplexity', 'chatgpt', 'gemini']);
+    expect(recordedRuns).toHaveLength(60);
+    expect(recordedCitations).toHaveLength(60); // one source-map per ok run
 
     for (const { result, mentions, ctx } of recordedRuns) {
       expect(result.run_id).toBe(runId);
-      expect(['claude-haiku-4-5-20251001', 'sonar']).toContain(result.model);
+      expect(['claude-haiku-4-5-20251001', 'sonar', 'gpt-4.1-mini', 'gemini-2.5-flash']).toContain(result.model);
       expect(mentions.mention_found).toBe(true);
       expect(mentions.competitors_mentioned).toContain('vectorbt');
       expect(mentions.share_of_voice).toBe(0.5);
