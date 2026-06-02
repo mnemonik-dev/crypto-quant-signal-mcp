@@ -93,7 +93,7 @@ import { formatSearchKnowledgeResponse } from './lib/search-knowledge-formatter.
 // AV-CHAT-MCP-W1 (C3, 2026-05-18) — chat substrate. ChatEngine reuses the
 // SearchEngine singleton from C2; quota tracked separately via ChatRateLimit
 // against the new `chat_usage_monthly` Postgres table.
-import { getLLMProvider, type LLMProvider } from './lib/llm-provider.js';
+import { getLLMProvider, type LLMProvider, type LLMProviderName } from './lib/llm-provider.js';
 import { ChatEngine, type ChatResult } from './lib/chat-engine.js';
 import { ChatRateLimit, ensureChatUsageTable, type ChatTier } from './lib/chat-rate-limit.js';
 import { formatChatKnowledgeResponse } from './lib/chat-knowledge-formatter.js';
@@ -1808,7 +1808,11 @@ async function startHttp() {
     let _analyticsQuestion = '';
     let _analyticsApiKey: string | null = null;
     let _analyticsTier: ChatTier = 'free';
-    let _analyticsProvider: 'anthropic' | 'stub' | 'openai' | 'gemini' = 'anthropic';
+    // GEO-MEASUREMENT-W2 (C1) enum-widening cascade: LLMProviderName widened
+    // with 'perplexity' (architect-ratified). Annotate with the canonical type
+    // (not a stale 4-literal) so future engines need zero touch here. Behavior
+    // unchanged — type annotation only.
+    let _analyticsProvider: LLMProviderName = 'anthropic';
     let _analyticsModel = 'claude-haiku-4-5-20251001';
     try {
       const body = (req.body ?? {}) as { question?: unknown; model?: unknown };
