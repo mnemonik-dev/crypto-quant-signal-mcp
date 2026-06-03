@@ -16,6 +16,7 @@
  *   5. Run summary (latest run id, queries, errors, last-fired timestamp)
  */
 import { dbQuery } from './performance-db.js';
+import { computeIndexPresence } from './geo-digest.js';
 
 interface WeeklyRow {
   week_utc: string;
@@ -97,6 +98,8 @@ export interface GeoDashboardData {
   sourceMap?: SourceMapRow[];
   tiered?: TieredRow[];
   gaps?: GapBriefRow[];
+  // R5 — per-engine index-presence (presence-tier; own section, never authority).
+  presence?: Array<{ model: string; present: boolean | string | null }>;
 }
 
 function n(v: string | number | null | undefined): number {
@@ -163,6 +166,7 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
             AVG(mention_position) FILTER (WHERE mention_found) AS avg_position
      FROM geo_mentions
      WHERE ran_at > now() - interval '4 weeks'
+       AND query_tier IS DISTINCT FROM 'presence'
      GROUP BY query_id, model
      ORDER BY mention_rate_pct ASC NULLS FIRST, query_id`,
     [],
@@ -201,6 +205,7 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
             ROUND(AVG(share_of_voice)::numeric, 3) AS avg_sov
      FROM geo_mentions
      WHERE retrieval = true AND ran_at > now() - $1 * interval '1 week'
+       AND query_tier IS DISTINCT FROM 'presence'
      GROUP BY model
      ORDER BY model`,
     [opts.lookbackWeeks],
@@ -223,8 +228,23 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
             ROUND(AVG(share_of_voice)::numeric, 3) AS avg_sov
      FROM geo_mentions
      WHERE retrieval = true AND ran_at > now() - $1 * interval '1 week'
+       AND query_tier IS DISTINCT FROM 'presence'
      GROUP BY query_tier
      ORDER BY query_tier NULLS LAST`,
+    [opts.lookbackWeeks],
+  );
+
+  // R5 (AI-CRAWLER-ACCESS-W2) — index presence: per-engine "did the substrate
+  // retrieve algovault.com?" for the presence-tier query (majority of samples).
+  // Its own section; EXCLUDED from every authority aggregate above.
+  const presence = await dbQuery<{ model: string; present: boolean | string | null }>(
+    `SELECT model,
+            (count(*) FILTER (WHERE mention_found) * 2 >= count(*)) AS present
+     FROM geo_mentions
+     WHERE retrieval = true AND query_tier = 'presence'
+       AND ran_at > now() - $1 * interval '1 week'
+     GROUP BY model
+     ORDER BY model`,
     [opts.lookbackWeeks],
   );
 
@@ -247,6 +267,7 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
     sourceMap,
     tiered,
     gaps,
+    presence,
   };
 }
 
@@ -390,6 +411,27 @@ export function renderGeoDashboardHtml(data: GeoDashboardData): string {
       ? '<p class="empty">No content gaps computed yet.</p>'
       : `<table><thead><tr><th>Query</th><th>Tier</th><th>SoV</th><th>Top competitor</th><th>Injected</th><th>Recommended action</th></tr></thead><tbody>${gapRows}</tbody></table>`;
 
+  // R5 — index presence (per-engine substrate retrieval; its own section, never authority).
+  const ip = computeIndexPresence(
+    (data.presence ?? []).map((r) => ({
+      model: r.model,
+      present: r.present === true || r.present === 't' || r.present === 'true',
+    })),
+  );
+  const presenceSection = !ip.hasData
+    ? '<p class="empty">No presence data yet — first probe Mon.</p>'
+    : `${ip.blocked ? `<div class="banner">🔴 BLOCKED ELIGIBILITY — not indexed on ${htmlEscape(ip.missing.join(', '))}. Fix the re-crawl before chasing authority.</div>` : ''}` +
+      `<p><code>${htmlEscape(ip.line)}</code></p>` +
+      `<table><thead><tr><th>Engine</th><th>Substrate</th><th>Indexed</th></tr></thead><tbody>` +
+      ip.engines
+        .map(
+          (e) =>
+            `<tr class="${e.present ? '' : 'warn'}"><td>${htmlEscape(e.engine === 'claude-web' ? 'claude' : e.engine)}</td>` +
+            `<td>${htmlEscape(e.substrate || '—')}</td><td>${e.present ? '✓' : '✗'}</td></tr>`,
+        )
+        .join('') +
+      `</tbody></table>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -439,6 +481,9 @@ ${sourceMapSection}
 
 <h2>8. Content-gap list (→ editorial-calendar via geo-gap injector, veto-gated)</h2>
 ${gapsSection}
+
+<h2>9. Index presence (per-engine substrate retrieval — 🔴 = not indexed, fix-now)</h2>
+${presenceSection}
 
 <p class="meta">Edit the canonical 15-query SoT at <code>landing/Prompt/geo-queries.yaml</code> — orchestrator loads at runtime. Add queries (with a <code>tier</code>) without code change. Engines via <code>GEO_ENGINES</code> (claude-web,perplexity); samples via <code>GEO_SAMPLES_PER_QUERY</code>.</p>
 </body>

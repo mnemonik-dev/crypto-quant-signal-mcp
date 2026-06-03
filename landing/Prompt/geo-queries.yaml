@@ -90,3 +90,14 @@ queries:
     text: "Best Python quant framework for AI trading agents in 2026?"
     tier: head
     competitor_terms: ["vectorbt", "vectorbt-pro", "qlib", "nautilus", "backtrader", "zipline-reloaded"]
+
+  # presence (AI-CRAWLER-ACCESS-W2 R5): NOT a buying-intent query. A known-entity
+  # retrieval check — does each engine's web_search substrate actually retrieve
+  # algovault.com? mention_found here = "indexed in that engine's substrate"
+  # (Bing→ChatGPT, Google→Gemini, Brave→Claude, Perplexity→own). EXCLUDED from
+  # every authority aggregate (mention rate / SoV / citations / gap-list) at the
+  # source — it would trivially self-mention the domain. No competitor_terms.
+  - id: algovault-exists
+    text: "Is there a tool or website at algovault.com — what is it and what does it do?"
+    tier: presence
+    competitor_terms: []

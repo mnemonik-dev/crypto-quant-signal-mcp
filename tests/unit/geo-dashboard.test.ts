@@ -85,4 +85,25 @@ describe('geo-dashboard: renderGeoDashboardHtml', () => {
     expect(html).toContain('vectorbt');
     expect(html).toContain('12');
   });
+
+  it('R5: index-presence section — empty-state when no presence data', () => {
+    const html = renderGeoDashboardHtml(EMPTY);
+    expect(html).toContain('9. Index presence');
+    expect(html).toContain('No presence data yet');
+    expect(html).not.toContain('BLOCKED ELIGIBILITY');
+  });
+
+  it('R5: index-presence section renders ✓/✗ + blocked banner when a substrate is missing', () => {
+    const html = renderGeoDashboardHtml({
+      ...EMPTY,
+      presence: [
+        { model: 'gpt-4.1-mini', present: true },
+        { model: 'claude-haiku-4-5-20251001', present: false },
+        { model: 'gemini-2.5-flash', present: true },
+        { model: 'sonar', present: true },
+      ],
+    });
+    expect(html).toContain('🔴 BLOCKED ELIGIBILITY — not indexed on claude');
+    expect(html).toContain('chatgpt ✓ (Bing) · claude ✗ (Brave) · gemini ✓ (Google) · perplexity ✓');
+  });
 });

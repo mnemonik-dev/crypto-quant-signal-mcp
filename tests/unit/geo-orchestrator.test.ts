@@ -47,6 +47,10 @@ import {
 } from '../../src/lib/geo-orchestrator.js';
 
 const YAML_PATH = path.resolve(__dirname, '..', '..', 'landing', 'Prompt', 'geo-queries.yaml');
+// Derived so adding a query to the SoT yaml (e.g. the R5 presence-tier query) doesn't
+// brittle-break every runWeeklyProbe iteration assertion — only the explicit count
+// lock in the loadQueries describe is hardcoded.
+const QUERY_COUNT = loadQueries(YAML_PATH).length;
 
 class StubProvider implements LLMProvider {
   readonly name = 'stub' as const;
@@ -85,11 +89,12 @@ function stubEngine(fn?: (msgs: unknown, opts: unknown) => LLMCompletion): Retri
 }
 
 describe('geo-orchestrator: loadQueries', () => {
-  it('returns 15 GeoQuery objects from canonical YAML', () => {
+  it('returns all canonical GeoQuery objects from YAML (15 authority + 1 presence)', () => {
     const queries = loadQueries(YAML_PATH);
-    expect(queries).toHaveLength(15);
+    expect(queries).toHaveLength(16);
     expect(queries[0].id).toBe('build-crypto-agent');
     expect(queries[14].id).toBe('python-quant-for-ai');
+    expect(queries[15].id).toBe('algovault-exists'); // R5 presence-tier query
   });
 
   it('each query has required fields {id, text, competitor_terms[]}', () => {
@@ -106,7 +111,7 @@ describe('geo-orchestrator: loadQueries', () => {
   it('default path resolves to landing/Prompt/geo-queries.yaml', () => {
     // No arg = use default __dirname-relative resolution
     const queries = loadQueries();
-    expect(queries).toHaveLength(15);
+    expect(queries).toHaveLength(16);
   });
 });
 
@@ -165,11 +170,11 @@ describe('geo-orchestrator: runWeeklyProbe (multi-engine × samples)', () => {
     });
     expect(runId.length).toBeGreaterThan(0);
     expect(engineIds).toEqual(['stub']);
-    expect(resultCount).toBe(15); // 15 queries × 1 engine × 1 sample
+    expect(resultCount).toBe(QUERY_COUNT); // every query × 1 engine × 1 sample
     expect(errorCount).toBe(0);
-    expect(mockRecord).toHaveBeenCalledTimes(15);
-    expect(mockExtract).toHaveBeenCalledTimes(15);
-    expect(mockRecordCites).toHaveBeenCalledTimes(15); // source-citation map per ok row
+    expect(mockRecord).toHaveBeenCalledTimes(QUERY_COUNT);
+    expect(mockExtract).toHaveBeenCalledTimes(QUERY_COUNT);
+    expect(mockRecordCites).toHaveBeenCalledTimes(QUERY_COUNT); // source-citation map per ok row
     // closed loop: gap-list computed + persisted once at end
     expect(mockComputeGap).toHaveBeenCalledTimes(1);
     expect(mockPersistGap).toHaveBeenCalledTimes(1);
@@ -182,8 +187,8 @@ describe('geo-orchestrator: runWeeklyProbe (multi-engine × samples)', () => {
       yamlPath: YAML_PATH,
       interQueryDelayMs: 0,
     });
-    expect(resultCount).toBe(15 * 2 * 3); // 90
-    expect(mockRecord).toHaveBeenCalledTimes(90);
+    expect(resultCount).toBe(QUERY_COUNT * 2 * 3);
+    expect(mockRecord).toHaveBeenCalledTimes(QUERY_COUNT * 2 * 3);
   });
 
   it('records via storage with safe defaults on the error path; skips extractor + citations', async () => {
@@ -197,11 +202,11 @@ describe('geo-orchestrator: runWeeklyProbe (multi-engine × samples)', () => {
       yamlPath: YAML_PATH,
       interQueryDelayMs: 0,
     });
-    expect(resultCount).toBe(15);
-    expect(errorCount).toBe(15);
+    expect(resultCount).toBe(QUERY_COUNT);
+    expect(errorCount).toBe(QUERY_COUNT);
     expect(mockExtract).not.toHaveBeenCalled();
     expect(mockRecordCites).not.toHaveBeenCalled();
-    expect(mockRecord).toHaveBeenCalledTimes(15); // still recorded with SAFE_DEFAULTS
+    expect(mockRecord).toHaveBeenCalledTimes(QUERY_COUNT); // still recorded with SAFE_DEFAULTS
   });
 
   it('no-ops cleanly when there are no runnable engines', async () => {
@@ -228,7 +233,7 @@ describe('geo-orchestrator: runWeeklyProbe (multi-engine × samples)', () => {
       interQueryDelayMs: 0,
       judgeProvider: judge,
     });
-    expect(mockExtract).toHaveBeenCalledTimes(15);
+    expect(mockExtract).toHaveBeenCalledTimes(QUERY_COUNT);
     for (const call of mockExtract.mock.calls) {
       expect(call[0]).toBe(judge); // judge provider
       expect(call[0]).not.toBe(engine.provider); // never the engine's provider

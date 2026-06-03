@@ -18,9 +18,11 @@ import { WOW_DROP_SQL } from '../lib/geo-dashboard.js';
 import {
   buildDigest,
   shortEngine,
+  computeIndexPresence,
   type GeoDigestData,
   type AttributionGap,
   type EnginePlacement,
+  type IndexPresenceRow,
 } from '../lib/geo-digest.js';
 
 const DASHBOARD_URL = 'https://api.algovault.com/admin/geo-dashboard';
@@ -73,7 +75,9 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
              / NULLIF(count(*) FILTER (WHERE ran_at > now() - interval '1 week'), 0), 1) AS mention_this,
        ROUND(100.0 * count(*) FILTER (WHERE mention_found AND ran_at <= now() - interval '1 week' AND ran_at > now() - interval '2 weeks')
              / NULLIF(count(*) FILTER (WHERE ran_at <= now() - interval '1 week' AND ran_at > now() - interval '2 weeks'), 0), 1) AS mention_last
-     FROM geo_mentions WHERE retrieval = true AND ran_at > now() - interval '2 weeks'`,
+     FROM geo_mentions
+     WHERE retrieval = true AND ran_at > now() - interval '2 weeks'
+       AND query_tier IS DISTINCT FROM 'presence'`,
     [],
   );
   const dr = deltaRows[0] ?? {};
@@ -97,7 +101,9 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
     `SELECT model,
             ROUND(100.0 * count(*) FILTER (WHERE mention_found) / NULLIF(count(*), 0), 1) AS mention_rate_pct,
             ROUND(100.0 * count(*) FILTER (WHERE cited) / NULLIF(count(*), 0), 1) AS cited_rate_pct
-     FROM geo_mentions WHERE retrieval = true AND ran_at > now() - interval '1 week'
+     FROM geo_mentions
+     WHERE retrieval = true AND ran_at > now() - interval '1 week'
+       AND query_tier IS DISTINCT FROM 'presence'
      GROUP BY model ORDER BY model`,
     [],
   );
@@ -170,6 +176,7 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
   const openRows = await dbQuery<{ query_id: string }>(
     `SELECT DISTINCT query_id FROM geo_mentions
       WHERE retrieval = true AND ran_at > now() - interval '4 weeks'
+        AND query_tier IS DISTINCT FROM 'presence'
         AND query_id NOT IN (
           SELECT query_id FROM geo_source_citations
            WHERE attributed_to IN ('algovault', 'competitor') AND ran_at > now() - interval '4 weeks')
@@ -192,6 +199,25 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
     `SELECT query_id, query_tier, recommended_action, top_competitor, top_competitor_domain
      FROM geo_content_gaps ORDER BY computed_at DESC, rank_score DESC LIMIT 1`,
     [],
+  );
+
+  // R5 — index presence: per-engine "did the substrate retrieve algovault.com?" for
+  // the presence-tier query this week (majority of samples). EXCLUDED from every
+  // authority aggregate above (it self-mentions the domain). Empty until first probe.
+  const presenceRows = await dbQuery<{ model: string; present: boolean | string | null }>(
+    `SELECT model,
+            (count(*) FILTER (WHERE mention_found) * 2 >= count(*)) AS present
+     FROM geo_mentions
+     WHERE retrieval = true AND query_tier = 'presence'
+       AND ran_at > now() - interval '1 week'
+     GROUP BY model ORDER BY model`,
+    [],
+  );
+  const indexPresence = computeIndexPresence(
+    presenceRows.map((r): IndexPresenceRow => ({
+      model: r.model,
+      present: r.present === true || r.present === 't' || r.present === 'true',
+    })),
   );
 
   const wowDropSummary = wowAlerts
@@ -220,6 +246,7 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
     attributionGaps,
     contested,
     topGap: topGapRows[0] ?? null,
+    indexPresence,
   };
 
   return { data, wowAlerts };

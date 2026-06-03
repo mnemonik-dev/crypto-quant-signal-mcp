@@ -122,6 +122,14 @@ jobs:
             cp landing/*.txt /var/www/algovault/ 2>/dev/null && echo "Landing txt/ synced" || echo "No landing txt/ to sync"
             cp landing/sitemap.xml /var/www/algovault/ 2>/dev/null && echo "Landing sitemap.xml synced" || echo "No landing sitemap.xml to sync"
 
+            # AI-CRAWLER-ACCESS-W2 R3: IndexNow ping. Submits the sitemap URL set to
+            # Bing / Yandex / Seznam / etc (→ the ChatGPT + Perplexity retrieval substrate;
+            # Google ignores IndexNow). Runs AFTER the key file (landing/<32-hex>.txt) +
+            # sitemap.xml are synced live above, so IndexNow can fetch the key to verify
+            # ownership. Fail-open by contract — the script never exits non-zero and the
+            # `|| echo` guard means a wobbly endpoint can never break the deploy.
+            node scripts/indexnow-ping.mjs >> /var/log/algovault-indexnow.log 2>&1 || echo "indexnow ping failed; continuing fail-open"
+
             # OPS-TRADE-CALL-CLUSTER-W1 CH5 (2026-05-28) — W1 R3 env-append +
             # logrotate-install steps REMOVED. Logger module + invocation in
             # get-trade-call.ts deleted in same commit. Hetzner-side env-strip

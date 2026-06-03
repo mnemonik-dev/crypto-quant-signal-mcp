@@ -110,6 +110,7 @@ export async function computeGapList(windowWeeks = 4): Promise<GapBrief[]> {
               AVG(share_of_voice) AS sov, count(*) AS samples
          FROM geo_mentions
         WHERE ran_at > now() - make_interval(weeks => $1) AND retrieval = true
+          AND query_tier IS DISTINCT FROM 'presence'
         GROUP BY query_id, model`,
       [windowWeeks],
     );

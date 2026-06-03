@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeMomentum,
   computeAttribution,
+  computeIndexPresence,
   buildDigest,
   type Verdict,
   type MomentumDeltas,
@@ -151,6 +152,12 @@ describe('buildDigest', () => {
       top_competitor: 'mcp.so',
       top_competitor_domain: 'mcp.so',
     },
+    indexPresence: computeIndexPresence([
+      { model: 'gpt-4.1-mini', present: true },
+      { model: 'claude-haiku-4-5-20251001', present: true },
+      { model: 'gemini-2.5-flash', present: true },
+      { model: 'sonar', present: true },
+    ]),
   };
 
   it('golden: assembles the target format with verdict header + 4 sections + link', () => {
@@ -170,6 +177,9 @@ describe('buildDigest', () => {
     expect(out).toContain('best-mcp-trading (head): ChatGPT cites mcp.so');
     expect(out).toContain('Get AlgoVault a placement/answer on mcp.so');
     expect(out).toContain('Full numbers ↗ https://api.algovault.com/admin/geo-dashboard?key=<admin-key>');
+    // R5 — index-presence line present; all ✓ → no blocked banner
+    expect(out).toContain('Index presence: chatgpt ✓ (Bing) · claude ✓ (Brave) · gemini ✓ (Google) · perplexity ✓');
+    expect(out).not.toContain('BLOCKED ELIGIBILITY');
   });
 
   it('header verdict matches body (no contradiction) — emoji == verdict', () => {
@@ -189,6 +199,7 @@ describe('buildDigest', () => {
       attributionGaps: [],
       contested: [],
       topGap: null,
+      indexPresence: computeIndexPresence([]),
     };
     const out = buildDigest(empty).join('\n');
     expect(out).toContain('🟡 *HOLDING');
@@ -196,5 +207,60 @@ describe('buildDigest', () => {
     expect(out).toContain('No content moves are ≥7d old yet');
     expect(out).toContain('every query is OPEN');
     expect(out).toContain('No move queued');
+    // R5 — index presence graceful pre-first-probe, no banner
+    expect(out).toContain('Index presence: no data yet — first probe Mon');
+    expect(out).not.toContain('BLOCKED ELIGIBILITY');
+  });
+
+  it('R5: a ✗ substrate surfaces the leading 🔴 BLOCKED ELIGIBILITY banner', () => {
+    const blocked: GeoDigestData = {
+      ...data,
+      indexPresence: computeIndexPresence([
+        { model: 'gpt-4.1-mini', present: true },
+        { model: 'claude-haiku-4-5-20251001', present: false }, // not indexed in Brave
+        { model: 'gemini-2.5-flash', present: true },
+        { model: 'sonar', present: true },
+      ]),
+    };
+    const out = buildDigest(blocked).join('\n');
+    expect(out).toContain('🔴 *BLOCKED ELIGIBILITY* — not indexed on claude.');
+    expect(out).toContain('chatgpt ✓ (Bing) · claude ✗ (Brave) · gemini ✓ (Google) · perplexity ✓');
+    // distinct from authority: the momentum verdict is still its own line
+    expect(out).toContain('🟢 *GAINING');
+  });
+});
+
+describe('computeIndexPresence (R5)', () => {
+  it('all engines indexed → not blocked, ordered chatgpt→claude→gemini→perplexity', () => {
+    const ip = computeIndexPresence([
+      { model: 'sonar', present: true },
+      { model: 'gemini-2.5-flash', present: true },
+      { model: 'gpt-4.1-mini', present: true },
+      { model: 'claude-haiku-4-5-20251001', present: true },
+    ]);
+    expect(ip.blocked).toBe(false);
+    expect(ip.missing).toEqual([]);
+    expect(ip.hasData).toBe(true);
+    expect(ip.line).toBe('chatgpt ✓ (Bing) · claude ✓ (Brave) · gemini ✓ (Google) · perplexity ✓');
+  });
+
+  it('a missing substrate → blocked, named in missing[], ✗ in the line', () => {
+    const ip = computeIndexPresence([
+      { model: 'gpt-4.1-mini', present: true },
+      { model: 'claude-haiku-4-5-20251001', present: false },
+      { model: 'gemini-2.5-flash', present: true },
+      { model: 'sonar', present: false },
+    ]);
+    expect(ip.blocked).toBe(true);
+    expect(ip.missing).toEqual(['claude', 'perplexity']);
+    expect(ip.line).toContain('claude ✗ (Brave)');
+    expect(ip.line).toContain('perplexity ✗');
+  });
+
+  it('empty input → graceful pre-first-probe state', () => {
+    const ip = computeIndexPresence([]);
+    expect(ip.hasData).toBe(false);
+    expect(ip.blocked).toBe(false);
+    expect(ip.line).toBe('no data yet — first probe Mon');
   });
 });

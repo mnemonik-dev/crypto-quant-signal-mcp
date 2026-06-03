@@ -164,6 +164,71 @@ export function shortEngine(model: string): string {
   return model;
 }
 
+// ── R5 (AI-CRAWLER-ACCESS-W2): per-engine index-presence ──────────────────────
+
+/** One engine's index-presence input (from the presence-tier probe). */
+export interface IndexPresenceRow {
+  model: string; // stored model string (claude-haiku… / sonar / gpt-4.1-mini / gemini-2.5-flash)
+  present: boolean; // majority mention_found for query_tier='presence' (engine retrieved algovault.com)
+}
+
+/** Each engine → its retrieval substrate (the index ChatGPT/Claude/Gemini draw from). */
+const ENGINE_SUBSTRATE: Record<string, string> = {
+  chatgpt: 'Bing',
+  'claude-web': 'Brave',
+  gemini: 'Google',
+  perplexity: 'own',
+};
+/** Stable display order: ChatGPT (largest reach) → Claude → Gemini → Perplexity. */
+const PRESENCE_ORDER = ['chatgpt', 'claude-web', 'gemini', 'perplexity'];
+
+export interface IndexPresence {
+  engines: Array<{ engine: string; present: boolean; substrate: string }>;
+  /** ≥1 engine NOT indexed → blocked-eligibility (🔴 fix-now, distinct from low authority). */
+  blocked: boolean;
+  /** engine display names that are ✗ (e.g. ["claude"]). */
+  missing: string[];
+  hasData: boolean;
+  /** one-line summary, e.g. "chatgpt ✓ (Bing) · claude ✗ (Brave) · gemini ✓ (Google) · perplexity ✓". */
+  line: string;
+}
+
+/** Display label (claude-web → claude; others unchanged). */
+function presenceLabel(engine: string): string {
+  return engine === 'claude-web' ? 'claude' : engine;
+}
+
+/**
+ * Per-engine index presence — a DIFFERENT metric class from authority. A ✗ means
+ * that engine's substrate hasn't indexed algovault.com, so a 0% mention there reads
+ * "not indexed" (🔴 fix-now), NOT "not authoritative". Empty input → graceful
+ * pre-first-probe state (no data yet). Reuses `shortEngine` for model→engine.
+ */
+export function computeIndexPresence(rows: IndexPresenceRow[]): IndexPresence {
+  if (!rows || rows.length === 0) {
+    return { engines: [], blocked: false, missing: [], hasData: false, line: 'no data yet — first probe Mon' };
+  }
+  const engines = rows
+    .map((r) => {
+      const engine = shortEngine(r.model);
+      return { engine, present: !!r.present, substrate: ENGINE_SUBSTRATE[engine] ?? '' };
+    })
+    .sort((a, b) => {
+      const ia = PRESENCE_ORDER.indexOf(a.engine);
+      const ib = PRESENCE_ORDER.indexOf(b.engine);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  const missing = engines.filter((e) => !e.present).map((e) => presenceLabel(e.engine));
+  const line = engines
+    .map((e) => {
+      const tick = e.present ? '✓' : '✗';
+      const sub = e.substrate && e.substrate !== 'own' ? ` (${e.substrate})` : '';
+      return `${presenceLabel(e.engine)} ${tick}${sub}`;
+    })
+    .join(' · ');
+  return { engines, blocked: missing.length > 0, missing, hasData: true, line };
+}
+
 export interface EnginePlacement {
   query_id: string;
   /** competitor_name leading this query, or null = OPEN (no clear leader). */
@@ -189,6 +254,8 @@ export interface GeoDigestData {
   attributionGaps: AttributionGap[];
   contested: EnginePlacement[];
   topGap: TopGapBrief | null;
+  /** R5 — per-engine index-presence (presence-tier probe; excluded from all authority aggregates). */
+  indexPresence: IndexPresence;
 }
 
 /**
@@ -202,13 +269,24 @@ export function buildDigest(data: GeoDigestData): string[] {
   const d = data.momentumDeltas;
   const L: string[] = [];
 
+  const ip = data.indexPresence;
+
   L.push(`📊 *GEO Weekly — ${data.dateLabel}*`);
   L.push('');
   L.push(`${m.emoji} *${m.headline}*`);
 
+  // R5 — index presence is a LEADING, fix-now signal, DISTINCT from the authority
+  // verdict above: a ✗ substrate means 0% there reads "not indexed", not "not
+  // authoritative". Surfaced as a 🔴 banner right under the header when blocked.
+  if (ip.blocked) {
+    L.push('');
+    L.push(`🔴 *BLOCKED ELIGIBILITY* — not indexed on ${ip.missing.join(', ')}. Fix the re-crawl before chasing authority.`);
+  }
+
   // WHAT MOVED — leading indicators first
   L.push('');
   L.push('*WHAT MOVED* (vs last week)');
+  L.push(`• Index presence: ${ip.line}`);
   const citArrow =
     d.citationsThisWeek > d.citationsLastWeek
       ? `↑ from ${d.citationsLastWeek}`

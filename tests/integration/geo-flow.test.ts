@@ -46,9 +46,12 @@ vi.mock('../../src/lib/geo-gap-list.js', () => ({
   persistGapBriefs: async () => [],
 }));
 
-import { runWeeklyProbe } from '../../src/lib/geo-orchestrator.js';
+import { runWeeklyProbe, loadQueries } from '../../src/lib/geo-orchestrator.js';
 
 const YAML_PATH = path.resolve(process.cwd(), 'landing/Prompt/geo-queries.yaml');
+// Derived from the SoT yaml × 4 engines × 1 sample, so adding a query (e.g. the
+// R5 presence-tier query) doesn't brittle-break the row-count assertions.
+const EXPECTED_ROWS = loadQueries(YAML_PATH).length * 4;
 
 const CANNED_EXTRACTOR_JSON = JSON.stringify({
   mention_found: true,
@@ -88,7 +91,7 @@ beforeEach(() => {
 });
 
 describe('GEO-MEASUREMENT-W3: 4-engine end-to-end flow', () => {
-  it('runs 4 engines × 1 sample over 15 queries; ctx + citations flow through (zero logic change)', async () => {
+  it('runs 4 engines × 1 sample over the full SoT query set; ctx + citations flow through (zero logic change)', async () => {
     const engines: RetrievalEngine[] = [
       { engineId: 'claude-web', provider: new DualBehaviorProvider(), model: 'claude-haiku-4-5-20251001' },
       { engineId: 'perplexity', provider: new DualBehaviorProvider(), model: 'sonar' },
@@ -105,11 +108,11 @@ describe('GEO-MEASUREMENT-W3: 4-engine end-to-end flow', () => {
       judgeProvider: new DualBehaviorProvider(),
     });
 
-    expect(resultCount).toBe(60); // 15 × 4 × 1
+    expect(resultCount).toBe(EXPECTED_ROWS); // queries × 4 engines × 1 sample
     expect(errorCount).toBe(0);
     expect(engineIds).toEqual(['claude-web', 'perplexity', 'chatgpt', 'gemini']);
-    expect(recordedRuns).toHaveLength(60);
-    expect(recordedCitations).toHaveLength(60); // one source-map per ok run
+    expect(recordedRuns).toHaveLength(EXPECTED_ROWS);
+    expect(recordedCitations).toHaveLength(EXPECTED_ROWS); // one source-map per ok run
 
     for (const { result, mentions, ctx } of recordedRuns) {
       expect(result.run_id).toBe(runId);
