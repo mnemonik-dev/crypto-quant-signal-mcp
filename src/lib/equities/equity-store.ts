@@ -118,3 +118,60 @@ export async function maxStoredSession(pool: Pool, symbol: string): Promise<stri
   );
   return res.rows[0].d ?? null;
 }
+
+// ── Singleton pool for the long-lived MCP server (per request would leak conns) ──
+let _equityPool: Pool | null = null;
+export function getEquityPool(): Pool {
+  if (!_equityPool) _equityPool = makeEquityPool();
+  return _equityPool;
+}
+
+/** Universe membership lookup for a single symbol. */
+export async function getUniverseEntry(pool: Pool, symbol: string): Promise<UniverseEntry | null> {
+  const res = await pool.query(
+    `SELECT symbol, rank_adv, is_etf FROM equity_universe WHERE symbol=$1 AND active`,
+    [symbol]
+  );
+  return (res.rows[0] as UniverseEntry) ?? null;
+}
+
+/** All active universe symbols (for nearest-prefix suggestions + universe size). */
+export async function getAllUniverseSymbols(pool: Pool): Promise<string[]> {
+  const res = await pool.query(`SELECT symbol FROM equity_universe WHERE active ORDER BY symbol`);
+  return res.rows.map((r) => r.symbol as string);
+}
+
+/**
+ * Latest PUBLIC verdict row for a symbol. SELECTs allow-listed columns ONLY —
+ * outcome_return_pct / outcome_filled_at are NEVER read on the public tool path
+ * (Data Integrity defense-in-depth: the leak can't happen even by accident).
+ */
+export interface PublicVerdictRow {
+  symbol: string;
+  session_date: string;
+  call: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number | null;
+  regime: string | null;
+  factors: string[];
+  engine_version: string;
+  pfe_horizon_sessions: number | null;
+}
+export async function getLatestVerdict(pool: Pool, symbol: string): Promise<PublicVerdictRow | null> {
+  const res = await pool.query(
+    `SELECT symbol, session_date::text AS session_date, call, confidence::float8 AS confidence,
+            regime, factors_json, engine_version, pfe_horizon_sessions
+       FROM equity_verdicts
+      WHERE symbol=$1
+      ORDER BY session_date DESC, id DESC LIMIT 1`,
+    [symbol]
+  );
+  if (res.rows.length === 0) return null;
+  const r = res.rows[0];
+  let factors: string[] = [];
+  try { factors = JSON.parse(r.factors_json) ?? []; } catch { factors = []; }
+  return {
+    symbol: r.symbol, session_date: r.session_date, call: r.call,
+    confidence: r.confidence, regime: r.regime, factors,
+    engine_version: r.engine_version, pfe_horizon_sessions: r.pfe_horizon_sessions,
+  };
+}

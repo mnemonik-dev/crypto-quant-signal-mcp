@@ -32,6 +32,9 @@ import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, 
 import { initX402, settleX402Async } from './lib/x402.js';
 import { mountX402HttpRoutes } from './lib/x402-http-routes.js';
 import { PUBLIC_READONLY_TOOL_ANNOTATIONS } from './tool-annotations.js';
+import { getEquityCall, getEquityRegime } from './lib/equities/equity-tool-formatters.js';
+import { getEquityPerformance } from './lib/equities/equity-performance.js';
+import { getEquityPool } from './lib/equities/equity-store.js';
 import { initAnalytics, logRequest, hashIp, getUsageStats, logSkillInvocation } from './lib/analytics.js';
 import { ensureProcessedStripeEventsSchema, tryClaimEvent } from './lib/stripe-events-store.js';
 import { upsertSignupEmail, markConfirmationSent, tryClaimSignupEmailEvent } from './lib/signup-emails-store.js';
@@ -421,6 +424,71 @@ function createServer(): McpServer {
     }
   );
 
+  // ── Tools: get_equity_call + get_equity_regime (EQUITIES-ENGINE-W1) ──
+  // US equities daily-bar verdict engine (Databento EQUS.MINI). Free-tier quota
+  // wiring identical to the crypto free tools (handled inside getEquityCall via
+  // trackCall). Verdicts are precomputed nightly; the handler is a DB read.
+  const GET_EQUITY_CALL_DESCRIPTION =
+    'Composite daily-bar trade call (BUY/SELL/HOLD) for a US equity or ETF, with confidence, ' +
+    'market regime, and the technical factors that drove it. Universe = top US equities by ' +
+    'dollar-volume plus index and crypto-proxy ETFs (SPY, QQQ, IBIT, …). Verdicts are computed ' +
+    'once per session from Databento EQUS.MINI daily bars. Out-of-universe tickers return a ' +
+    'structured SYMBOL_NOT_IN_UNIVERSE error with nearest-symbol suggestions. Accepts BRK-B or BRK.B.';
+  const GET_EQUITY_REGIME_DESCRIPTION =
+    'Market regime for a US equity or ETF (defaults to SPY): trending_up, trending_down, ' +
+    'compression, or ranging, with a confidence score. Derived from daily-bar trend strength ' +
+    '(ADX/DI), persistence (Hurst), and volatility compression.';
+  server.tool(
+    'get_equity_call',
+    GET_EQUITY_CALL_DESCRIPTION,
+    { symbol: z.string().max(12).describe('US equity/ETF ticker, e.g. AAPL, SPY, BRK.B (BRK-B also accepted).') },
+    { title: 'Equity Trade Call', ...PUBLIC_READONLY_TOOL_ANNOTATIONS },
+    async ({ symbol }) => {
+      const startMs = Date.now();
+      try {
+        const license = getRequestLicense();
+        const result = await getEquityCall({ symbol, license });
+        logRequest({
+          sessionId: getRequestSessionId(),
+          toolName: 'get_equity_call',
+          asset: symbol,
+          licenseTier: license.tier,
+          responseTimeMs: Date.now() - startMs,
+          ipHash: getRequestIpHash(),
+          isBotInternal: license.tier === 'internal',
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err: unknown) {
+        return toolErrorContent(err);
+      }
+    }
+  );
+  server.tool(
+    'get_equity_regime',
+    GET_EQUITY_REGIME_DESCRIPTION,
+    { symbol: z.string().max(12).optional().describe('US equity/ETF ticker; defaults to SPY.') },
+    { title: 'Equity Market Regime', ...PUBLIC_READONLY_TOOL_ANNOTATIONS },
+    async ({ symbol }) => {
+      const startMs = Date.now();
+      try {
+        const license = getRequestLicense();
+        const result = await getEquityRegime({ symbol, license });
+        logRequest({
+          sessionId: getRequestSessionId(),
+          toolName: 'get_equity_regime',
+          asset: symbol ?? 'SPY',
+          licenseTier: license.tier,
+          responseTimeMs: Date.now() - startMs,
+          ipHash: getRequestIpHash(),
+          isBotInternal: license.tier === 'internal',
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err: unknown) {
+        return toolErrorContent(err);
+      }
+    }
+  );
+
   // ── Tool: scan_trade_calls (SCAN-TRADE-CALLS-W1) — cross-asset market scanner ──
   // Thin handler: quota gate + envelope live in src/tools/scan-trade-calls.ts
   // (runScanTradeCall); the scanner compute is src/lib/trade-call-scanner.ts.
@@ -607,10 +675,19 @@ function createServer(): McpServer {
     { description: 'Signal track record — PFE win rates by timeframe, asset, tier, and signal type. Measures whether price moved in the signal direction during the evaluation window.' },
     async () => {
       const stats = await getSignalPerformance();
+      // EQUITIES-ENGINE-W1 E6: ADDITIVE `equities` key (PFE-only). Crypto keys
+      // byte-unchanged. Fail-open — equity DB issues must never break the crypto
+      // resource (graceful pre-data shape on error).
+      let equities: unknown;
+      try {
+        equities = await getEquityPerformance(getEquityPool());
+      } catch {
+        equities = { state: 'pre_data', overall: { totalCalls: 0, totalEvaluated: 0, pfeWinRate: null } };
+      }
       return {
         contents: [{
           uri: 'performance://signal-performance',
-          text: JSON.stringify(stats, null, 2),
+          text: JSON.stringify({ ...stats, equities }, null, 2),
           mimeType: 'application/json',
         }],
       };

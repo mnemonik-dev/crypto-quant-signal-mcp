@@ -1,0 +1,27 @@
+{
+  "endpoint": "MCP tool get_equity_regime",
+  "wave": "EQUITIES-ENGINE-W1 C4",
+  "as_of": "2026-06-04",
+  "allowed_keys": ["symbol", "regime", "confidence", "as_of_session", "_algovault"],
+  "forbidden_keys": ["outcome_return_pct", "outcome_price"],
+  "default_symbol": "SPY",
+  "regime_values": ["trending_up", "trending_down", "compression", "ranging", "quarantined", "insufficient_data", "unknown"],
+  "error_contract": {
+    "SYMBOL_NOT_IN_UNIVERSE": {
+      "returned": true,
+      "keys": ["error", "code", "message", "suggested_symbols", "universe_size", "_algovault"]
+    },
+    "NO_VERDICT_FOR_SESSION": {
+      "returned": true,
+      "keys": ["error", "code", "message", "suggested_action", "_algovault"]
+    },
+    "TIER_LIMIT_REACHED": {
+      "thrown": true,
+      "via": "toolErrorContent",
+      "keys": ["code", "error_code", "message", "current_usage", "monthly_limit", "tier", "suggested_upgrade_url", "retry_after_days"]
+    }
+  },
+  "cache_contract": "MCP clients cache tools/list at session start; adding/renaming this tool requires a cache-refresh notice in status.md.",
+  "consumers": ["MCP agents via https://api.algovault.com/mcp (tools/call)"],
+  "drift_check_command": "rm -rf dist && npm run build && grep -q \"get_equity_regime\" dist/index.js && ! grep -RnE \"outcome_return_pct|outcome_price\" dist/lib/equities/equity-tool-formatters.js && echo SHAPE_OK"
+}
