@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`computeEquityVerdict — honesty + golden snapshot > golden snapshot for a fixed oscillating-uptrend series 1`] = `
+{
+  "call": "BUY",
+  "confidence": 0.57,
+  "factors": [
+    "technical:ema20_above_ema50",
+    "technical:price_above_ema20",
+    "technical:rsi_overbought",
+    "technical:adx_strong_bull",
+    "regime:trending_up",
+  ],
+  "regime": "trending_up",
+}
+`;

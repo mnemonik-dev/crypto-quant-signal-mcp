@@ -91,6 +91,25 @@ export async function countActiveUniverse(pool: Pool): Promise<number> {
   return res.rows[0].c as number;
 }
 
+/**
+ * Recent chronological (oldest→newest) bars for a symbol, up to and including
+ * `uptoDate`, capped at `limit` most-recent sessions.
+ */
+export async function getRecentBars(
+  pool: Pool, symbol: string, uptoDate: string, limit: number
+): Promise<EquityBar[]> {
+  const res = await pool.query(
+    `SELECT symbol, session_date::text AS session_date,
+            open::float8 AS open, high::float8 AS high, low::float8 AS low,
+            close::float8 AS close, volume::float8 AS volume
+       FROM equity_bars_daily
+      WHERE symbol=$1 AND session_date <= $2
+      ORDER BY session_date DESC LIMIT $3`,
+    [symbol, uptoDate, limit]
+  );
+  return (res.rows as EquityBar[]).reverse();
+}
+
 /** Max session_date already stored for a symbol (for resumable backfill). */
 export async function maxStoredSession(pool: Pool, symbol: string): Promise<string | null> {
   const res = await pool.query(
