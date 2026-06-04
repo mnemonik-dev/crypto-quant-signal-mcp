@@ -162,9 +162,13 @@ export class BitgetAdapter implements ExchangeAdapter {
   async getAssetContext(coin: string, _dex?: DexType): Promise<AssetContext> {
     const symbol = toBitgetSymbol(coin);
 
-    // Parallel fetch: ticker (single via filtering all tickers) + open interest + current funding rate
+    // Parallel fetch: ticker + open interest + current funding rate.
+    // OPS-BITGET-TICKER-SYMBOL-FILTER-W1 (2026-06-04): use the SINGULAR
+    // /api/v2/mix/market/ticker — the PLURAL /tickers IGNORES `symbol` and
+    // returns all ~595 contracts, so `[0]` was YGGUSDT for every coin (wrong
+    // price/volume/prevDayPx). The singular endpoint honors `symbol`.
     const [tickersData, oiData, fundingData] = await Promise.all([
-      bitgetGet<BitgetTicker[]>('/api/v2/mix/market/tickers', {
+      bitgetGet<BitgetTicker[]>('/api/v2/mix/market/ticker', {
         productType: 'USDT-FUTURES',
         symbol,
       }),
@@ -180,6 +184,11 @@ export class BitgetAdapter implements ExchangeAdapter {
     ]);
 
     const ticker = tickersData[0];
+    // Default-deny on drift: never silently use a mismatched row (guards against
+    // the endpoint changing behavior again).
+    if (!ticker || ticker.symbol !== symbol) {
+      throw new Error(`BITGET_TICKER_SYMBOL_MISMATCH: requested ${symbol}, got ${ticker?.symbol ?? 'none'} from /api/v2/mix/market/ticker`);
+    }
     const fundingRate = fundingData[0]?.fundingRate || '0';
     const oiEntry = oiData.openInterestList?.[0];
 
@@ -236,11 +245,17 @@ export class BitgetAdapter implements ExchangeAdapter {
   async getCurrentPrice(coin: string, _dex?: DexType): Promise<number | null> {
     try {
       const symbol = toBitgetSymbol(coin);
-      const data = await bitgetGet<BitgetTicker[]>('/api/v2/mix/market/tickers', {
+      // OPS-BITGET-TICKER-SYMBOL-FILTER-W1: singular /ticker (the plural ignores
+      // `symbol` → `[0]`=YGGUSDT). Default-deny on a mismatched row.
+      const data = await bitgetGet<BitgetTicker[]>('/api/v2/mix/market/ticker', {
         productType: 'USDT-FUTURES',
         symbol,
       });
-      return parseFloat(data[0].markPrice);
+      const ticker = data[0];
+      if (!ticker || ticker.symbol !== symbol) {
+        throw new Error(`BITGET_TICKER_SYMBOL_MISMATCH: requested ${symbol}, got ${ticker?.symbol ?? 'none'}`);
+      }
+      return parseFloat(ticker.markPrice);
     } catch {
       return null;
     }

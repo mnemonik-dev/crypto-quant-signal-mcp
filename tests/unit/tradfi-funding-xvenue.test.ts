@@ -132,10 +132,10 @@ describe('fetchTradFiFundingByVenue (cache trio + fail-soft + fingerprint)', () 
     // TSLA is supported on all 5 promoted venues. All return sane prices ~421.
     vi.mocked(getAdapter).mockImplementation(adapterReturning({
       HL: { funding: -0.000015, px: 421.6 }, BINANCE: { funding: 0, px: 421.7 },
-      BYBIT: { funding: 0, px: 421.9 }, OKX: { funding: 0, px: 422.1 }, BITGET: { funding: 0, px: 0.03 },
+      BYBIT: { funding: 0, px: 421.9 }, OKX: { funding: 0, px: 422.1 }, BITGET: { funding: 0, px: 421.8 },
     }));
     const out = await fetchTradFiFundingByVenue('TSLA');
-    expect(out.length).toBe(5); // Bitget kept despite broken price (funding trusted)
+    expect(out.length).toBe(5); // all 5 sane prices → all kept
     expect(out.map(v => v.venue).sort()).toContain('BITGET');
     expect(_getTradFiFundingCacheState()).toEqual({ size: 1, coins: ['TSLA'] });
 
@@ -156,17 +156,26 @@ describe('fetchTradFiFundingByVenue (cache trio + fail-soft + fingerprint)', () 
     expect(out.map(v => v.venue)).toEqual(['HL']); // only HL survived → quorum handled downstream
   });
 
-  it('fingerprint drops a non-Bitget venue with off-magnitude price; keeps Bitget', async () => {
+  it('fingerprint drops ANY venue with off-magnitude price (Bitget exemption removed in OPS-BITGET-TICKER-SYMBOL-FILTER-W1)', async () => {
     vi.mocked(getAdapter).mockImplementation(adapterReturning({
       HL: { funding: 0, px: 421.6 }, BINANCE: { funding: 0, px: 421.7 },
       BYBIT: { funding: 0, px: 421.9 },
       OKX: { funding: 0.05, px: 9999 },     // 24× off → symbol misID → DROPPED
-      BITGET: { funding: 0, px: 0.03 },     // adapter-bug price → EXEMPT → kept
+      BITGET: { funding: 0, px: 421.8 },    // price now correct (singular /ticker) → KEPT, fingerprinted like everyone
     }));
     const out = await fetchTradFiFundingByVenue('TSLA');
     const venues = out.map(v => v.venue);
     expect(venues).not.toContain('OKX');   // fingerprint-dropped
-    expect(venues).toContain('BITGET');    // exempt (funding trusted)
+    expect(venues).toContain('BITGET');    // correct price → passes fingerprint (no longer exempt)
     expect(venues).toContain('HL');
+  });
+
+  it('Bitget is NO LONGER exempt — an off-magnitude Bitget price is now dropped', async () => {
+    vi.mocked(getAdapter).mockImplementation(adapterReturning({
+      HL: { funding: 0, px: 421.6 }, BINANCE: { funding: 0, px: 421.7 }, BYBIT: { funding: 0, px: 421.9 },
+      BITGET: { funding: 0, px: 0.03 },     // would have been exempt pre-hotfix → now DROPPED
+    }));
+    const out = await fetchTradFiFundingByVenue('TSLA');
+    expect(out.map(v => v.venue)).not.toContain('BITGET');
   });
 });

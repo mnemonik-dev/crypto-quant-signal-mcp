@@ -172,14 +172,13 @@ export async function fetchTradFiFundingByVenue(coin: string): Promise<VenueFund
   const present = settled.filter((x): x is VenueFunding & { price: number } => x !== null);
   // Runtime price-fingerprint guard (SPX6900 LAW): drop any venue whose price is
   // off-magnitude vs the cross-venue median → future symbol-misID protection.
-  // BITGET is EXEMPT: its adapter price is known-broken (the /tickers plural
-  // endpoint ignores ?symbol= and returns [0]=YGGUSDT — flagged as
-  // OPS-BITGET-TICKER-SYMBOL-FILTER-W1); its FUNDING endpoint is symbol-correct,
-  // so Bitget funding is trusted and its price is excluded from the fingerprint.
-  const refPrices = present.filter(p => p.venue !== 'BITGET' && p.price > 0).map(p => p.price).sort((a, b) => a - b);
+  // (OPS-BITGET-TICKER-SYMBOL-FILTER-W1, 2026-06-04: the Bitget price exemption
+  // was REMOVED — its adapter now reads the singular /ticker endpoint and serves
+  // the correct per-symbol price, so Bitget rejoins the fingerprint like every
+  // other venue.)
+  const refPrices = present.filter(p => p.price > 0).map(p => p.price).sort((a, b) => a - b);
   const median = refPrices.length ? refPrices[Math.floor(refPrices.length / 2)] : null;
   const kept = present.filter((p) => {
-    if (p.venue === 'BITGET') return true;             // funding trusted; price-fingerprint skipped (adapter bug)
     if (median === null || !(p.price > 0)) return true; // no reference price → cannot fingerprint → keep
     if (priceFingerprintPass(p.price, median)) return true;
     console.debug(`[tradfi-funding] ${p.venue} ${symbol} price ${p.price} failed fingerprint vs median ${median} — dropped`);
