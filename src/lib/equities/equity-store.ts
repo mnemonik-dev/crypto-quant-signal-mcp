@@ -71,6 +71,35 @@ export async function freezeUniverse(pool: Pool, rows: UniverseRow[]): Promise<n
   return res.rows[0].c as number;
 }
 
+/** Idempotent insert of computed verdict rows. ON CONFLICT (symbol,session_date,engine_version) DO NOTHING. */
+export async function insertVerdicts(
+  pool: Pool,
+  rows: Array<{ symbol: string; session_date: string; call: string; confidence: number; regime: string; factors: string[]; engine_version: string }>,
+  pfeHorizonSessions: number
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  let inserted = 0;
+  const CHUNK = 500;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const values: string[] = [];
+    const params: unknown[] = [];
+    chunk.forEach((r, j) => {
+      const o = j * 7;
+      values.push(`($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`);
+      params.push(r.symbol, r.session_date, r.call, r.confidence, r.regime, JSON.stringify(r.factors), r.engine_version);
+    });
+    const sql =
+      `INSERT INTO equity_verdicts (symbol, session_date, call, confidence, regime, factors_json, engine_version, pfe_horizon_sessions) ` +
+      `SELECT v.symbol, v.session_date::date, v.call, v.confidence::numeric, v.regime, v.factors_json, v.engine_version, ${Number(pfeHorizonSessions)} ` +
+      `FROM (VALUES ${values.join(',')}) AS v(symbol, session_date, call, confidence, regime, factors_json, engine_version) ` +
+      `ON CONFLICT (symbol, session_date, engine_version) DO NOTHING`;
+    const res = await pool.query(sql, params);
+    inserted += res.rowCount ?? 0;
+  }
+  return inserted;
+}
+
 export interface UniverseEntry { symbol: string; rank_adv: number | null; is_etf: boolean; }
 
 /** Active universe symbols (ordered: ETFs + by ADV rank). */
