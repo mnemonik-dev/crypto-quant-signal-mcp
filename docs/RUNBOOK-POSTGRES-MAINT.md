@@ -16,6 +16,7 @@ insert-scale-factor for each append-only table.
 | `equity_bars_daily` | append (daily OHLCV) | ~254k rows at 2y/500-sym; grows ~500 rows/session |
 | `equity_verdicts` | append + nightly UPDATE (outcome fill) | UPDATE path keeps autovacuum active; ANALYZE still useful |
 | `equity_universe` | small, re-frozen periodically | negligible |
+| `equity_symbol_misses` | append (out-of-universe demand log) | EQUITY-LAUNCH-READINESS-W1; low-volume; no PII (tickers only); safe to trim >180d |
 
 ### Monthly cron (host root crontab, off-:00, low-traffic window)
 ```

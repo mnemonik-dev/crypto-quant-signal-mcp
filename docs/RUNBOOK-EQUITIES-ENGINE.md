@@ -56,5 +56,34 @@ Every producer logs its `metadata.get_cost` estimate before pulling. Phase-1 dai
 ### Zero-verdict watchdog
 `equity-verdict-watch.sh` (chained in the seed cron) fires ONE `OPS_EQUITY_ZERO_VERDICT` Telegram alert (via `send_telegram.sh`, CRITICAL_PERSISTENT, 24h cooldown) only when the producer has been silent for 3+ sessions (0 verdict-sessions in the last 7 days) while bars exist. Everything else is silent + forensic (logs only).
 
+## Launch-readiness latch (EQUITY-LAUNCH-READINESS-W1)
+`equity-launch-readiness.sh` (cron `47 10 * * 2-6`, after the 09:41 outcomes backfill) fires ONE `EQUITY_LAUNCH_READINESS` Telegram (via `send_telegram.sh`, CRITICAL_PERSISTENT) when the first PFE cohort has matured into a presentable sample, telling Mr.1 to **dispatch `EQUITY-CALIBRATION-AUDIT-W1`** (the launch decision). It is latched — fires ONCE.
+
+- **Gate**: `n >= 150` matured BUY/SELL PFE outcomes AND `s >= 3` distinct matured sessions (constants at top of the script with rationale). `matured` = `outcome_filled_at IS NOT NULL`.
+- **Threshold rationale**: below 150 matured outcomes the calibration sample is noise; `>=3` sessions guards against a single-session fluke driving the decision.
+- **Re-arm the latch** (e.g. to re-evaluate after a universe change): `rm /var/lib/algovault-monitoring/equity-launch-readiness.fired` — the next cron fire re-checks the gate.
+- **Dry-run / force smokes** (never touch the real latch or send a real TG):
+  ```
+  DRY_RUN_TG=1 bash /opt/algovault-monitoring/equity-launch-readiness.sh                 # WOULD_FIRE=no today (n below gate)
+  DRY_RUN_TG=1 READINESS_FORCE=1 bash /opt/algovault-monitoring/equity-launch-readiness.sh # WOULD_FIRE=yes; latch -> /tmp/...fired.test
+  DRY_RUN_TG=1 READINESS_FORCE=1 bash /opt/algovault-monitoring/equity-launch-readiness.sh # NO_FIRE_LATCHED (tmp latch present)
+  ```
+- Public-copy HOLD stays in force until Mr.1 flips it post-audit; this alert does NOT unlock copy — it only prompts the audit.
+
+## Out-of-universe demand instrumentation (`equity_symbol_misses`)
+Every `SYMBOL_NOT_IN_UNIVERSE` from `get_equity_call`/`get_equity_regime` records the requested ticker (fire-and-forget, fail-open — never blocks the tool). This is the demand signal for a future 500→1000 universe bump. Internal-only.
+
+```sql
+-- Top requested out-of-universe symbols, last 30d (the bump shortlist)
+SELECT symbol, count(*) AS requests, max(requested_at) AS last_seen
+  FROM equity_symbol_misses
+ WHERE requested_at > now() - interval '30 days'
+ GROUP BY symbol ORDER BY requests DESC LIMIT 25;
+```
+Rank-bucket PFE quality (internal view feeding `EQUITY-CALIBRATION-AUDIT-W1`):
+```sql
+SELECT * FROM equity_pfe_by_rank_bucket;  -- buckets 1-50 / 51-100 / 101-500 / etf; matured PFE WR per bucket
+```
+
 ## Phase 2 (not this wave)
 EQUS.MINI **live** subscription (intraday). Trigger: equity-tool call share ≥ stated % of total OR a paying-customer ask. Same provider, new schema param.

@@ -15,6 +15,7 @@ import {
   getEquityPool, getUniverseEntry, getAllUniverseSymbols, getLatestVerdict,
   type PublicVerdictRow,
 } from './equity-store.js';
+import { recordSymbolMiss } from './equity-misses.js';
 
 export interface AlgovaultMeta { tool: string; version: string; source: string; ts: string; }
 
@@ -108,11 +109,13 @@ export async function getEquityCall(input: { symbol: string; license?: LicenseIn
   const symbol = normalizeSymbol(input.symbol);
   if (!symbol) {
     const all = await getAllUniverseSymbols(pool);
+    void recordSymbolMiss(pool, symbol, input.symbol);
     return { error: true, code: 'SYMBOL_NOT_IN_UNIVERSE', message: 'Empty or invalid symbol.', suggested_symbols: [], universe_size: all.length, _algovault: meta('get_equity_call') };
   }
   const entry = await getUniverseEntry(pool, symbol);
   if (!entry) {
     const all = await getAllUniverseSymbols(pool);
+    void recordSymbolMiss(pool, symbol, input.symbol);
     return {
       error: true, code: 'SYMBOL_NOT_IN_UNIVERSE',
       message: `${symbol} is not in the AlgoVault equities universe (top US equities by dollar-volume + index/crypto-proxy ETFs).`,
@@ -142,6 +145,7 @@ export async function getEquityRegime(input: { symbol?: string; license?: Licens
   const entry = await getUniverseEntry(pool, symbol);
   if (!entry) {
     const all = await getAllUniverseSymbols(pool);
+    void recordSymbolMiss(pool, symbol, input.symbol);
     return {
       error: true, code: 'SYMBOL_NOT_IN_UNIVERSE',
       message: `${symbol} is not in the AlgoVault equities universe.`,
