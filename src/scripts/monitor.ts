@@ -8,6 +8,9 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { sendAlert, sendDigest } from '../lib/telegram.js';
 import { getPerformanceStatsAsync, dbQuery } from '../lib/performance-db.js';
+import { hlInfoPost } from '../lib/adapters/hyperliquid.js';
+import { UpstreamRateLimitError } from '../lib/errors.js';
+import { WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
 
 // ── Config ──
 
@@ -283,14 +286,33 @@ async function checkDatabase(): Promise<string | null> {
 // Bybit + Hyperliquid (parallel-checked) → false-positive alert. Fix
 // expands per-call budget to 4 attempts so blips that long get caught.
 async function checkExchangeHealth(name: string, url: string): Promise<boolean> {
-  const opts: RequestInit = name === 'Hyperliquid'
-    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'meta' }) }
-    : {};
   const MAX_ATTEMPTS = 4;
   const BACKOFF_MS = [500, 1500, 4000]; // delays before attempt 2, 3, 4
 
+  // OPS-HL-RATELIMITER-W2: route HL's liveness probe through the shared HL weight
+  // budget so the monitor can't itself contribute to a 429 storm. A budget refusal
+  // (interactive rate-limit throw OR batch skip) means WE throttled locally — HL is
+  // NOT down — so report alive. A real HTTP 429 surfaces as UpstreamRateLimitError
+  // ("alive but busy" → alive). Only a genuine network/HTTP failure trips the down path.
+  if (name === 'Hyperliquid') {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        await hlInfoPost({ type: 'meta' }, { cls: 'interactive' });
+        return true;
+      } catch (err) {
+        if (err instanceof UpstreamRateLimitError || err instanceof WeightBudgetSkipError) {
+          return true; // budget-managed locally / alive-but-busy — never a false outage
+        }
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, BACKOFF_MS[attempt - 1] ?? 4000));
+        }
+      }
+    }
+    return false;
+  }
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const { ok, status } = await fetchJson(url, opts);
+    const { ok, status } = await fetchJson(url, {});
     // 429 = rate-limited but alive — never a real outage signal
     if (ok || status === 429) return true;
     if (attempt < MAX_ATTEMPTS) {

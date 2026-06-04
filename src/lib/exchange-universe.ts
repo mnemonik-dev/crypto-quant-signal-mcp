@@ -18,6 +18,7 @@
 
 import type { ExchangeId } from '../types.js';
 import { getTicker24hrFullCoalesced } from './adapters/binance.js';
+import { hlInfoPost } from './adapters/hyperliquid.js';
 
 export interface ExchangeAsset {
   /** Bare coin symbol, uppercase (e.g. `BTC`, `SOL`). */
@@ -46,15 +47,12 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
 
 /** HL: `metaAndAssetCtxs` returns OI + markPx + dayNtlVlm. `dayNtlVlm` is natively USD-notional. */
 async function fetchHL(limit: number): Promise<ExchangeAsset[]> {
-  const res = await fetchWithTimeout('https://api.hyperliquid.xyz/info', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
-  });
-  const raw = (await res.json()) as [
+  // OPS-HL-RATELIMITER-W2: route through the shared HL weight budget (was a
+  // direct fetch bypassing the adapter chokepoint).
+  const raw = await hlInfoPost<[
     { universe: { name: string }[] },
     { openInterest?: string; markPx?: string; dayNtlVlm?: string }[],
-  ];
+  ]>({ type: 'metaAndAssetCtxs' });
   const meta = raw[0];
   const ctxs = raw[1];
   const assets: ExchangeAsset[] = meta.universe

@@ -3,9 +3,9 @@
  * 1-hour in-memory cache to avoid hammering the HL API.
  */
 
-const HL_INFO_URL = 'https://api.hyperliquid.xyz/info';
+import { hlInfoPost } from './adapters/hyperliquid.js';
+
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const TIMEOUT_MS = 5000;
 
 interface OIAsset {
   coin: string;
@@ -21,19 +21,13 @@ export async function getTopAssetsByOI(limit: number = 50): Promise<OIAsset[]> {
     return cache.assets.slice(0, limit);
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(HL_INFO_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
-      signal: controller.signal,
+    // OPS-HL-RATELIMITER-W2: route through the shared HL weight budget (was a
+    // direct fetch that bypassed the adapter chokepoint). hlInfoPost owns the
+    // timeout + 429 handling; a budget rate-limit/skip falls through to stale cache.
+    const raw = await hlInfoPost<[{ universe: { name: string }[] }, { openInterest: string; markPx: string }[]]>({
+      type: 'metaAndAssetCtxs',
     });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HL API ${res.status}`);
-
-    const raw = (await res.json()) as [{ universe: { name: string }[] }, { openInterest: string; markPx: string }[]];
     const meta = raw[0];
     const ctxs = raw[1];
 
@@ -47,8 +41,7 @@ export async function getTopAssetsByOI(limit: number = 50): Promise<OIAsset[]> {
     cache = { assets, ts: Date.now() };
     return assets.slice(0, limit);
   } catch (err) {
-    clearTimeout(timer);
-    // Return stale cache if available
+    // Return stale cache if available (incl. on a budget rate-limit/skip).
     if (cache) return cache.assets.slice(0, limit);
     throw err;
   }
@@ -72,19 +65,12 @@ export async function getXyzAssetsByOI(): Promise<OIAsset[]> {
     return xyzCache.assets;
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(HL_INFO_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'metaAndAssetCtxs', dex: 'xyz' }),
-      signal: controller.signal,
+    // OPS-HL-RATELIMITER-W2: route the xyz (TradFi) meta fetch through the budget too.
+    const raw = await hlInfoPost<[{ universe: { name: string }[] }, { openInterest: string; markPx: string; dayNtlVlm?: string }[]]>({
+      type: 'metaAndAssetCtxs',
+      dex: 'xyz',
     });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HL xyz API ${res.status}`);
-
-    const raw = (await res.json()) as [{ universe: { name: string }[] }, { openInterest: string; markPx: string; dayNtlVlm?: string }[]];
     const meta = raw[0];
     const ctxs = raw[1];
 
@@ -101,7 +87,6 @@ export async function getXyzAssetsByOI(): Promise<OIAsset[]> {
     xyzCache = { assets, ts: Date.now() };
     return assets;
   } catch (err) {
-    clearTimeout(timer);
     if (xyzCache) return xyzCache.assets;
     throw err;
   }

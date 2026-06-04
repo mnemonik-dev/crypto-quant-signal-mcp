@@ -48,6 +48,8 @@ import { InsufficientCandlesError } from '../lib/errors.js';
 import { hasRecentSignalAsync, closeDb, bulkWarmFundingCache } from '../lib/performance-db.js';
 import { classifyAsset, warmTierCaches, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getTicker24hrFullCoalesced } from '../lib/adapters/binance.js';
+import { hlInfoPost } from '../lib/adapters/hyperliquid.js';
+import { runAsBatch, WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
 import type { LicenseInfo, ExchangeId, VenueStatus } from '../types.js';
 import { listVenues, stampSeedingStarted } from '../lib/venue-store.js';
 
@@ -356,30 +358,31 @@ interface HLAssetInfo {
  * sorted by notional OI descending.
  */
 async function fetchHLCoins(topN: number): Promise<string[]> {
-  // Fetch standard perps and xyz (TradFi) perps in parallel
-  const [stdRes, xyzRes] = await Promise.all([
-    fetch('https://api.hyperliquid.xyz/info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
-    }),
-    fetch('https://api.hyperliquid.xyz/info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'metaAndAssetCtxs', dex: 'xyz' }),
-    }).catch(() => null),
-  ]);
-
-  const stdData = await stdRes.json() as [{ universe: { name: string }[] }, { openInterest: string; markPx: string }[]];
+  // OPS-HL-RATELIMITER-W2: route universe discovery through the shared HL weight
+  // budget (was 2 direct fetches that bypassed the adapter chokepoint). Runs in
+  // batch class — seed main() wraps the whole run in runAsBatch. The std meta is
+  // required; if the budget skips it under saturation, abort the fire gracefully
+  // (empty universe → seeds nothing → next idempotent fire retries). xyz is best-effort.
+  type HLMetaTuple = [{ universe: { name: string }[] }, { openInterest: string; markPx: string }[]];
+  let stdData: HLMetaTuple;
+  try {
+    stdData = await hlInfoPost<HLMetaTuple>({ type: 'metaAndAssetCtxs' });
+  } catch (err) {
+    if (err instanceof WeightBudgetSkipError) {
+      console.log(`[${ts()}] [HL] universe discovery skipped — HL weight budget saturated; will retry next fire.`);
+      return [];
+    }
+    throw err;
+  }
+  const xyzData = await hlInfoPost<HLMetaTuple>({ type: 'metaAndAssetCtxs', dex: 'xyz' }).catch(() => null);
 
   const assets: HLAssetInfo[] = stdData[0].universe.map((u, i) => ({
     name: u.name,
     notionalOI: parseFloat(stdData[1][i]?.openInterest || '0') * parseFloat(stdData[1][i]?.markPx || '0'),
   }));
 
-  if (xyzRes && xyzRes.ok) {
+  if (xyzData) {
     try {
-      const xyzData = await xyzRes.json() as [{ universe: { name: string }[] }, { openInterest: string; markPx: string }[]];
       const xyzAssets: HLAssetInfo[] = xyzData[0].universe
         .map((u, i) => ({
           name: u.name.replace(/^xyz:/i, ''),
@@ -763,7 +766,12 @@ async function seedExchange(
       // structured InsufficientCandlesError (message no longer contains the
       // legacy "Insufficient candle" substring) — recognize it explicitly so
       // unsupported/young coins keep self-skipping instead of counting as errors.
-      if (err instanceof InsufficientCandlesError || msg.includes('Insufficient candle') || msg.includes('insufficient liquidity') || msg.includes('not found')) {
+      if (err instanceof WeightBudgetSkipError) {
+        // OPS-HL-RATELIMITER-W2: budget saturation is the arbiter working as
+        // designed — count as a skip (NOT a fire error, per AC3); the budget's
+        // own batch_skip telemetry records it. The next idempotent fire retries.
+        skipped++;
+      } else if (err instanceof InsufficientCandlesError || msg.includes('Insufficient candle') || msg.includes('insufficient liquidity') || msg.includes('not found')) {
         skipped++;
       } else {
         console.error(`[${ts()}] [${exchangeId}] ${coin} -> ERROR: ${msg}`);
@@ -786,6 +794,10 @@ async function seedExchange(
 }
 
 async function main() {
+  // OPS-HL-RATELIMITER-W2: run the whole seed in `batch` weight class so every HL
+  // call (universe discovery + per-coin candles/ctx) waits behind the shared
+  // weight budget and yields the interactive reserve to live users.
+  return runAsBatch(async () => {
   const { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges } = parseArgs();
   const idempotencyWindow = IDEMPOTENCY_WINDOWS[timeframe] || 50 * 60;
 
@@ -863,6 +875,7 @@ async function main() {
 
   closeDb();
   console.log(`[${ts()}] All exchanges done [${timeframe}]: ${totals.seeded} seeded, ${totals.skipped} skipped, ${totals.errors} errors.`);
+  });
 }
 
 // Auto-run only when invoked as a script (`node dist/scripts/seed-signals.js`),

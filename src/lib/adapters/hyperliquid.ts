@@ -14,10 +14,90 @@ import type {
   DexType,
 } from '../../types.js';
 import { UpstreamRateLimitError } from '../errors.js';
+import { hlWeightBudget, currentWeightClass, type WeightClass } from '../upstream-weight-budget.js';
 
 const BASE_URL = 'https://api.hyperliquid.xyz/info';
 const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 1;
+
+// ── OPS-HL-RATELIMITER-W2: HL `/info` request → rate-limit weight ──
+// Source (re-verified 2026-06-04): HL docs "rate-limits-and-user-limits":
+//   • "All other documented info requests have weight 20."
+//   • candleSnapshot: additional +1 weight per 60 items returned.
+//   • fundingHistory class: additional +1 weight per 20 items returned.
+//   • weight 2: l2Book, allMids, clearinghouseState, orderStatus,
+//     spotClearinghouseState, exchangeStatus.
+// `weightHint` is the expected item count (passed by getCandles /
+// getFundingHistory). Unknown types default to 20 — never under-count.
+const WEIGHT_2_TYPES = new Set([
+  'l2Book',
+  'allMids',
+  'clearinghouseState',
+  'orderStatus',
+  'spotClearinghouseState',
+  'exchangeStatus',
+]);
+// Conservative fallback when a caller omits weightHint. Real candle/funding
+// callers always pass one; this only guards a future caller that forgets.
+const DEFAULT_ITEM_HINT = 500;
+
+export function weightFor(body: Record<string, unknown>, weightHint?: number): number {
+  const type = typeof body?.type === 'string' ? (body.type as string) : '';
+  if (WEIGHT_2_TYPES.has(type)) return 2;
+  if (type === 'candleSnapshot') {
+    return 20 + Math.ceil((weightHint ?? DEFAULT_ITEM_HINT) / 60);
+  }
+  if (type === 'fundingHistory') {
+    return 20 + Math.ceil((weightHint ?? DEFAULT_ITEM_HINT) / 20);
+  }
+  return 20; // metaAndAssetCtxs, predictedFundings, and unknown → never under-count
+}
+
+// HL candle intervals → ms, for deriving the candleSnapshot weightHint from the
+// requested [startTime, now] window (HL returns ~one item per interval bucket).
+const INTERVAL_MS: Record<string, number> = {
+  '1m': 60_000,
+  '3m': 180_000,
+  '5m': 300_000,
+  '15m': 900_000,
+  '30m': 1_800_000,
+  '1h': 3_600_000,
+  '2h': 7_200_000,
+  '4h': 14_400_000,
+  '8h': 28_800_000,
+  '12h': 43_200_000,
+  '1d': 86_400_000,
+  '3d': 259_200_000,
+  '1w': 604_800_000,
+  '1M': 2_592_000_000,
+};
+
+function expectedCandleItems(interval: string, startTime: number): number | undefined {
+  const ms = INTERVAL_MS[interval];
+  if (!ms) return undefined; // unknown interval → weightFor falls back to its conservative default
+  return Math.max(1, Math.ceil((Date.now() - startTime) / ms));
+}
+
+/**
+ * Budgeted entry point for EVERY HL `/info` POST — the single chokepoint
+ * (OPS-HL-RATELIMITER-W2). Reserves the request's weight against the shared
+ * cross-process HL weight ledger BEFORE hitting the network, then delegates to
+ * the raw fetch. `cls` defaults to the AsyncLocalStorage weight class
+ * (`interactive` unless inside `runAsBatch`). Exported so the non-adapter HL
+ * callers (seed universe discovery, oi-ranking, exchange-universe, monitor)
+ * route through the SAME budget — making "every HL caller is throttled" structural.
+ *   - interactive: throws `UpstreamRateLimitError` if over ceiling (→ structured 429).
+ *   - batch: waits for the window to roll, else throws `WeightBudgetSkipError`
+ *     (caller logs a skip and the next idempotent fire retries).
+ */
+export async function hlInfoPost<T>(
+  body: Record<string, unknown>,
+  opts?: { cls?: WeightClass; weightHint?: number },
+): Promise<T> {
+  const cls = opts?.cls ?? currentWeightClass();
+  await hlWeightBudget.acquire(weightFor(body, opts?.weightHint), cls);
+  return hlPost<T>(body);
+}
 
 // OPS-HL-RATELIMIT-W1 (2026-05-22): per-coin getAssetContext used to issue
 // N redundant `metaAndAssetCtxs` fetches per seed fire — each returning the
@@ -52,7 +132,7 @@ async function getMetaAndAssetCtxsCoalesced<T>(dex: DexType): Promise<T> {
   }
   const body: Record<string, unknown> = { type: 'metaAndAssetCtxs' };
   if (dex === 'xyz') body.dex = 'xyz';
-  const promise = hlPost<T>(body)
+  const promise = hlInfoPost<T>(body)
     .then((value) => {
       metaCache.set(key, { value, ts: Date.now() });
       metaInflight.delete(key);
@@ -122,10 +202,10 @@ export class HyperliquidAdapter implements ExchangeAdapter {
   async getCandles(coin: string, interval: string, startTime: number, dex: DexType = 'standard'): Promise<Candle[]> {
     // xyz perps require the xyz: prefix for candle fetches
     const apiCoin = dex === 'xyz' ? `xyz:${coin}` : coin;
-    const raw = await hlPost<HLCandle[]>({
-      type: 'candleSnapshot',
-      req: { coin: apiCoin, interval, startTime },
-    });
+    const raw = await hlInfoPost<HLCandle[]>(
+      { type: 'candleSnapshot', req: { coin: apiCoin, interval, startTime } },
+      { weightHint: expectedCandleItems(interval, startTime) },
+    );
     return (raw || []).map(c => ({
       open: parseFloat(c.o),
       high: parseFloat(c.h),
@@ -166,7 +246,7 @@ export class HyperliquidAdapter implements ExchangeAdapter {
   }
 
   async getPredictedFundings(): Promise<FundingData[]> {
-    const raw = await hlPost<HLPredictedFunding[]>({ type: 'predictedFundings' });
+    const raw = await hlInfoPost<HLPredictedFunding[]>({ type: 'predictedFundings' });
     return raw.map(entry => ({
       coin: entry[0],
       venues: (entry[1] || [])
@@ -190,11 +270,10 @@ export class HyperliquidAdapter implements ExchangeAdapter {
    */
   async getFundingHistory(coin: string, startTime: number): Promise<{ time: number; fundingRate: number }[]> {
     try {
-      const raw = await hlPost<{ time: number; coin: string; fundingRate: string; premium: string }[]>({
-        type: 'fundingHistory',
-        coin,
-        startTime,
-      });
+      const raw = await hlInfoPost<{ time: number; coin: string; fundingRate: string; premium: string }[]>(
+        { type: 'fundingHistory', coin, startTime },
+        { weightHint: Math.max(1, Math.ceil((Date.now() - startTime) / 3_600_000)) },
+      );
       return (raw || [])
         .filter(r => r.fundingRate != null && !isNaN(parseFloat(r.fundingRate)))
         .map(r => ({

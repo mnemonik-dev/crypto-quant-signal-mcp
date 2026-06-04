@@ -28,6 +28,7 @@
 import { getSignalsNeedingUnifiedBackfillAsync, updateSignalOutcomes, closeDb } from '../lib/performance-db.js';
 import { getAdapter } from '../lib/exchange-adapter.js';
 import { getDexForCoin } from '../lib/asset-tiers.js';
+import { runAsBatch, WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
 import type { Candle, ExchangeId, SignalRecord } from '../types.js';
 
 const DELAY_BETWEEN_FETCHES_MS = 300; // polite to HL API
@@ -137,6 +138,9 @@ function computePFEMAE(
 }
 
 async function main() {
+  // OPS-HL-RATELIMITER-W2: backfill is bulk → run in `batch` weight class so its
+  // HL candle fetches wait behind the shared budget and yield the interactive reserve.
+  return runAsBatch(async () => {
   console.log(`[${ts()}] Starting v1.4 PFE/MAE outcome backfill (looping until queue empty)...`);
 
   let totalFilled = 0;
@@ -267,6 +271,14 @@ async function main() {
           filled++;
           await sleep(DELAY_BETWEEN_FETCHES_MS);
         } catch (err: unknown) {
+          if (err instanceof WeightBudgetSkipError) {
+            // OPS-HL-RATELIMITER-W2: transient budget saturation — count as a
+            // skip, NOT a symbol failure (do not touch failCounts or errors).
+            // The next loop / 3-min cron fire retries this signal.
+            skipped++;
+            await sleep(DELAY_BETWEEN_FETCHES_MS);
+            continue;
+          }
           const msg = err instanceof Error ? err.message : String(err);
           const fc = (failCounts.get(failKey) || 0) + 1;
           failCounts.set(failKey, fc);
@@ -299,6 +311,7 @@ async function main() {
 
   closeDb();
   console.log(`[${ts()}] Backfill complete: ${totalFilled} filled, ${totalSkipped} skipped (not ready), ${totalErrors} errors across ${batchNum} batch(es).`);
+  });
 }
 
 main().catch((err) => {
