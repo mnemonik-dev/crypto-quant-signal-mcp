@@ -101,9 +101,18 @@ Each demo is runnable as `python examples/<framework>/demo.py BTC 4h` — gets a
 
 ---
 
-## What's new in v1.19.0
+## What's new in v1.20.0
 
-Live since 2026-05-30:
+Live since 2026-06-04:
+
+- **📡 `scan_trade_calls` — market-wide scanner.** One call scans the top-N perps (1–100, ranked by open interest) on your chosen venue and returns every actionable BUY/SELL with confidence and regime. HOLDs stay free — quota counts only actionable calls.
+- **🔔 Webhooks: dynamic `top:N` watchlists.** Subscribe with `assets: ["top:25"]` and your webhook follows the venue's top perps automatically. No manual list upkeep.
+- **🏛️ TradFi-aware analysis.** Both core tools now report the underlying market session (`underlying_session`, with weekend/holiday caveats), interpret fixed pre-IPO funding correctly, and aggregate cross-venue funding sentiment for stocks, indices, commodities, and FX across all 5 venues.
+- **🧭 Smarter errors on young listings.** Insufficient history returns a structured `INSUFFICIENT_CANDLES` error with `suggested_timeframes` instead of a plain string.
+
+> MCP clients cache `tools/list` at session start — toggle the connector off/on (or restart the MCP connection) to see `scan_trade_calls`.
+
+### v1.19.0 highlights (recap)
 
 - **🔔 Webhook Delivery Service.** Subscribe a URL; receive `trade_call` and `regime_shift` events as push, not poll. Payloads are HMAC-SHA256 signed, retried, and idempotent. Manage over HTTP: `POST` / `GET` / `DELETE /api/webhooks`, plus `POST /api/webhooks/:id/test` for a live test fire. API key required.
 - **🔗 One-call signal verification.** Every webhook payload carries a `verify_url`. Resolve it at `GET /api/verify-signal?hash=<signal_hash>` for that call's public, on-chain-anchored record.
@@ -167,7 +176,7 @@ Live since 2026-05-30:
 - **🪪 ERC-8004 Verified Agent on Base.** AlgoVault MCP is registered on the canonical ERC-8004 Identity Registry at [`0x8004A169...e539a432`](https://basescan.org/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432). Each call traces back to a portable, censorship-resistant agent identity on Base L2. agentId [`44544`](https://basescan.org/token/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432?a=44544) on Basescan. Same on-chain track record; new verified agent handle that AI orchestrators can resolve.
 - **🔌 `/api/erc-8004-reputation` endpoint.** Read-only JSON aggregator exposing agentId, identity registry address, registration timestamp, and Basescan link. Cached 5 minutes. `curl -s api.algovault.com/api/erc-8004-reputation | jq`.
 
-> **Upgrading from v1.18.x or earlier?** The MCP tool surface is unchanged structurally — `get_trade_call`, `scan_funding_arb`, `get_market_regime`, `search_knowledge`, `chat_knowledge` keep their parameter shapes. v1.19.0 adds an OPTIONAL outbound webhook HTTP API (`POST` / `GET` / `DELETE /api/webhooks` + `POST /api/webhooks/:id/test`) and a `GET /api/verify-signal?hash=` resolver, plus two more platform integration examples — but the MCP tool contract is untouched. MCP clients (Claude Desktop, Cursor, Cline) cache `tools/list` at session start — no toggle needed for this release since no tool descriptions changed.
+> **Upgrading from v1.19.x or earlier?** The six original tools — `get_trade_call`, `get_trade_signal`, `scan_funding_arb`, `get_market_regime`, `search_knowledge`, `chat_knowledge` — keep their parameter shapes unchanged. v1.20.0 adds ONE new tool, `scan_trade_calls` (top-N market scanner), and additive output fields on the core tools (`underlying_session`, `session_note`, `metrics.funding_by_venue`) plus a structured `INSUFFICIENT_CANDLES` error — all backward-compatible. Because MCP clients (Claude Desktop, Cursor, Cline) cache `tools/list` at session start, reconnect (toggle the connector off/on) once to see `scan_trade_calls`; existing integrations keep working without changes.
 
 ---
 
@@ -261,7 +270,7 @@ Responses also include optional `closest_tradeable` (on HOLD verdicts) and `also
     { "coin": "SOL", "timeframe": "15m", "confidence": 73 }
   ],
   "_algovault": {
-    "version": "1.19.0",
+    "version": "1.20.0",
     "tool": "get_trade_call",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }
@@ -292,6 +301,22 @@ Combines directional strength measurement with ADX slope analysis (detecting tre
 - `exchange` (string, default `"BINANCE"`): Exchange to analyze — same options as `get_trade_call`
 
 **Output includes:** regime label, confidence score, underlying metrics (trend strength, volatility interpretation, price structure), cross-venue funding sentiment, and a plain-English strategy suggestion.
+
+### `scan_trade_calls`
+
+Scans the **top-N perpetual futures by open interest** on a venue and returns composite BUY/SELL/HOLD verdicts for the whole set in one call — market-wide coverage for agents that would otherwise loop `get_trade_call` per coin.
+
+Non-HOLD calls are ranked first by confidence; HOLDs are free and never consume quota (quota counts only the actionable BUY/SELL results returned).
+
+**Parameters:**
+- `topN` (integer 1–100, default `20`): How many top perps (by open interest) to scan
+- `timeframe` (string, default `"15m"`): Candle timeframe for the scan — `1m`–`1d`
+- `exchange` (string, default `"BINANCE"`): Venue — `BINANCE`, `HL`, `BYBIT`, `OKX`, `BITGET`
+- `minConfidence` (number 0–100, optional): Drop non-HOLD calls below this confidence
+- `includeHolds` (boolean, default `false`): Append HOLD calls after the non-HOLD results
+- `limit` (integer 1–100, default `10`): Max ranked calls returned (non-HOLD first)
+
+**Output includes:** an array of `{ coin, timeframe, exchange, call, confidence, regime }` entries, ranked non-HOLD first, plus the scan's venue and timeframe.
 
 ---
 
