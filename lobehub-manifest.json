@@ -217,6 +217,71 @@
           "question"
         ]
       }
+    },
+    {
+      "url": "https://api.algovault.com/mcp",
+      "name": "scan_trade_calls",
+      "description": "Cross-asset market scanner — composite verdict BUY SELL HOLD trade calls across the top 1-100 crypto perpetual futures by open interest on Binance Bybit OKX Bitget Hyperliquid. Returns ranked non-HOLD calls with confidence and market regime. One scan, whole-market coverage for AI trading agents. Use get_trade_call for per-coin depth and reasoning.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "topN": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "Scan the top-N perps by open interest (1-100, default 20). Whole-market scan."
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "1m",
+              "3m",
+              "5m",
+              "15m",
+              "30m",
+              "1h",
+              "2h",
+              "4h",
+              "8h",
+              "12h",
+              "1d"
+            ],
+            "default": "15m",
+            "description": "Candle timeframe (1m to 1d) for the scan. Default 15m intraday."
+          },
+          "exchange": {
+            "type": "string",
+            "enum": [
+              "BINANCE",
+              "HL",
+              "BYBIT",
+              "OKX",
+              "BITGET"
+            ],
+            "default": "BINANCE",
+            "description": "Venue: BINANCE (default) HL BYBIT OKX BITGET — top perps by open interest."
+          },
+          "minConfidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Optional min confidence (0-100) filter applied to non-HOLD trade calls."
+          },
+          "includeHolds": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include HOLD calls after non-HOLD (default false). HOLDs never cost quota."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "description": "Max ranked calls returned (1-100, default 10). Non-HOLD ranked first."
+          }
+        }
+      }
     }
   ],
   "author": "AlgoVault Labs",
@@ -237,5 +302,5 @@
     "title": "Crypto Quant Signal MCP",
     "description": "Composite BUY/SELL/HOLD trade calls across 5 crypto perp venues (Binance, Bybit, OKX, Bitget, Hyperliquid). Verified track record, Merkle-anchored on Base L2. Drop-in tutorials for LangChain, LlamaIndex, Microsoft Agent Framework, and CrewAI. Ask-AlgoVault-anything via search_knowledge + chat_knowledge tools."
   },
-  "version": "13"
+  "version": "14"
 }
