@@ -311,6 +311,14 @@ function getCallTracker(key: string): CallTracker {
   return tracker;
 }
 
+// SCAN-TRADE-CALLS-W1 C1: multi-unit quota seam. Batch tools (scan_trade_calls,
+// future batch regime/chat, TG /scan) charge N units per request. Default-deny
+// per CLAUDE.md — any non-finite / sub-1 value collapses to 1 so a bad caller
+// can never charge 0 (or a negative). Fractional units floor to an integer ≥1.
+function clampUnits(units: number): number {
+  return Number.isFinite(units) && units >= 1 ? Math.floor(units) : 1;
+}
+
 export function getMonthlyQuota(tier: LicenseTier): number {
   switch (tier) {
     case 'starter': return 3_000;
@@ -371,8 +379,12 @@ export function checkQuota(license: LicenseInfo): TrackCallResult {
 /**
  * Increment the call counter and check quota.
  * Returns whether the call is allowed after incrementing.
+ *
+ * `units` (default 1) charges a batch atomically — a scan returning 5 non-HOLD
+ * calls charges 5 in one increment. Existing single-call sites pass nothing and
+ * stay byte-identical (units defaults to 1). Default-deny via clampUnits.
  */
-export function trackCall(license: LicenseInfo): TrackCallResult {
+export function trackCall(license: LicenseInfo, units = 1): TrackCallResult {
   if (license.tier === 'x402' || license.tier === 'internal') {
     return { allowed: true, remaining: Infinity, overage: 0, used: 0, total: Infinity };
   }
@@ -381,7 +393,7 @@ export function trackCall(license: LicenseInfo): TrackCallResult {
   const tracker = getCallTracker(key);
   const quota = getMonthlyQuota(license.tier);
 
-  tracker.count++;
+  tracker.count += clampUnits(units);
   persistTracker(key, tracker);
 
   const remaining = Math.max(0, quota - tracker.count);
@@ -421,13 +433,13 @@ export function checkQuotaByKey(trackerKey: string, tier: LicenseTier): TrackCal
 }
 
 /** Increment + check an explicit tracker key against the monthly meter. */
-export function trackCallByKey(trackerKey: string, tier: LicenseTier): TrackCallResult {
+export function trackCallByKey(trackerKey: string, tier: LicenseTier, units = 1): TrackCallResult {
   if (tier === 'x402' || tier === 'internal') {
     return { allowed: true, remaining: Infinity, overage: 0, used: 0, total: Infinity };
   }
   const tracker = getCallTracker(trackerKey);
   const quota = getMonthlyQuota(tier);
-  tracker.count++;
+  tracker.count += clampUnits(units);
   persistTracker(trackerKey, tracker);
   const remaining = Math.max(0, quota - tracker.count);
   const overage = Math.max(0, tracker.count - quota);
