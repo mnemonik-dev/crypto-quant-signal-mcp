@@ -50,6 +50,7 @@ import { classifyAsset, warmTierCaches, isKnownTradFi } from '../lib/asset-tiers
 import { getTicker24hrFullCoalesced } from '../lib/adapters/binance.js';
 import { hlInfoPost } from '../lib/adapters/hyperliquid.js';
 import { runAsBatch, WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from '../lib/adapters/_upstream-fetch.js';
 import type { LicenseInfo, ExchangeId, VenueStatus } from '../types.js';
 import { listVenues, stampSeedingStarted } from '../lib/venue-store.js';
 
@@ -470,8 +471,10 @@ async function fetchBinanceCoins(topN: number): Promise<string[]> {
  * Fetch Bybit USDT linear pairs sorted by notional OI (openInterest × lastPrice).
  */
 async function fetchBybitCoins(topN: number): Promise<string[]> {
-  const res = await fetch('https://api.bybit.com/v5/market/tickers?category=linear');
-  const data = await res.json() as { result: { list: Array<{ symbol: string; openInterest: string; lastPrice: string }> } };
+  const data = await upstreamFetch<{ result: { list: Array<{ symbol: string; openInterest: string; lastPrice: string }> } }>(
+    VENUE_FETCH_CONFIGS.BYBIT,
+    { url: 'https://api.bybit.com/v5/market/tickers?category=linear' },
+  );
 
   const usdtPairs = (data.result?.list || [])
     .filter(t => t.symbol.endsWith('USDT'))
@@ -490,8 +493,10 @@ async function fetchBybitCoins(topN: number): Promise<string[]> {
  * Uses /api/v5/public/open-interest?instType=SWAP for bulk OI data.
  */
 async function fetchOKXCoins(topN: number): Promise<string[]> {
-  const res = await fetch('https://www.okx.com/api/v5/public/open-interest?instType=SWAP');
-  const data = await res.json() as { data: Array<{ instId: string; oiUsd: string }> };
+  const data = await upstreamFetch<{ data: Array<{ instId: string; oiUsd: string }> }>(
+    VENUE_FETCH_CONFIGS.OKX,
+    { url: 'https://www.okx.com/api/v5/public/open-interest?instType=SWAP' },
+  );
 
   const usdtSwaps = (data.data || [])
     .filter(t => t.instId.endsWith('-USDT-SWAP'))
@@ -505,8 +510,10 @@ async function fetchOKXCoins(topN: number): Promise<string[]> {
  * Fetch Bitget USDT-M futures sorted by notional OI (holdingAmount × lastPr).
  */
 async function fetchBitgetCoins(topN: number): Promise<string[]> {
-  const res = await fetch('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
-  const data = await res.json() as { data: Array<{ symbol: string; holdingAmount: string; lastPr: string }> };
+  const data = await upstreamFetch<{ data: Array<{ symbol: string; holdingAmount: string; lastPr: string }> }>(
+    VENUE_FETCH_CONFIGS.BITGET,
+    { url: 'https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES' },
+  );
 
   const usdtPairs = (data.data || [])
     .filter(t => t.symbol.endsWith('USDT'))
@@ -533,12 +540,13 @@ async function fetchBitgetCoins(topN: number): Promise<string[]> {
 
 async function fetchUniverseJson(url: string, venue: string): Promise<unknown | null> {
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn(`[${ts()}] [${venue}] universe HTTP ${res.status} — skipping venue this cycle`);
-      return null;
-    }
-    return await res.json();
+    // OPS-SEED-UNIVERSE-FETCH-BUDGET-W1: route through the shared transport (typed
+    // 418/429/403 ban handling + transient-retry loop). Shadow venues have no budget
+    // (getVenueBudget → null → no throttle). upstreamFetch parses the JSON and throws
+    // on !ok / ban / exhausted-retries; the catch keeps the fail-soft contract
+    // (null → the venue self-skips this cycle), so the prior !res.ok branch is folded
+    // into the catch (the HTTP status is still surfaced via the thrown Error message).
+    return await upstreamFetch<unknown>(VENUE_FETCH_CONFIGS[venue], { url });
   } catch (e) {
     console.warn(`[${ts()}] [${venue}] universe fetch error: ${e instanceof Error ? e.message : e} — skipping venue this cycle`);
     return null;
