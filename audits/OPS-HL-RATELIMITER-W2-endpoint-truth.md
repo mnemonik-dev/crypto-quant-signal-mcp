@@ -200,3 +200,29 @@ Architect (Mr.1) approved the wave with the following amendments. These OVERRIDE
 5. **Sanity ack:** worst shared boundary (6 long-TF lines ≈ 31.8K wt) ≈ ~45 min drain at 700/min — acceptable: users stay protected by the reserve; every line completes inside its own cadence. R4 stagger spreads those boundaries; all HL lines stay off `:00`.
 
 **Status: APPROVED → proceeding to C1.**
+
+---
+
+## §11 — LIVE-GATE RESULTS (post-deploy, commit `cedf1bc`)
+
+Deployed 06-04 16:04 (server-time); observed through ~14h soak + the cpx42 upgrade.
+
+| Gate | Result |
+|---|---|
+| R6 — container code live | ✅ `grep -c algovault-hl-weight dist/lib/upstream-weight-budget.js` = 3; ledger active |
+| AC1 — build + tests | ✅ clean `tsc`; full suite 16 fail / 1671 pass = baseline 16 fail / 1656 pass + 15 new → **+0 new failures** (baseline-stash verified) |
+| AC5 — frozen surface | ✅ `tools/list` = 9; `get_trade_call` response keys unchanged |
+| AC2 — interactive resilience | ✅ at deploy: 5/5 rapid `get_trade_call HL` → verdicts; throws = 0 |
+| AC3 — split (ratified §10.3.1) | ✅ **primary**: real HTTP 429 in HL seed paths post-deploy = **0**; ✅ arbiter engaged (24,557 `batch_wait`, p95 60 s). ⚠️ cadence sub-gate (3m fire <180 s) NOT met — see caveat |
+| AC4 — cron diff | n/a — R4 deferred to OPS-HL-SEED-LOAD-W1 (cron collisions not the bottleneck; all HL lines already off :00) |
+
+### ⚠️ Caveat surfaced by 14h soak → OPS-HL-SEED-LOAD-W1 (architect-approved fast-track)
+
+The budget is correct, but it EXPOSED a pre-existing **backfill over-fetch**: `backfill-outcomes`/`runBackfill` call `getCandles(coin,tf,signalTimeMs)` which fetches `[signalTime, now]` (~5000 candles on HL → weight ~104) while `computePFEMAE` only consumes `evalCount` (~8). This inflates HL batch demand ~5-13×, pinning the 1000 ceiling:
+
+- `batch_used` ~700 (cap), `interactive_used` ~290-310, `used` ~986-1000 per window.
+- `batch_wait` n=24,557 (p50 59.7 s / p95 60.0 s); `batch_skip` = 3,787.
+- HL seeding throttled to ~1/15 min (CEX venues, unbudgeted, seed normally: BYBIT 47 / BINANCE 19 per 15 min).
+- interactive demand (~390/min) > ~300 slot → **49-101 `throws`/window** (HL→Binance fallbacks). throws = 0 at deploy, rose as backlog grew (425→737 pending, 102 older-7d).
+
+**Verdict: ⚠️ GREEN_WITH_CAVEAT.** Budget infra shipped + correct (deterministic, interactive-reserved, zero raw 429s — strictly better than random storms). The over-fetch is the disease; the resolution is OPS-HL-SEED-LOAD-W1 (bound the backfill window via an optional trailing `endTime?` on `getCandles` — no 17-adapter cascade; HL honors `candleSnapshot.req.endTime`). Data-Integrity-safe: the bounded window still covers `evalCount` → PFE/MAE unchanged. Closes retroactively when W1 lands.
