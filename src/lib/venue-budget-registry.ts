@@ -93,11 +93,78 @@ export const binanceWeightBudget = new WeightBudget({
   log: BINANCE_VITEST ? () => {} : undefined,
 });
 
+// ── Bybit / OKX / Bitget: consumers #3-5 (OPS-ADAPTER-RATELIMIT-UNIFY-W1 C3) ──
+// These three PROMOTED venues are REQUEST-COUNT limited (not Binance-style weight),
+// so each registry row uses `weightFor = () => 1` — the budget meters requests/min;
+// ceiling/reserve are req/min. Each ceiling sits well under the venue's documented
+// per-IP limit so we self-throttle (typed UpstreamRateLimitError, no-retry) BEFORE
+// the venue issues an IP ban — the same class of self-DoS the Binance budget closed
+// (Bybit 403, Bitget body-code 45001). Ceilings/reserves are architect-ratified in
+// audits/OPS-ADAPTER-RATELIMIT-UNIFY-W1-endpoint-truth.md §6-7. Ledger paths are
+// STATIC literals (NOT templated through a slug variable) so the R6 deploy-smoke grep
+// + ops can grep each `algovault-<venue>-weight` target in the compiled output.
+// // TODO: revisit ceilings by 2026-06-26 with a week of per-window telemetry.
+
+// Bybit v5: "600 requests within a 5-second window per IP" (= 7200/min;
+// bybit-exchange.github.io/docs/v5/rate-limit) → 403 'access too frequent', wait
+// ≥10min. Ceiling 3600 = 50%-of-verified; reserve 1200.
+export const BYBIT_REQ_CEILING = 3600;
+export const BYBIT_INTERACTIVE_RESERVE = 1200;
+const BYBIT_VITEST = process.env.VITEST === 'true';
+const bybitLedgerSuffix = BYBIT_VITEST ? `.test-${process.pid}` : '';
+export const bybitWeightBudget = new WeightBudget({
+  venue: 'Bybit',
+  ledgerPath: process.env.BYBIT_WEIGHT_LEDGER ?? `/tmp/algovault-bybit-weight${bybitLedgerSuffix}.json`,
+  lockPath: process.env.BYBIT_WEIGHT_LOCK ?? `/tmp/algovault-bybit-weight${bybitLedgerSuffix}.lock`,
+  ceilingPerMin: BYBIT_VITEST ? 1_000_000_000 : BYBIT_REQ_CEILING,
+  interactiveReserve: BYBIT_VITEST ? 0 : BYBIT_INTERACTIVE_RESERVE,
+  log: BYBIT_VITEST ? () => {} : undefined,
+});
+
+// OKX is PER-ENDPOINT IP-rate-limited (NOT a single per-IP aggregate like Binance):
+// market-data endpoints ≈ 20 req / 2s = 600/min/endpoint (okx.com/docs-v5, err 50026).
+// Q2=A (architect-ratified): model ONE conservative aggregate budget across all OKX
+// endpoints rather than per-endpoint buckets — 500/min sits under the lowest single
+// 600/min ceiling, so it stays safe even if every call hits one endpoint, without
+// per-endpoint ledger complexity. fetchOKX issues 2 requests (tickers +
+// open-interest) per universe refresh; each costs 1.
+export const OKX_REQ_CEILING = 500;
+export const OKX_INTERACTIVE_RESERVE = 150;
+const OKX_VITEST = process.env.VITEST === 'true';
+const okxLedgerSuffix = OKX_VITEST ? `.test-${process.pid}` : '';
+export const okxWeightBudget = new WeightBudget({
+  venue: 'OKX',
+  ledgerPath: process.env.OKX_WEIGHT_LEDGER ?? `/tmp/algovault-okx-weight${okxLedgerSuffix}.json`,
+  lockPath: process.env.OKX_WEIGHT_LOCK ?? `/tmp/algovault-okx-weight${okxLedgerSuffix}.lock`,
+  ceilingPerMin: OKX_VITEST ? 1_000_000_000 : OKX_REQ_CEILING,
+  interactiveReserve: OKX_VITEST ? 0 : OKX_INTERACTIVE_RESERVE,
+  log: OKX_VITEST ? () => {} : undefined,
+});
+
+// Bitget mix: "6000 requests / IP / Min … 5 minutes to recover"
+// (bitget.com/wiki/bitget-api-rate-limits); also signals throttle via response
+// body-codes 45001/40725/40808 (handled as banBodyCodes in the transport). Ceiling
+// 3000 = 50%-of-verified; reserve 1000.
+export const BITGET_REQ_CEILING = 3000;
+export const BITGET_INTERACTIVE_RESERVE = 1000;
+const BITGET_VITEST = process.env.VITEST === 'true';
+const bitgetLedgerSuffix = BITGET_VITEST ? `.test-${process.pid}` : '';
+export const bitgetWeightBudget = new WeightBudget({
+  venue: 'Bitget',
+  ledgerPath: process.env.BITGET_WEIGHT_LEDGER ?? `/tmp/algovault-bitget-weight${bitgetLedgerSuffix}.json`,
+  lockPath: process.env.BITGET_WEIGHT_LOCK ?? `/tmp/algovault-bitget-weight${bitgetLedgerSuffix}.lock`,
+  ceilingPerMin: BITGET_VITEST ? 1_000_000_000 : BITGET_REQ_CEILING,
+  interactiveReserve: BITGET_VITEST ? 0 : BITGET_INTERACTIVE_RESERVE,
+  log: BITGET_VITEST ? () => {} : undefined,
+});
+
 // ── The registry (sparse Map; one row per budgeted venue) ──
-// C3 (OPS-ADAPTER-RATELIMIT-UNIFY-W1) adds BYBIT / OKX / BITGET request-count rows.
 const VENUE_BUDGETS: ReadonlyMap<string, VenueBudgetEntry> = new Map<string, VenueBudgetEntry>([
   ['HL', { budget: hlWeightBudget, weightFor: (req) => req.weightHint ?? 20 }],
   ['BINANCE', { budget: binanceWeightBudget, weightFor: (req) => req.weightHint ?? 5 }],
+  ['BYBIT', { budget: bybitWeightBudget, weightFor: () => 1 }],
+  ['OKX', { budget: okxWeightBudget, weightFor: () => 1 }],
+  ['BITGET', { budget: bitgetWeightBudget, weightFor: () => 1 }],
 ]);
 
 /**
