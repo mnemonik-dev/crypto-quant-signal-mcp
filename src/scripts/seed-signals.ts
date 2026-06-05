@@ -541,12 +541,21 @@ async function fetchBitgetCoins(topN: number): Promise<string[]> {
 async function fetchUniverseJson(url: string, venue: string): Promise<unknown | null> {
   try {
     // OPS-SEED-UNIVERSE-FETCH-BUDGET-W1: route through the shared transport (typed
-    // 418/429/403 ban handling + transient-retry loop). Shadow venues have no budget
-    // (getVenueBudget → null → no throttle). upstreamFetch parses the JSON and throws
-    // on !ok / ban / exhausted-retries; the catch keeps the fail-soft contract
-    // (null → the venue self-skips this cycle), so the prior !res.ok branch is folded
-    // into the catch (the HTTP status is still surfaced via the thrown Error message).
-    return await upstreamFetch<unknown>(VENUE_FETCH_CONFIGS[venue], { url });
+    // 418/429/403 ban handling). Shadow venues have no budget (getVenueBudget → null
+    // → no throttle). upstreamFetch parses the JSON and throws on !ok / ban; the catch
+    // keeps the fail-soft contract (null → the venue self-skips this cycle), so the
+    // prior !res.ok branch is folded into the catch (HTTP status surfaced via the
+    // thrown Error message).
+    //
+    // transientRetries:0 (follow-up fix): these universe pulls are already FAIL-SOFT
+    // (skip on error + retry next cron cycle), so the transport's default 500ms
+    // transient retry only adds latency on the failure path for zero benefit — and 12
+    // sequential shadow fetchers × 500ms blew the seed-signals-registry "fail-soft"
+    // test's 5s timeout (the W1 wave ran seed-signals-fetchers.test.ts, not -registry).
+    // Typed-ban handling is no-retry by design, so it is unaffected. (The 3 PROMOTED
+    // single-shot fetchers keep transientRetries:1 — no 12-sequential compounding, and
+    // a single retry on a higher-stakes promoted universe is worth one 500ms.)
+    return await upstreamFetch<unknown>({ ...VENUE_FETCH_CONFIGS[venue], transientRetries: 0 }, { url });
   } catch (e) {
     console.warn(`[${ts()}] [${venue}] universe fetch error: ${e instanceof Error ? e.message : e} — skipping venue this cycle`);
     return null;
