@@ -12,7 +12,7 @@ import type {
   DexType,
 } from '../../types.js';
 import { UpstreamRateLimitError } from '../errors.js';
-import { binanceWeightBudget, currentWeightClass } from '../upstream-weight-budget.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://fapi.binance.com';
 const TIMEOUT_MS = 3000;
@@ -207,60 +207,20 @@ export function _resetBinanceAdapterCaches(): void {
 }
 
 async function binGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<T> {
-  // OPS-BINANCE-RATELIMITER-W1: reserve this request's weight against the shared
-  // cross-process Binance budget BEFORE hitting fapi. interactive callers (grid,
-  // live get_trade_call) throw UpstreamRateLimitError over ceiling; batch callers
-  // (seed/backfill, via runAsBatch) wait then SKIP. Prevents the aggregate per-IP
-  // burst that triggers Binance's 418 ban.
-  await binanceWeightBudget.acquire(weightForBinance(path, params), currentWeightClass());
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const url = new URL(path, BASE_URL);
-      if (params) {
-        for (const [k, v] of Object.entries(params)) {
-          url.searchParams.set(k, String(v));
-        }
-      }
-      const res = await fetch(url.toString(), {
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-
-      // Monitor rate limit usage
-      const usedWeight = res.headers.get('X-MBX-USED-WEIGHT-1m');
-      if (usedWeight && parseInt(usedWeight) > 1800) {
-        console.warn(`[Binance] Rate limit warning: ${usedWeight}/2400 weight used`);
-      }
-
-      // OPS-BINANCE-RATELIMITER-W1: 418 (IP ban) AND 429 → typed
-      // UpstreamRateLimitError, thrown IMMEDIATELY (no retry). Re-hammering a 418
-      // ban extends it; and the prior generic-Error-for-418 path both retried the
-      // ban AND never tripped the cross-asset-grid's UpstreamRateLimitError-only
-      // backoff (so the warmer kept self-DoS-ing). The weight budget makes these
-      // rare now; this is the backstop + the signal the grid backoff needs.
-      if (res.status === 418 || res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After');
-        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        throw new UpstreamRateLimitError('Binance', Number.isFinite(seconds) ? seconds : null);
-      }
-
-      if (!res.ok) {
-        throw new Error(`Binance API ${res.status}: ${res.statusText}`);
-      }
-      return (await res.json()) as T;
-    } catch (err) {
-      clearTimeout(timer);
-      // Don't retry rate-limit errors (418/429 → UpstreamRateLimitError, or a
-      // batch WeightBudgetSkipError) — surface immediately so the caller falls
-      // back / backs off instead of re-hammering the upstream.
-      if (err instanceof UpstreamRateLimitError) throw err;
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 500));
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: URL-build + venue weight (weightForBinance) unchanged;
+  // the cross-process budget acquire (via the registry), 418/429→typed-no-retry, and the
+  // X-MBX-USED-WEIGHT forensic warn (cfg.onResponse) all move into the shared upstreamFetch.
+  // Behavior byte-identical (OPS-BINANCE-RATELIMITER-W1 budget + 418 handling preserved).
+  const url = new URL(path, BASE_URL);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, String(v));
     }
   }
-  throw new Error('Binance API: max retries exceeded');
+  return upstreamFetch<T>(
+    { ...VENUE_FETCH_CONFIGS.BINANCE, transientRetries: retries },
+    { url: url.toString(), weightHint: weightForBinance(path, params) },
+  );
 }
 
 // ── Response types from Binance ──

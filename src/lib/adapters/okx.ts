@@ -11,7 +11,7 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
-import { UpstreamRateLimitError } from '../errors.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://www.okx.com';
 const TIMEOUT_MS = 3000;
@@ -73,50 +73,21 @@ interface OKXResponse<T> {
 }
 
 async function okxGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<OKXResponse<T>> {
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: intra-process throttle() (complementary to the
+  // cross-process budget, D2) + URL-build + code-envelope check unchanged;
+  // fetch/retry/ban via upstreamFetch.
   await throttle();
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const url = new URL(path, BASE_URL);
-      if (params) {
-        for (const [k, v] of Object.entries(params)) {
-          url.searchParams.set(k, String(v));
-        }
-      }
-      const res = await fetch(url.toString(), {
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-
-      if (res.status === 429) {
-        // v1.10.2: typed error so MCP handler can surface exchange + retry_after.
-        const retryAfter = res.headers.get('Retry-After');
-        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, seconds ? seconds * 1000 : 1000));
-          continue;
-        }
-        throw new UpstreamRateLimitError('OKX', Number.isFinite(seconds) ? seconds : null);
-      }
-
-      if (!res.ok) {
-        throw new Error(`OKX API ${res.status}: ${res.statusText}`);
-      }
-
-      const body = (await res.json()) as OKXResponse<T>;
-      if (body.code !== '0') {
-        throw new Error(`OKX API error code ${body.code}: ${body.msg}`);
-      }
-      return body;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 500));
+  const url = new URL(path, BASE_URL);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, String(v));
     }
   }
-  throw new Error('OKX API: max retries exceeded');
+  const body = await upstreamFetch<OKXResponse<T>>({ ...VENUE_FETCH_CONFIGS.OKX, transientRetries: retries }, { url: url.toString() });
+  if (body.code !== '0') {
+    throw new Error(`OKX API error code ${body.code}: ${body.msg}`);
+  }
+  return body;
 }
 
 // ── Response types from OKX ──

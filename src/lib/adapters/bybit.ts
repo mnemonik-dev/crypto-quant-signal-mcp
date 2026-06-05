@@ -11,7 +11,7 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
-import { UpstreamRateLimitError } from '../errors.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://api.bybit.com';
 const TIMEOUT_MS = 3000;
@@ -79,43 +79,20 @@ interface BybitFundingHistoryEntry {
 }
 
 async function bybitGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<T> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const url = new URL(path, BASE_URL);
-      if (params) {
-        for (const [k, v] of Object.entries(params)) {
-          url.searchParams.set(k, String(v));
-        }
-      }
-      const res = await fetch(url.toString(), { signal: controller.signal });
-      clearTimeout(timer);
-
-      if (res.status === 429) {
-        // v1.10.2: typed error so MCP handler can surface exchange + retry_after.
-        const retryAfter = res.headers.get('Retry-After');
-        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, seconds ? seconds * 1000 : 1000));
-          continue;
-        }
-        throw new UpstreamRateLimitError('Bybit', Number.isFinite(seconds) ? seconds : null);
-      }
-      if (!res.ok) throw new Error(`Bybit API ${res.status}: ${res.statusText}`);
-
-      const body = (await res.json()) as BybitResponse<T>;
-      if (body.retCode !== 0) {
-        throw new Error(`Bybit API error ${body.retCode}: ${body.retMsg}`);
-      }
-      return body.result;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 500));
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: URL-build + retCode envelope check unchanged;
+  // fetch/retry/ban via upstreamFetch — incl. Bybit's public-IP **403 "access too
+  // frequent"** ban (banStatuses [403,418,429]), previously a generic retried Error.
+  const url = new URL(path, BASE_URL);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, String(v));
     }
   }
-  throw new Error('Bybit API: max retries exceeded');
+  const body = await upstreamFetch<BybitResponse<T>>({ ...VENUE_FETCH_CONFIGS.BYBIT, transientRetries: retries }, { url: url.toString() });
+  if (body.retCode !== 0) {
+    throw new Error(`Bybit API error ${body.retCode}: ${body.retMsg}`);
+  }
+  return body.result;
 }
 
 export class BybitAdapter implements ExchangeAdapter {

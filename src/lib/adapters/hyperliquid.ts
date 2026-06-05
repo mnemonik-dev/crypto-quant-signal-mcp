@@ -14,7 +14,8 @@ import type {
   DexType,
 } from '../../types.js';
 import { UpstreamRateLimitError } from '../errors.js';
-import { hlWeightBudget, currentWeightClass, type WeightClass } from '../upstream-weight-budget.js';
+import { type WeightClass } from '../upstream-weight-budget.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://api.hyperliquid.xyz/info';
 const TIMEOUT_MS = 3000;
@@ -101,9 +102,18 @@ export async function hlInfoPost<T>(
   body: Record<string, unknown>,
   opts?: { cls?: WeightClass; weightHint?: number },
 ): Promise<T> {
-  const cls = opts?.cls ?? currentWeightClass();
-  await hlWeightBudget.acquire(weightFor(body, opts?.weightHint), cls);
-  return hlPost<T>(body);
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: HL weight (weightFor) + class resolution unchanged;
+  // budget acquire (via the registry, passed as weightHint) + 429→typed-no-retry move
+  // into the shared upstreamFetch. The in-process metaAndAssetCtxs coalescing (above)
+  // is unchanged — it still collapses concurrent callers to one hlInfoPost.
+  return upstreamFetch<T>(VENUE_FETCH_CONFIGS.HL, {
+    url: BASE_URL,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    weightHint: weightFor(body, opts?.weightHint),
+    cls: opts?.cls,
+  });
 }
 
 // OPS-HL-RATELIMIT-W1 (2026-05-22): per-coin getAssetContext used to issue
@@ -162,44 +172,8 @@ export function _resetHyperliquidMetaCache(): void {
   metaInflight.clear();
 }
 
-async function hlPost<T>(body: Record<string, unknown>, retries = MAX_RETRIES): Promise<T> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const res = await fetch(BASE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      // v1.10.2: throw a typed UpstreamRateLimitError on 429 so the MCP tool
-      // handler can emit a structured response with exchange + retry_after.
-      // Other non-2xx still throw a generic Error (no client-side fallback
-      // suggestion is meaningful for those).
-      if (res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After');
-        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        throw new UpstreamRateLimitError('Hyperliquid', Number.isFinite(seconds) ? seconds : null);
-      }
-      if (!res.ok) {
-        throw new Error(`HL API ${res.status}: ${res.statusText}`);
-      }
-      return (await res.json()) as T;
-    } catch (err) {
-      clearTimeout(timer);
-      // Don't retry rate-limit errors at the adapter layer — let the MCP
-      // handler surface them immediately so the agent can fall back to
-      // another exchange instead of waiting through MAX_RETRIES × 500ms
-      // of guaranteed-to-fail retries.
-      if (err instanceof UpstreamRateLimitError) throw err;
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 500));
-    }
-  }
-  throw new Error('HL API: max retries exceeded');
-}
+// OPS-ADAPTER-RATELIMIT-UNIFY-W1: the raw `hlPost` POST/retry/429 loop was retired —
+// hlInfoPost now routes through the shared `upstreamFetch` (VENUE_FETCH_CONFIGS.HL).
 
 export class HyperliquidAdapter implements ExchangeAdapter {
   getName(): string {

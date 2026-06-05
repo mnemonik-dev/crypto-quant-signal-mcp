@@ -24,6 +24,7 @@
  * `process.env.VITEST` guard keeps every test deterministic and offline.
  */
 import { toBinanceSymbol } from './adapters/binance.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './adapters/_upstream-fetch.js';
 import { isKnownTradFi } from './asset-tiers.js';
 import {
   STATIC_ASSET_CLASS_MAP,
@@ -60,24 +61,23 @@ let fetcherOverride: ExchangeInfoFetcher | null = null;
 
 /** Default fetcher: live Binance exchangeInfo, parsed to the narrow map. Fail-open (null). */
 async function defaultFetcher(): Promise<Map<string, UnderlyingTypeEntry>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${BINANCE_FAPI_BASE}/fapi/v1/exchangeInfo`, { signal: controller.signal });
-    if (!res.ok) throw new Error(`exchangeInfo HTTP ${res.status}`);
-    const json = (await res.json()) as { symbols?: Array<{ symbol: string; contractType?: string; underlyingType?: string }> };
-    const map = new Map<string, UnderlyingTypeEntry>();
-    for (const s of json.symbols ?? []) {
-      if (!s.symbol) continue;
-      map.set(s.symbol, {
-        contractType: s.contractType ?? '',
-        underlyingType: s.underlyingType ?? null,
-      });
-    }
-    return map;
-  } finally {
-    clearTimeout(timer);
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: routed through the shared upstreamFetch so this
+  // non-adapter Binance caller inherits the cross-process budget + typed 418/429
+  // handling (closes a binanceWeightBudget bypass missed by W1). The 6s timeout is
+  // preserved via the cfg override — exchangeInfo is a large all-symbols payload.
+  const json = await upstreamFetch<{ symbols?: Array<{ symbol: string; contractType?: string; underlyingType?: string }> }>(
+    { ...VENUE_FETCH_CONFIGS.BINANCE, timeoutMs: FETCH_TIMEOUT_MS },
+    { url: `${BINANCE_FAPI_BASE}/fapi/v1/exchangeInfo` },
+  );
+  const map = new Map<string, UnderlyingTypeEntry>();
+  for (const s of json.symbols ?? []) {
+    if (!s.symbol) continue;
+    map.set(s.symbol, {
+      contractType: s.contractType ?? '',
+      underlyingType: s.underlyingType ?? null,
+    });
   }
+  return map;
 }
 
 /**

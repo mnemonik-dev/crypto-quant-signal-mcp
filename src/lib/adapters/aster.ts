@@ -24,6 +24,7 @@ import type {
   DexType,
 } from '../../types.js';
 import { UpstreamRateLimitError } from '../errors.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://fapi.asterdex.com';
 const TIMEOUT_MS = 3000;
@@ -45,41 +46,14 @@ export function fromAsterSymbol(symbol: string): string {
 }
 
 async function asterGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<T> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const url = new URL(path, BASE_URL);
-      if (params) {
-        for (const [k, v] of Object.entries(params)) {
-          url.searchParams.set(k, String(v));
-        }
-      }
-      const res = await fetch(url.toString(), { signal: controller.signal });
-      clearTimeout(timer);
-
-      if (res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After');
-        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        const waitMs = seconds ? seconds * 1000 : 1000;
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, waitMs));
-          continue;
-        }
-        throw new UpstreamRateLimitError('Aster', Number.isFinite(seconds) ? seconds : null);
-      }
-
-      if (!res.ok) {
-        throw new Error(`Aster API ${res.status}: ${res.statusText}`);
-      }
-      return (await res.json()) as T;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 500));
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: URL-build unchanged; fetch/retry/ban via upstreamFetch.
+  const url = new URL(path, BASE_URL);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, String(v));
     }
   }
-  throw new Error('Aster API: max retries exceeded');
+  return upstreamFetch<T>({ ...VENUE_FETCH_CONFIGS.ASTER, transientRetries: retries }, { url: url.toString() });
 }
 
 // ── Response types (mirror Binance shapes verbatim) ──

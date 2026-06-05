@@ -19,6 +19,7 @@
 import type { ExchangeId } from '../types.js';
 import { getTicker24hrFullCoalesced } from './adapters/binance.js';
 import { hlInfoPost } from './adapters/hyperliquid.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './adapters/_upstream-fetch.js';
 
 export interface ExchangeAsset {
   /** Bare coin symbol, uppercase (e.g. `BTC`, `SOL`). */
@@ -102,10 +103,11 @@ async function fetchBinance(limit: number): Promise<ExchangeAsset[]> {
  * `turnover24h` is USDT-denominated. notionalOI_usd = openInterest × lastPrice.
  */
 async function fetchBybit(limit: number): Promise<ExchangeAsset[]> {
-  const res = await fetchWithTimeout('https://api.bybit.com/v5/market/tickers?category=linear');
-  const json = (await res.json()) as {
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: routed through the shared upstreamFetch so this
+  // non-adapter Bybit caller inherits the cross-process budget + typed 403/ban handling.
+  const json = await upstreamFetch<{
     result: { list: Array<{ symbol: string; openInterest?: string; lastPrice?: string; turnover24h?: string }> };
-  };
+  }>(VENUE_FETCH_CONFIGS.BYBIT, { url: 'https://api.bybit.com/v5/market/tickers?category=linear' });
   const assets: ExchangeAsset[] = json.result.list
     .filter((t) => t.symbol.endsWith('USDT'))
     .map((t) => {
@@ -131,14 +133,13 @@ async function fetchBybit(limit: number): Promise<ExchangeAsset[]> {
  * ~$77,394 ≈ $5.68B USD (matches expected daily BTC perp volume magnitude).
  */
 async function fetchOKX(limit: number): Promise<ExchangeAsset[]> {
-  const [oiRes, tickersRes] = await Promise.all([
-    fetchWithTimeout('https://www.okx.com/api/v5/public/open-interest?instType=SWAP'),
-    fetchWithTimeout('https://www.okx.com/api/v5/market/tickers?instType=SWAP'),
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: routed through upstreamFetch (budget + typed ban).
+  const [oiData, tickersData] = await Promise.all([
+    upstreamFetch<{ data: Array<{ instId: string; oiCcy?: string }> }>(
+      VENUE_FETCH_CONFIGS.OKX, { url: 'https://www.okx.com/api/v5/public/open-interest?instType=SWAP' }),
+    upstreamFetch<{ data: Array<{ instId: string; last?: string; markPx?: string; volCcy24h?: string }> }>(
+      VENUE_FETCH_CONFIGS.OKX, { url: 'https://www.okx.com/api/v5/market/tickers?instType=SWAP' }),
   ]);
-  const oiData = (await oiRes.json()) as { data: Array<{ instId: string; oiCcy?: string }> };
-  const tickersData = (await tickersRes.json()) as {
-    data: Array<{ instId: string; last?: string; markPx?: string; volCcy24h?: string }>;
-  };
   const tickerMap = new Map(tickersData.data.map((t) => [t.instId, t]));
   const assets: ExchangeAsset[] = oiData.data
     .filter((o) => o.instId.endsWith('-USDT-SWAP'))
@@ -162,10 +163,10 @@ async function fetchOKX(limit: number): Promise<ExchangeAsset[]> {
  * `markPrice`, and `quoteVolume` (USDT-denominated; verified via probe matching `usdtVolume` byte-for-byte).
  */
 async function fetchBitget(limit: number): Promise<ExchangeAsset[]> {
-  const res = await fetchWithTimeout('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
-  const json = (await res.json()) as {
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: routed through upstreamFetch (budget + typed ban/body-code).
+  const json = await upstreamFetch<{
     data: Array<{ symbol: string; holdingAmount?: string; markPrice?: string; quoteVolume?: string }>;
-  };
+  }>(VENUE_FETCH_CONFIGS.BITGET, { url: 'https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES' });
   const assets: ExchangeAsset[] = json.data
     .filter((t) => t.symbol.endsWith('USDT'))
     .map((t) => {

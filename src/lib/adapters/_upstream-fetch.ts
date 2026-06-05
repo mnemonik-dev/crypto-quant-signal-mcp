@@ -24,12 +24,15 @@
  * banStatuses anywhere.
  */
 import { UpstreamRateLimitError } from '../errors.js';
-import { WeightBudgetSkipError, currentWeightClass } from '../upstream-weight-budget.js';
+import { WeightBudgetSkipError, currentWeightClass, type WeightClass } from '../upstream-weight-budget.js';
 import { getVenueBudget } from '../venue-budget-registry.js';
 
 export interface VenueFetchConfig {
-  /** Display name in thrown errors (must match the venue's existing UpstreamRateLimitError arg + "API" error text). */
+  /** Name in the typed UpstreamRateLimitError (the venue's existing rate-limit arg, e.g. 'Hyperliquid'). */
   venueName: string;
+  /** Name in the generic `<name> API <status>` / `max retries exceeded` errors. Defaults to venueName.
+   *  Only differs for HL (error text says 'HL' while the rate-limit venue is 'Hyperliquid'). */
+  apiErrorName?: string;
   /** Registry key for the budget lookup. */
   exchangeId: string;
   /** HTTP statuses treated as a typed rate-limit/ban (thrown immediately, no retry). Default [418, 429]. */
@@ -42,6 +45,9 @@ export interface VenueFetchConfig {
   timeoutMs: number;
   /** Transient (network/5xx) retry budget. */
   transientRetries: number;
+  /** Side-effect hook on each response BEFORE the ban check (e.g. Binance's
+   *  X-MBX-USED-WEIGHT forensic warn). Must not throw. */
+  onResponse?: (res: Response) => void;
 }
 
 export interface UpstreamRequest {
@@ -51,6 +57,8 @@ export interface UpstreamRequest {
   body?: string;
   /** Venue-computed weight (HL/Binance); request-count venues ignore it. */
   weightHint?: number;
+  /** Explicit weight class override (e.g. HL monitor liveness = 'interactive'); defaults to the ALS class. */
+  cls?: WeightClass;
 }
 
 function isBanBody(json: unknown, codes: Array<string | number>): boolean {
@@ -68,7 +76,7 @@ function isBanBody(json: unknown, codes: Array<string | number>): boolean {
 export async function upstreamFetch<T>(cfg: VenueFetchConfig, req: UpstreamRequest): Promise<T> {
   const entry = getVenueBudget(cfg.exchangeId);
   if (entry) {
-    await entry.budget.acquire(entry.weightFor(req), currentWeightClass());
+    await entry.budget.acquire(entry.weightFor(req), req.cls ?? currentWeightClass());
   }
   for (let attempt = 0; attempt <= cfg.transientRetries; attempt++) {
     const controller = new AbortController();
@@ -81,13 +89,14 @@ export async function upstreamFetch<T>(cfg: VenueFetchConfig, req: UpstreamReque
         signal: controller.signal,
       });
       clearTimeout(timer);
+      cfg.onResponse?.(res);
       if (cfg.banStatuses.includes(res.status)) {
         const ra = res.headers.get(cfg.retryAfterHeader ?? 'Retry-After');
         const seconds = ra ? parseInt(ra, 10) : null;
         throw new UpstreamRateLimitError(cfg.venueName, Number.isFinite(seconds) ? seconds : null);
       }
       if (!res.ok) {
-        throw new Error(`${cfg.venueName} API ${res.status}: ${res.statusText}`);
+        throw new Error(`${cfg.apiErrorName ?? cfg.venueName} API ${res.status}: ${res.statusText}`);
       }
       const json = (await res.json()) as T;
       if (cfg.banBodyCodes && isBanBody(json, cfg.banBodyCodes)) {
@@ -102,7 +111,7 @@ export async function upstreamFetch<T>(cfg: VenueFetchConfig, req: UpstreamReque
       await new Promise((r) => setTimeout(r, 500));
     }
   }
-  throw new Error(`${cfg.venueName} API: max retries exceeded`);
+  throw new Error(`${cfg.apiErrorName ?? cfg.venueName} API: max retries exceeded`);
 }
 
 // ── Per-venue configs (exported; reused by adapters + non-adapter callers) ──
@@ -113,8 +122,20 @@ export async function upstreamFetch<T>(cfg: VenueFetchConfig, req: UpstreamReque
 const T3 = 3000;
 const T4 = 4000;
 export const VENUE_FETCH_CONFIGS: Record<string, VenueFetchConfig> = {
-  HL: { venueName: 'Hyperliquid', exchangeId: 'HL', banStatuses: [429], timeoutMs: T3, transientRetries: 1 },
-  BINANCE: { venueName: 'Binance', exchangeId: 'BINANCE', banStatuses: [418, 429], timeoutMs: T3, transientRetries: 1 },
+  HL: { venueName: 'Hyperliquid', apiErrorName: 'HL', exchangeId: 'HL', banStatuses: [429], timeoutMs: T3, transientRetries: 1 },
+  BINANCE: {
+    venueName: 'Binance',
+    exchangeId: 'BINANCE',
+    banStatuses: [418, 429],
+    timeoutMs: T3,
+    transientRetries: 1,
+    onResponse: (res) => {
+      const usedWeight = res.headers.get('X-MBX-USED-WEIGHT-1m');
+      if (usedWeight && parseInt(usedWeight) > 1800) {
+        console.warn(`[Binance] Rate limit warning: ${usedWeight}/2400 weight used`);
+      }
+    },
+  },
   BYBIT: { venueName: 'Bybit', exchangeId: 'BYBIT', banStatuses: [403, 418, 429], timeoutMs: T3, transientRetries: 1 },
   OKX: { venueName: 'OKX', exchangeId: 'OKX', banStatuses: [418, 429], timeoutMs: T3, transientRetries: 1 },
   BITGET: { venueName: 'Bitget', exchangeId: 'BITGET', banStatuses: [418, 429], banBodyCodes: [45001, 40725, 40808], timeoutMs: T3, transientRetries: 1 },

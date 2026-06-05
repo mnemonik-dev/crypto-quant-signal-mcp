@@ -23,6 +23,7 @@ import type {
   DexType,
 } from '../../types.js';
 import { UpstreamRateLimitError } from '../errors.js';
+import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://api-contract.weex.com';
 const TIMEOUT_MS = 4000;
@@ -53,39 +54,14 @@ export function fromWeexSymbol(symbol: string): string {
 }
 
 async function weexGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<T> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const url = new URL(path, BASE_URL);
-      if (params) {
-        for (const [k, v] of Object.entries(params)) {
-          url.searchParams.set(k, String(v));
-        }
-      }
-      const res = await fetch(url.toString(), { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After');
-        const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        const waitMs = seconds ? seconds * 1000 : 1000;
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, waitMs));
-          continue;
-        }
-        throw new UpstreamRateLimitError('WEEX', Number.isFinite(seconds) ? seconds : null);
-      }
-      if (!res.ok) {
-        throw new Error(`WEEX API ${res.status}: ${res.statusText}`);
-      }
-      return (await res.json()) as T;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 500));
+  // OPS-ADAPTER-RATELIMIT-UNIFY-W1: URL-build unchanged; fetch/retry/ban via upstreamFetch.
+  const url = new URL(path, BASE_URL);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, String(v));
     }
   }
-  throw new Error('WEEX API: max retries exceeded');
+  return upstreamFetch<T>({ ...VENUE_FETCH_CONFIGS.WEEX, transientRetries: retries }, { url: url.toString() });
 }
 
 type WeexKlineRow = [string, string, string, string, string, string, string];
