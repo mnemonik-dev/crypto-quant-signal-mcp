@@ -80,19 +80,32 @@ const CIRCUIT_OPEN_DURATION_MS = 60 * 60_000;   // 1 hour
 const REFRESH_HISTORY_SIZE = 3;
 let refreshDurations: number[] = [];            // FIFO, max length REFRESH_HISTORY_SIZE
 let circuitOpenUntil: number = 0;
+// OPS-BINANCE-RATELIMITER-W1: dedup the slow-grid TG alert. It was un-cooled →
+// during the Binance-418 incident the breaker re-tripped across repeated container
+// restarts (each restart resets module state) → alert spam. Cap to ≤1 alert per
+// cooldown window per process (defense-in-depth; the Binance budget + 418→fast-throw
+// remove the slow refreshes that trip this in the first place).
+let lastSlowGridAlertAt: number = 0;
+const SLOW_GRID_ALERT_COOLDOWN_MS = CIRCUIT_OPEN_DURATION_MS; // ≥1h between alerts
 
 // ── Module-private state ──
 let cachedSnapshot: GridCell[] | null = null;
 let cachedAt: number = 0;
 let inflight: Promise<void> | null = null;
 
-// v1.10.2: HL-429 self-DoS guard.
-// Every grid cell scores via HL (`exchange: 'HL'` is hardcoded at line ~95).
-// When HL upstream rate-limits us, the warmer's 50s tick keeps hammering 24
-// cells per cycle, prolonging the rate-limit window. Backoff: when ≥50% of a
-// refresh cycle's cells fail with UpstreamRateLimitError, pause the warmer
-// for an exponentially-growing window (5min → 10 → 20 → 40 → cap 60min).
-// First successful refresh resets the backoff counter to 0.
+// v1.10.2: upstream-rate-limit self-DoS guard.
+// OPS-BINANCE-RATELIMITER-W1 (2026-06-05) correction: grid cells actually score
+// via the get_trade_call DEFAULT exchange — **BINANCE** (get-trade-call.ts:116) —
+// NOT HL. The `exchange: 'HL'` label on each GridCell below is a PUBLIC-CONTRACT
+// field (surfaces in closest_tradeable/try_next; asserted in tests) and is a
+// known scoring-vs-label discrepancy flagged for a separate sign-off — NOT
+// changed here. When the upstream rate-limits us, the warmer's 50s tick keeps
+// hammering cells, prolonging the window. Backoff: when ≥50% of a refresh cycle's
+// cells fail with UpstreamRateLimitError, pause the warmer for an exponentially-
+// growing window (5min → 10 → 20 → 40 → cap 60min); first clean refresh resets it.
+// As of W1, Binance 418/429 throw UpstreamRateLimitError (were generic + retried,
+// so this backoff never tripped on Binance bans), AND the per-IP `binanceWeightBudget`
+// caps aggregate load so the 418 ban rarely happens in the first place.
 const RATE_LIMIT_BACKOFF_BASE_MS = 5 * 60 * 1000;   // 5 min
 const RATE_LIMIT_BACKOFF_MAX_MS  = 60 * 60 * 1000;  // 60 min cap
 const RATE_LIMIT_FAILURE_THRESHOLD = 0.5;           // ≥50% of cells 429-ing → trip
@@ -112,6 +125,7 @@ export function _resetRateLimitBackoff(): void {
 export function _resetCircuitBreaker(): void {
   refreshDurations = [];
   circuitOpenUntil = 0;
+  lastSlowGridAlertAt = 0;
 }
 
 /** SHADOW-SEED-W1 test seam — push synthetic refresh durations to drive the breaker. */
@@ -247,12 +261,16 @@ async function refreshGrid(): Promise<void> {
         `last ${REFRESH_HISTORY_SIZE} refreshes [${measured}] all > ${SLOW_REFRESH_THRESHOLD_MS / 1000}s. ` +
         `Falling back to ${FALLBACK_TIMEFRAMES.length}-timeframe grid (${FALLBACK_TIMEFRAMES.join(',')}) for ${CIRCUIT_OPEN_DURATION_MS / 60_000}min.`
       );
-      sendAlert(
-        `Cross-asset grid slow-grid circuit breaker TRIPPED.\n` +
-        `Last ${REFRESH_HISTORY_SIZE} refreshes: ${measured}\n` +
-        `Falling back to ${FALLBACK_TIMEFRAMES.join(',')} for ${CIRCUIT_OPEN_DURATION_MS / 60_000}min.`,
-        'warning',
-      ).catch(() => { /* swallow */ });
+      // OPS-BINANCE-RATELIMITER-W1: cooldown-gated so it can't spam.
+      if (Date.now() - lastSlowGridAlertAt > SLOW_GRID_ALERT_COOLDOWN_MS) {
+        lastSlowGridAlertAt = Date.now();
+        sendAlert(
+          `Cross-asset grid slow-grid circuit breaker TRIPPED.\n` +
+          `Last ${REFRESH_HISTORY_SIZE} refreshes: ${measured}\n` +
+          `Falling back to ${FALLBACK_TIMEFRAMES.join(',')} for ${CIRCUIT_OPEN_DURATION_MS / 60_000}min.`,
+          'warning',
+        ).catch(() => { /* swallow */ });
+      }
       // Reset history so post-fallback re-evaluation starts fresh.
       refreshDurations = [];
     }

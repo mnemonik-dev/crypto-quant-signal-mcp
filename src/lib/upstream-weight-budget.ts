@@ -420,3 +420,32 @@ export const hlWeightBudget = new WeightBudget({
   interactiveReserve: HL_VITEST ? 0 : HL_INTERACTIVE_RESERVE,
   log: HL_VITEST ? () => {} : undefined,
 });
+
+// ── Binance: consumer #2 (OPS-BINANCE-RATELIMITER-W1, 2026-06-05) ──
+// Same cross-process token-bucket as HL. Binance USD-M Futures (fapi) imposes a
+// **2400 weight/min per-IP** limit (the adapter already reads `X-MBX-USED-WEIGHT-1m`
+// and warns at >1800). The 42-cell cross-asset-grid warmer + default-exchange
+// `get_trade_call` + Binance seed crons all hit fapi from the one Hetzner IP;
+// during the 12-venue shadow ramp the AGGREGATE burst exceeded 2400 → HTTP 418
+// IP-ban → grid slow-grid breaker spam. This budget caps the aggregate at 2000
+// (400 under 2400 for header-rolling-window drift) and reserves 800 for
+// interactive (grid + live user calls) so seed/backfill batch load can't starve
+// them. // TODO: revisit constants with a week of telemetry (target 2026-06-19).
+// Third consumer (Bybit/OKX/Bitget) triggers extraction to a shared registry
+// per the CLAUDE.md threshold rule.
+export const BINANCE_WEIGHT_CEILING = 2000;
+export const BINANCE_INTERACTIVE_RESERVE = 800;
+
+const BINANCE_VITEST = process.env.VITEST === 'true';
+const binanceLedgerSuffix = BINANCE_VITEST ? `.test-${process.pid}` : '';
+
+export const binanceWeightBudget = new WeightBudget({
+  venue: 'Binance',
+  ledgerPath:
+    process.env.BINANCE_WEIGHT_LEDGER ?? `/tmp/algovault-binance-weight${binanceLedgerSuffix}.json`,
+  lockPath:
+    process.env.BINANCE_WEIGHT_LOCK ?? `/tmp/algovault-binance-weight${binanceLedgerSuffix}.lock`,
+  ceilingPerMin: BINANCE_VITEST ? 1_000_000_000 : BINANCE_WEIGHT_CEILING,
+  interactiveReserve: BINANCE_VITEST ? 0 : BINANCE_INTERACTIVE_RESERVE,
+  log: BINANCE_VITEST ? () => {} : undefined,
+});

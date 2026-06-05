@@ -12,10 +12,36 @@ import type {
   DexType,
 } from '../../types.js';
 import { UpstreamRateLimitError } from '../errors.js';
+import { binanceWeightBudget, currentWeightClass } from '../upstream-weight-budget.js';
 
 const BASE_URL = 'https://fapi.binance.com';
 const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 1;
+
+// ── OPS-BINANCE-RATELIMITER-W1: fapi request → documented IP weight ──
+// Binance USD-M Futures REST weights (per binance-docs fapi/v1, re-verified
+// 2026-06-05). Single-symbol info requests are weight 1; the all-symbol
+// (no `symbol` param) variants are the expensive ones. klines weight scales
+// with `limit` (≤100→1, ≤500→2, ≤1000→5, else 10). Unknown paths default to a
+// conservative 5 — never under-count (under-counting lets the IP burst past
+// 2400 → 418 ban, the exact failure this budget prevents).
+export function weightForBinance(path: string, params?: Record<string, string | number>): number {
+  const hasSymbol = params?.symbol !== undefined;
+  if (path.includes('/ticker/24hr')) return hasSymbol ? 1 : 40;
+  if (path.includes('/premiumIndex')) return hasSymbol ? 1 : 10;
+  if (path.includes('/ticker/price')) return hasSymbol ? 1 : 2;
+  if (path.includes('/klines')) {
+    const limit = Number(params?.limit ?? 100);
+    if (limit <= 100) return 1;
+    if (limit <= 500) return 2;
+    if (limit <= 1000) return 5;
+    return 10;
+  }
+  if (path.includes('/openInterest')) return 1;
+  if (path.includes('/fundingRate')) return 1;
+  if (path.includes('/ping') || path.includes('/time')) return 1;
+  return 5; // conservative default — never under-count
+}
 
 // OPS-BINANCE-POLITE-DELAY-W1 (2026-05-22): per-coin getAssetContext used to
 // issue 3 separate per-symbol calls (premiumIndex@symbol + openInterest@symbol
@@ -181,6 +207,12 @@ export function _resetBinanceAdapterCaches(): void {
 }
 
 async function binGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<T> {
+  // OPS-BINANCE-RATELIMITER-W1: reserve this request's weight against the shared
+  // cross-process Binance budget BEFORE hitting fapi. interactive callers (grid,
+  // live get_trade_call) throw UpstreamRateLimitError over ceiling; batch callers
+  // (seed/backfill, via runAsBatch) wait then SKIP. Prevents the aggregate per-IP
+  // burst that triggers Binance's 418 ban.
+  await binanceWeightBudget.acquire(weightForBinance(path, params), currentWeightClass());
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -202,16 +234,15 @@ async function binGet<T>(path: string, params?: Record<string, string | number>,
         console.warn(`[Binance] Rate limit warning: ${usedWeight}/2400 weight used`);
       }
 
-      // Handle rate limiting (v1.10.2: typed error so MCP handler can surface
-      // exchange + retry_after structured response)
-      if (res.status === 429) {
+      // OPS-BINANCE-RATELIMITER-W1: 418 (IP ban) AND 429 → typed
+      // UpstreamRateLimitError, thrown IMMEDIATELY (no retry). Re-hammering a 418
+      // ban extends it; and the prior generic-Error-for-418 path both retried the
+      // ban AND never tripped the cross-asset-grid's UpstreamRateLimitError-only
+      // backoff (so the warmer kept self-DoS-ing). The weight budget makes these
+      // rare now; this is the backstop + the signal the grid backoff needs.
+      if (res.status === 418 || res.status === 429) {
         const retryAfter = res.headers.get('Retry-After');
         const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
-        const waitMs = seconds ? seconds * 1000 : 1000;
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, waitMs));
-          continue;
-        }
         throw new UpstreamRateLimitError('Binance', Number.isFinite(seconds) ? seconds : null);
       }
 
@@ -221,6 +252,10 @@ async function binGet<T>(path: string, params?: Record<string, string | number>,
       return (await res.json()) as T;
     } catch (err) {
       clearTimeout(timer);
+      // Don't retry rate-limit errors (418/429 → UpstreamRateLimitError, or a
+      // batch WeightBudgetSkipError) — surface immediately so the caller falls
+      // back / backs off instead of re-hammering the upstream.
+      if (err instanceof UpstreamRateLimitError) throw err;
       if (attempt === retries) throw err;
       await new Promise(r => setTimeout(r, 500));
     }
