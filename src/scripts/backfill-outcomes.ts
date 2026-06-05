@@ -224,7 +224,12 @@ async function main() {
           const exchangeId = (sig.exchange as ExchangeId) || 'HL';
           const adapter = getAdapter(exchangeId);
           const dex = exchangeId === 'HL' ? getDexForCoin(coin) : undefined;
-          const candles = await adapter.getCandles(coin, timeframe, signalTimeMs, dex);
+          // OPS-HL-SEED-LOAD-W1: bound the fetch to the eval window (+2 buffer).
+          // We only consume evalCount candles after signalTime (computePFEMAE
+          // filters time>=signalTime then slices evalCount) — fetching to-now
+          // pulled ~5000 candles (HL weight ~104) for ~8 needed. Outcome unchanged.
+          const fetchEndTime = signalTimeMs + (evalCount + 2) * candleMs;
+          const candles = await adapter.getCandles(coin, timeframe, signalTimeMs, dex, fetchEndTime);
 
           // Filter candles: only those AFTER signal creation
           const relevantCandles = candles.filter(c => c.time >= signalTimeMs);

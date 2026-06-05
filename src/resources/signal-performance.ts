@@ -39,7 +39,11 @@ export async function runBackfill(): Promise<void> {
         if (Date.now() < endTimeNeeded) continue; // not ready yet
 
         const adapter = getAdapter((sig.exchange as ExchangeId) || 'HL');
-        const candles = await adapter.getCandles(sig.coin, sig.timeframe, signalTimeMs);
+        // OPS-HL-SEED-LOAD-W1: bound the HL candle fetch to the eval window (+2
+        // buffer) instead of [signalTime, now] (~5000 candles, HL weight ~104).
+        // We only consume evalCount candles below; outcome math unchanged.
+        const fetchEndTime = signalTimeMs + (evalCount + 2) * candleMs;
+        const candles = await adapter.getCandles(sig.coin, sig.timeframe, signalTimeMs, undefined, fetchEndTime);
         const relevant = candles.filter(c => c.time >= signalTimeMs);
         if (relevant.length < 1) continue;
 

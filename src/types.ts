@@ -82,7 +82,11 @@ export interface FundingData {
 }
 
 export interface ExchangeAdapter {
-  getCandles(coin: string, interval: string, startTime: number, dex?: DexType): Promise<Candle[]>;
+  // OPS-HL-SEED-LOAD-W1: optional trailing `endTime` bounds the fetch window
+  // (outcome backfill needs only [signalTime, signalTime+(evalCount+buffer)·candleMs],
+  // not [startTime, now]). Trailing-optional → the 16 narrower adapter impls
+  // remain assignable with no signature change; only the HL adapter honors it.
+  getCandles(coin: string, interval: string, startTime: number, dex?: DexType, endTime?: number): Promise<Candle[]>;
   getAssetContext(coin: string, dex?: DexType): Promise<AssetContext>;
   getPredictedFundings(): Promise<FundingData[]>;
   getFundingHistory(coin: string, startTime: number): Promise<{ time: number; fundingRate: number }[]>;

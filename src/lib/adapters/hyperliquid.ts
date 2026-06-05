@@ -72,10 +72,17 @@ const INTERVAL_MS: Record<string, number> = {
   '1M': 2_592_000_000,
 };
 
-function expectedCandleItems(interval: string, startTime: number): number | undefined {
+export function expectedCandleItems(
+  interval: string,
+  startTime: number,
+  endTime?: number,
+): number | undefined {
   const ms = INTERVAL_MS[interval];
   if (!ms) return undefined; // unknown interval → weightFor falls back to its conservative default
-  return Math.max(1, Math.ceil((Date.now() - startTime) / ms));
+  // OPS-HL-SEED-LOAD-W1: bound by endTime when given (outcome backfill window),
+  // else assume to-now. Matches HL's "+1 weight per 60 items RETURNED".
+  const upper = endTime ?? Date.now();
+  return Math.max(1, Math.ceil((upper - startTime) / ms));
 }
 
 /**
@@ -199,12 +206,18 @@ export class HyperliquidAdapter implements ExchangeAdapter {
     return 'Hyperliquid';
   }
 
-  async getCandles(coin: string, interval: string, startTime: number, dex: DexType = 'standard'): Promise<Candle[]> {
+  async getCandles(coin: string, interval: string, startTime: number, dex: DexType = 'standard', endTime?: number): Promise<Candle[]> {
     // xyz perps require the xyz: prefix for candle fetches
     const apiCoin = dex === 'xyz' ? `xyz:${coin}` : coin;
+    // OPS-HL-SEED-LOAD-W1: bound the fetch with endTime when given. Outcome
+    // backfill needs only [signalTime, signalTime+(evalCount+buffer)·candleMs];
+    // without endTime HL returns [startTime, now] (~5000 candles → weight ~104).
+    // HL candleSnapshot honors req.endTime (live-verified: 11 candles bounded vs 101 to-now).
+    const req: Record<string, unknown> = { coin: apiCoin, interval, startTime };
+    if (endTime !== undefined) req.endTime = endTime;
     const raw = await hlInfoPost<HLCandle[]>(
-      { type: 'candleSnapshot', req: { coin: apiCoin, interval, startTime } },
-      { weightHint: expectedCandleItems(interval, startTime) },
+      { type: 'candleSnapshot', req },
+      { weightHint: expectedCandleItems(interval, startTime, endTime) },
     );
     return (raw || []).map(c => ({
       open: parseFloat(c.o),
