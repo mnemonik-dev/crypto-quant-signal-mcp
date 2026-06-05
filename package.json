@@ -10,7 +10,7 @@
     "url": "https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp/issues"
   },
   "mcpName": "io.github.AlgoVaultFi/crypto-quant-signal-mcp",
-  "description": "The Brain Layer for AI Trading Agents — composite quant calls across 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget), cross-venue arb, regime-aware classification, and a 20-skill catalog via MCP.",
+  "description": "The Brain Layer for AI Trading Agents — one MCP call returns a composite trade verdict (direction, confidence, regime) across 5 perp venues. On-chain Merkle-verified track record.",
   "main": "dist/index.js",
   "module": "src/index.ts",
   "bin": {
