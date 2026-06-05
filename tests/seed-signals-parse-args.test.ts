@@ -123,3 +123,59 @@ describe('seed-signals parseArgs — --exchange-list flag (OPS-3M-EXPAND-W2-PART
     expect(exitSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('seed-signals parseArgs — --concurrency flag (OPS-SEED-ORCHESTRATOR-W1)', () => {
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`__process_exit__:${code ?? 0}`);
+    }) as never);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('case 11 — defaults to concurrency 1 when absent (byte-equivalent serial loop)', () => {
+    const r = parseArgs(['--timeframe', '5m']);
+    expect(r.concurrency).toBe(1);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('case 12 — --concurrency 3 parses to 3', () => {
+    const r = parseArgs(['--timeframe', '5m', '--concurrency', '3']);
+    expect(r.concurrency).toBe(3);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('case 13 — boundary values 1 and 8 are accepted', () => {
+    expect(parseArgs(['--concurrency', '1']).concurrency).toBe(1);
+    expect(parseArgs(['--concurrency', '8']).concurrency).toBe(8);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('case 14 — --concurrency 9 (>8) errors with "Invalid --concurrency" + exit(1)', () => {
+    expect(() => parseArgs(['--concurrency', '9'])).toThrow(/__process_exit__:1/);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid --concurrency'),
+    );
+  });
+
+  it('case 15 — --concurrency 0 (<1) errors with exit(1)', () => {
+    expect(() => parseArgs(['--concurrency', '0'])).toThrow(/__process_exit__:1/);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid --concurrency'),
+    );
+  });
+
+  it('case 16 — non-numeric --concurrency errors with exit(1)', () => {
+    expect(() => parseArgs(['--concurrency', 'lots'])).toThrow(/__process_exit__:1/);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid --concurrency'),
+    );
+  });
+});

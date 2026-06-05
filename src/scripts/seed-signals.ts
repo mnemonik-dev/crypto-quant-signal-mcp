@@ -191,7 +191,7 @@ export const ALL_EXCHANGE_IDS: ExchangeId[] = [
  *              Exposed for testability (vitest passes synthetic argv to
  *              `tests/seed-signals-parse-args.test.ts`).
  */
-export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number; statusFilter: VenueStatus | 'all' | null; explicitExchanges: boolean } {
+export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number; statusFilter: VenueStatus | 'all' | null; explicitExchanges: boolean; concurrency: number } {
   const args = argv;
 
   let timeframe = '15m';
@@ -303,7 +303,22 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: 
   }
   const explicitExchanges = exIdx !== -1 || exListIdx !== -1;
 
-  return { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges };
+  // OPS-SEED-ORCHESTRATOR-W1/CH1 R1.1: --concurrency N (integer 1..8, default 1).
+  // Default 1 keeps the per-venue loop strictly serial (byte-equivalent to the
+  // pre-wave behavior); the per-TF orchestrator cron lines pass --concurrency 2
+  // to bound in-flight venues without spawning one process per venue.
+  let concurrency = 1;
+  const concIdx = args.indexOf('--concurrency');
+  if (concIdx !== -1 && args[concIdx + 1]) {
+    const n = parseInt(args[concIdx + 1]);
+    if (isNaN(n) || n < 1 || n > 8) {
+      console.error(`Invalid --concurrency value: ${args[concIdx + 1]}. Must be an integer 1-8.`);
+      process.exit(1);
+    }
+    concurrency = n;
+  }
+
+  return { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges, concurrency };
 }
 
 /**
@@ -798,15 +813,160 @@ async function seedExchange(
   return { seeded, skipped, errors };
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// OPS-SEED-ORCHESTRATOR-W1 / CH1 — bounded per-timeframe seed orchestration.
+// The durable generator fix for the per-venue×TF process explosion: ONE process
+// per timeframe runs N venues through a p-limit(concurrency) fan-out over a
+// single 2-conn pool, so seed-process count and the Postgres connection ceiling
+// become invariant to venue count (6→17 promotion = a `venues.status` flip,
+// zero cron edits, zero connection growth). Default concurrency 1 keeps the
+// loop byte-equivalent to the prior serial main().
+// ════════════════════════════════════════════════════════════════════════
+
+/** Per-venue seed outcome (reduced after fan-out; powers the R1.6 summary line). */
+export interface VenueSeedResult {
+  venueId: ExchangeId;
+  seeded: number;
+  skipped: number;
+  errors: number;
+  durationMs: number;
+  /** true ⇔ a throw was caught inside runVenueSeed (NOT an empty universe). */
+  failed: boolean;
+}
+
+/** Nominal cadence per timeframe (seconds) — pure map; powers overrun detection. */
+export const TF_CADENCE_S: Record<string, number> = {
+  '1m': 60, '3m': 180, '5m': 300, '15m': 900, '30m': 1800,
+  '1h': 3600, '2h': 7200, '4h': 14400, '8h': 28800, '12h': 43200, '1d': 86400,
+};
+
+/** R1.6 — a fire "overruns" when it eats >0.8× of its cadence (strictly greater). */
+export function computeOverrun(timeframe: string, durationS: number): boolean {
+  const cadenceS = TF_CADENCE_S[timeframe] ?? 0;
+  return cadenceS > 0 && durationS > 0.8 * cadenceS;
+}
+
+/** R1.6 — the greppable [seed-orchestrator] summary line (monitor + 48h-gate contract). */
+export function formatOrchestratorSummary(s: {
+  timeframe: string;
+  venues: number;
+  concurrency: number;
+  seeded: number;
+  skipped: number;
+  errors: number;
+  failedVenues: string[];
+  durationS: number;
+  overrun: boolean;
+}): string {
+  return (
+    `[seed-orchestrator] tf=${s.timeframe} venues=${s.venues} concurrency=${s.concurrency} ` +
+    `seeded=${s.seeded} skipped=${s.skipped} errors=${s.errors} ` +
+    `failed_venues=${s.failedVenues.length ? s.failedVenues.join(',') : 'none'} ` +
+    `duration_s=${s.durationS.toFixed(1)} overrun=${s.overrun}`
+  );
+}
+
+/**
+ * R1.4 — deterministic venue rotation keyed by timeframe index. Overlapping TF
+ * processes start on different venues so they don't all hit the same venue at
+ * second 0 (cross-process burst spread). Pure + order-only: the result is a
+ * permutation of the input (coverage identical), so a single-venue list rotates
+ * to itself and a serial run stays byte-equivalent.
+ */
+export function rotateVenues(venueIds: ExchangeId[], timeframe: string): ExchangeId[] {
+  const n = venueIds.length;
+  if (n === 0) return [];
+  const idx = VALID_TIMEFRAMES.indexOf(timeframe); // -1 for unknown TF → normalized below
+  const offset = (((idx % n) + n) % n);
+  return [...venueIds.slice(offset), ...venueIds.slice(0, offset)];
+}
+
+/**
+ * R1.2 — seed ONE venue, fail-soft. Encapsulates the per-venue block of the
+ * prior main() loop (universe resolve → empty-skip → bulk-warm funding →
+ * seedExchange → totals). ANY throw is caught, logged, and returned as
+ * {failed:true}; this function NEVER rejects, preserving the continue-on-
+ * venue-failure semantics. Log lines are byte-identical to the prior loop.
+ */
+export async function runVenueSeed(
+  venueId: ExchangeId,
+  opts: { timeframe: string; top: number; idempotencyWindow: number; restrictedCoins: string[] | null },
+): Promise<VenueSeedResult> {
+  const { timeframe, top, idempotencyWindow, restrictedCoins } = opts;
+  const startedAt = Date.now();
+  try {
+    let coins: string[];
+    if (restrictedCoins) {
+      coins = restrictedCoins;
+    } else {
+      try {
+        coins = await UNIVERSE_FETCHERS[venueId](top);
+      } catch (err) {
+        console.error(`[${ts()}] [${venueId}] universe fetch failed: ${err instanceof Error ? err.message : err} — skipping venue.`);
+        return { venueId, seeded: 0, skipped: 0, errors: 0, durationMs: Date.now() - startedAt, failed: true };
+      }
+    }
+    if (!coins || coins.length === 0) {
+      console.warn(`[${ts()}] [${venueId}] empty universe — skipping.`);
+      return { venueId, seeded: 0, skipped: 0, errors: 0, durationMs: Date.now() - startedAt, failed: false };
+    }
+
+    console.log(`[${ts()}] Starting ${timeframe} ${venueId} signal seed for ${coins.length} assets${restrictedCoins ? ` (restricted)` : top ? ` (top ${top})` : ''} (delay: ${DELAY_PER_EXCHANGE[venueId]}ms)...`);
+    // OPTIMIZE-FUNDING-CACHE-CRON-W1: bulk-warm cache before per-coin loop
+    // (fail-soft → per-coin fallback inside seedExchange).
+    try { await bulkWarmFundingCache(coins); }
+    catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
+    const result = await seedExchange(venueId, coins, timeframe, idempotencyWindow);
+    console.log(`[${ts()}] ${venueId} seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
+    return { venueId, seeded: result.seeded, skipped: result.skipped, errors: result.errors, durationMs: Date.now() - startedAt, failed: false };
+  } catch (err) {
+    // R1.2 fail-soft safety net: ANY unexpected throw → failed:true, never reject.
+    console.error(`[${ts()}] [${venueId}] seed failed unexpectedly: ${err instanceof Error ? err.message : err}`);
+    return { venueId, seeded: 0, skipped: 0, errors: 0, durationMs: Date.now() - startedAt, failed: true };
+  }
+}
+
+/**
+ * R1.3 — run venues through a bounded p-limit(limit) fan-out. Pure: no shared
+ * mutable counters (callers reduce the returned array after all settle). A
+ * rogue runner that rejects is contained so it never loses the other venues
+ * (the production runner, runVenueSeed, already never rejects). The caller
+ * invokes closeDb() only AFTER this resolves (single-pool drain-on-close).
+ */
+export async function runVenuesWithConcurrency(
+  venueIds: ExchangeId[],
+  limit: number,
+  runner: (venueId: ExchangeId) => Promise<VenueSeedResult>,
+): Promise<VenueSeedResult[]> {
+  // p-limit@3.1.0 is CommonJS (deliberate, load-bearing pin — package.json).
+  // `require` matches the require.main guard at the bottom of this file and
+  // sidesteps ESM-default-interop ambiguity in the CJS (module=Node16) compile.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pLimit = require('p-limit') as (concurrency: number) => <T>(fn: () => Promise<T>) => Promise<T>;
+  const lim = pLimit(limit);
+  return Promise.all(
+    venueIds.map((venueId) =>
+      lim(async (): Promise<VenueSeedResult> => {
+        const startedAt = Date.now();
+        try {
+          return await runner(venueId);
+        } catch (err) {
+          console.error(`[${ts()}] [${venueId}] runner rejected unexpectedly: ${err instanceof Error ? err.message : err}`);
+          return { venueId, seeded: 0, skipped: 0, errors: 0, durationMs: Date.now() - startedAt, failed: true };
+        }
+      }),
+    ),
+  );
+}
+
 async function main() {
   // OPS-HL-RATELIMITER-W2: run the whole seed in `batch` weight class so every HL
   // call (universe discovery + per-coin candles/ctx) waits behind the shared
   // weight budget and yields the interactive reserve to live users.
   return runAsBatch(async () => {
-  const { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges } = parseArgs();
+  const fireStartedAt = Date.now();
+  const { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges, concurrency } = parseArgs();
   const idempotencyWindow = IDEMPOTENCY_WINDOWS[timeframe] || 50 * 60;
-
-  const totals = { seeded: 0, skipped: 0, errors: 0 };
 
   // SHADOW-SEED-W1: when --restricted-universe N is set (used by 1m + 3m
   // shadow-mode crons), we bypass per-exchange OI-ranked universe fetches
@@ -842,44 +1002,43 @@ async function main() {
     console.log(`[${ts()}] Venue-table-driven selection (${statusFilter ?? 'promoted+shadow'}): [${venuesToSeed.join(', ')}]`);
   }
 
-  // Uniform per-venue seed loop (replaces the 5 hardcoded blocks). ONE venue at
-  // a time → peak CPU is bounded to a single venue's seedExchange (this serial
-  // execution IS the staggering primitive for the 2-vCPU box). Fail-soft: a
-  // venue whose universe fetch throws or returns [] is skipped without aborting
-  // the run or starving the other venues. HL's warmTierCaches + Top-20-TradFi
-  // limiting live inside UNIVERSE_FETCHERS.HL, so --exchange HL stays byte-
-  // equivalent. The --restricted-universe path is preserved (shared coin list).
-  for (const venueId of venuesToSeed) {
-    let coins: string[];
-    if (restrictedCoins) {
-      coins = restrictedCoins;
-    } else {
-      try {
-        coins = await UNIVERSE_FETCHERS[venueId](top);
-      } catch (err) {
-        console.error(`[${ts()}] [${venueId}] universe fetch failed: ${err instanceof Error ? err.message : err} — skipping venue.`);
-        continue;
-      }
-    }
-    if (!coins || coins.length === 0) {
-      console.warn(`[${ts()}] [${venueId}] empty universe — skipping.`);
-      continue;
-    }
-
-    console.log(`[${ts()}] Starting ${timeframe} ${venueId} signal seed for ${coins.length} assets${restrictedCoins ? ` (restricted)` : top ? ` (top ${top})` : ''} (delay: ${DELAY_PER_EXCHANGE[venueId]}ms)...`);
-    // OPTIMIZE-FUNDING-CACHE-CRON-W1: bulk-warm cache before per-coin loop
-    // (fail-soft → per-coin fallback inside seedExchange).
-    try { await bulkWarmFundingCache(coins); }
-    catch (e) { console.debug('[funding-cache] bulk-warm failed, falling back to per-coin:', e instanceof Error ? e.message : e); }
-    const result = await seedExchange(venueId, coins, timeframe, idempotencyWindow);
-    console.log(`[${ts()}] ${venueId} seed complete: ${result.seeded} seeded, ${result.skipped} skipped, ${result.errors} errors.`);
-    totals.seeded += result.seeded;
-    totals.skipped += result.skipped;
-    totals.errors += result.errors;
-  }
+  // OPS-SEED-ORCHESTRATOR-W1/CH1 — bounded-concurrency venue fan-out (the
+  // generator fix replacing the 5 hardcoded blocks → uniform per-venue loop).
+  // rotateVenues spreads each TF's start venue (cross-process burst spread);
+  // runVenuesWithConcurrency caps in-flight venues at --concurrency (default
+  // 1 = the prior serial loop, byte-equivalent — a single-venue legacy cron
+  // rotates to itself and runs serially). HL's warmTierCaches + Top-20-TradFi
+  // limiting live inside UNIVERSE_FETCHERS.HL and the --restricted-universe
+  // shared-coin path is preserved inside runVenueSeed; fail-soft per venue.
+  // Single pool: closeDb() runs only AFTER every venue settles (drain-on-close).
+  const orderedVenues = rotateVenues(venuesToSeed, timeframe);
+  const results = await runVenuesWithConcurrency(orderedVenues, concurrency, (venueId) =>
+    runVenueSeed(venueId, { timeframe, top, idempotencyWindow, restrictedCoins }),
+  );
+  const totals = results.reduce(
+    (acc, r) => ({ seeded: acc.seeded + r.seeded, skipped: acc.skipped + r.skipped, errors: acc.errors + r.errors }),
+    { seeded: 0, skipped: 0, errors: 0 },
+  );
+  const failedVenues = results.filter((r) => r.failed).map((r) => r.venueId);
 
   closeDb();
   console.log(`[${ts()}] All exchanges done [${timeframe}]: ${totals.seeded} seeded, ${totals.skipped} skipped, ${totals.errors} errors.`);
+
+  // OPS-SEED-ORCHESTRATOR-W1/CH1 R1.6 — structured summary line (greppable
+  // contract for the monitor freshness check + 48h gate) + overrun WARN.
+  // Log-only, silent-recovery: an overrun never alerts — the next idempotent
+  // fire self-heals.
+  const durationS = (Date.now() - fireStartedAt) / 1000;
+  const overrun = computeOverrun(timeframe, durationS);
+  console.log(formatOrchestratorSummary({
+    timeframe, venues: orderedVenues.length, concurrency,
+    seeded: totals.seeded, skipped: totals.skipped, errors: totals.errors,
+    failedVenues, durationS, overrun,
+  }));
+  if (overrun) {
+    const cadenceS = TF_CADENCE_S[timeframe] ?? 0;
+    console.warn(`[seed-orchestrator] WARN overrun tf=${timeframe} duration_s=${durationS.toFixed(1)} cadence_s=${cadenceS} threshold_s=${(0.8 * cadenceS).toFixed(0)} — fire exceeded 0.8× cadence; next idempotent fire self-heals.`);
+  }
   });
 }
 
