@@ -102,11 +102,15 @@ describe('MCP_USAGE_HTML (live export, post-C2)', () => {
     expect(MCP_USAGE_HTML).toContain('id="connect-exchange-kit"');
   });
 
-  it('contains 4 exchange-kit display names in the new H3 block', () => {
+  it('contains 7 exchange-kit display names in the new H3 block', () => {
     expect(MCP_USAGE_HTML).toContain('Binance');
     expect(MCP_USAGE_HTML).toContain('OKX');
     expect(MCP_USAGE_HTML).toContain('Bybit');
     expect(MCP_USAGE_HTML).toContain('Bitget');
+    // +3 crypto agentic-trading kits
+    expect(MCP_USAGE_HTML).toContain('Gemini');
+    expect(MCP_USAGE_HTML).toContain('Kraken');
+    expect(MCP_USAGE_HTML).toContain('Alpaca');
   });
 
   it('H2 intro mentions exchange kits (3-path framing)', () => {

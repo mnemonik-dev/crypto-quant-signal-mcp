@@ -986,7 +986,9 @@ async function startHttp() {
   // tsconfig targets CommonJS via Node16, so __dirname is available natively
   // and `import.meta.url` is forbidden. Read each mirror once at startup
   // into INTEGRATION_HTML so per-request overhead is a Map.get(), no fs hit.
-  const INTEGRATION_EXCHANGES = ['binance', 'okx', 'bybit', 'bitget'] as const;
+  // BROKER-PAIRING-CRYPTO-W1 (2026-06-05): +3 crypto agentic-trading kit pages
+  // (gemini/kraken/alpaca). Allow-list gates /integrations/:slug → 404 otherwise.
+  const INTEGRATION_EXCHANGES = ['binance', 'okx', 'bybit', 'bitget', 'gemini', 'kraken', 'alpaca'] as const;
   const INTEGRATION_FRAMEWORKS = ['langchain', 'llamaindex', 'maf', 'crewai'] as const;
   // INTEGRATIONS-FULL-STACK-W1 C4 (2026-05-19): 5 MCP-client landing pages
   // (Plain HTTP/curl stays inline-only per Q-PLAIN-HTTP=NO; not in allow-list).

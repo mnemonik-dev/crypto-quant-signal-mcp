@@ -119,6 +119,66 @@ claude plugin install binance/binance-skills-hub</code></pre>
       fullTutorialUrl: '/integrations/bitget',
       hasDedicatedPage: true,
     },
+    {
+      slug: 'gemini',
+      displayName: 'Gemini',
+      surfaceType: 'exchange-kit',
+      setupSummary:
+        '<code class="text-xs bg-navy-800 px-1 rounded">node packages/mcp-server/dist/index.js</code> &middot; Self-hosted Node MCP (Apache-2.0), sandbox-gated',
+      whatYouGet:
+        "Composite verdict + Gemini's Agentic Trading MCP. Agent reads signals, places sandbox orders via gemini_new_order; subaccounts isolate each agent.",
+      walkthroughHtml: `      <p>Build Gemini's self-hosted MCP from source, alongside AlgoVault:</p>
+      <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
+        <pre><code class="text-xs text-gray-300">git clone https://github.com/gemini/developer-platform
+cd developer-platform/packages/mcp-server
+npm install
+npm run build</code></pre>
+      </div>
+      <p>Set <code class="text-xs bg-navy-800 px-1 rounded">GEMINI_API_BASE_URL=https://api.sandbox.gemini.com/v1</code> for zero real-money risk during development. Public market-data tools need no keys.</p>
+      <p><a href="/integrations/gemini" class="text-mint-400 hover:underline">Full tutorial + runnable demo &rarr;</a></p>`,
+      fullTutorialUrl: '/integrations/gemini',
+      hasDedicatedPage: true,
+    },
+    {
+      slug: 'kraken',
+      displayName: 'Kraken',
+      surfaceType: 'exchange-kit',
+      setupSummary:
+        '<code class="text-xs bg-navy-800 px-1 rounded">kraken mcp -s all</code> &middot; Single Rust binary (MIT), 151 commands, keyless paper engine',
+      whatYouGet:
+        "Composite verdict + the Kraken CLI's stdio MCP. Agent reads signals, simulates orders on the keyless paper engine before going live.",
+      walkthroughHtml: `      <p>Install the Kraken CLI (one binary), then serve it over MCP next to AlgoVault:</p>
+      <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
+        <pre><code class="text-xs text-gray-300">curl --proto '=https' --tlsv1.2 -LsSf https://github.com/krakenfx/kraken-cli/releases/latest/download/kraken-cli-installer.sh | sh
+kraken mcp -s all</code></pre>
+      </div>
+      <p>The <code class="text-xs bg-navy-800 px-1 rounded">kraken paper</code> engine needs no keys and no account. Run <code class="text-xs">--validate</code> before any live order; arm <code class="text-xs">cancel-after</code> as a dead-man's switch.</p>
+      <p><a href="/integrations/kraken" class="text-mint-400 hover:underline">Full tutorial + runnable demo &rarr;</a></p>`,
+      fullTutorialUrl: '/integrations/kraken',
+      hasDedicatedPage: true,
+    },
+    {
+      slug: 'alpaca',
+      displayName: 'Alpaca',
+      surfaceType: 'exchange-kit',
+      setupSummary:
+        '<code class="text-xs bg-navy-800 px-1 rounded">uvx alpaca-mcp-server</code> &middot; Crypto toolsets, paper venue default-on',
+      whatYouGet:
+        "Composite verdict + Alpaca's crypto MCP Server. Agent reads signals, places notional BTC/USD paper orders via place_crypto_order.",
+      walkthroughHtml: `      <p>Run Alpaca's crypto MCP Server zero-install, scoped to crypto toolsets, alongside AlgoVault:</p>
+      <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
+        <pre><code class="text-xs text-gray-300">{
+  "mcpServers": {
+    "algovault": {"url": "https://api.algovault.com/mcp"},
+    "alpaca": {"command": "uvx", "args": ["alpaca-mcp-server"]}
+  }
+}</code></pre>
+      </div>
+      <p>Set <code class="text-xs bg-navy-800 px-1 rounded">ALPACA_TOOLSETS=trading,crypto-data</code> to scope crypto-only; <code class="text-xs">ALPACA_PAPER_TRADE</code> defaults to <code class="text-xs">true</code> for zero real-money risk.</p>
+      <p><a href="/integrations/alpaca" class="text-mint-400 hover:underline">Full tutorial + runnable demo &rarr;</a></p>`,
+      fullTutorialUrl: '/integrations/alpaca',
+      hasDedicatedPage: true,
+    },
   ],
 };
 

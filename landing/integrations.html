@@ -506,6 +506,48 @@ tailwind.config = {
           <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bitget" class="text-steel-400 hover:text-mint-400" onclick="event.stopPropagation()">Demo &rarr;</a>
         </div>
       </a>
+      <a href="/integrations/gemini?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-gemini"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'exchange-kit',slug:'gemini',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">Gemini &times; AlgoVault</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Composite verdict + Gemini's Agentic Trading MCP. Agent reads signals, places sandbox orders via gemini_new_order; subaccounts isolate each agent.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">node packages/mcp-server/dist/index.js</code> &middot; Self-hosted Node MCP (Apache-2.0), sandbox-gated</p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+          <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/gemini" class="text-steel-400 hover:text-mint-400" onclick="event.stopPropagation()">Demo &rarr;</a>
+        </div>
+      </a>
+      <a href="/integrations/kraken?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-kraken"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'exchange-kit',slug:'kraken',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">Kraken &times; AlgoVault</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Composite verdict + the Kraken CLI's stdio MCP. Agent reads signals, simulates orders on the keyless paper engine before going live.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">kraken mcp -s all</code> &middot; Single Rust binary (MIT), 151 commands, keyless paper engine</p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+          <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/kraken" class="text-steel-400 hover:text-mint-400" onclick="event.stopPropagation()">Demo &rarr;</a>
+        </div>
+      </a>
+      <a href="/integrations/alpaca?utm_source=integrations_index&utm_medium=card&utm_campaign=integration-alpaca"
+         onclick="if(window.plausible)plausible('Integration View',{props:{surface:'exchange-kit',slug:'alpaca',source:'integrations_index'}})"
+         class="card-hover bg-navy-700 border border-white/5 rounded-xl p-5 hover:border-mint-500/40 transition block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-mint-400 text-2xl" aria-hidden="true">&#9670;</span>
+          <h3 class="text-white font-semibold text-base">Alpaca &times; AlgoVault</h3>
+        </div>
+        <p class="text-gray-400 text-xs mb-3">Composite verdict + Alpaca's crypto MCP Server. Agent reads signals, places notional BTC/USD paper orders via place_crypto_order.</p>
+        <p class="text-gray-600 text-xs mb-3"><code class="text-xs bg-navy-800 px-1 rounded">uvx alpaca-mcp-server</code> &middot; Crypto toolsets, paper venue default-on</p>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-mint-400">View tutorial &rarr;</span>
+          <a href="https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/alpaca" class="text-steel-400 hover:text-mint-400" onclick="event.stopPropagation()">Demo &rarr;</a>
+        </div>
+      </a>
       <!-- BUILD:INTEGRATIONS_INDEX_EXCHANGE_KITS:end -->
     </div>
 

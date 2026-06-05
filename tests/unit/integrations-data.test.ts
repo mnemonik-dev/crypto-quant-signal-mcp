@@ -117,7 +117,7 @@ describe('integrations-data: forbidden-phrase canary', () => {
 });
 
 describe('integrations-data: cross-surface invariants', () => {
-  it('all 14 hasDedicatedPage:true slugs are unique across the union', () => {
+  it('all 16 hasDedicatedPage:true slugs are unique across the union', () => {
     const dedicated = ALL_SURFACES.flatMap(({ mod }) =>
       mod.entries.filter((e) => e.hasDedicatedPage).map((e) => e.slug),
     );
@@ -139,8 +139,8 @@ describe('integrations-data: cross-surface invariants', () => {
     }
   });
 
-  it('EXCHANGE_KITS contains exactly 4 entries all with hasDedicatedPage:true', () => {
-    expect(EXCHANGE_KITS.entries).toHaveLength(4);
+  it('EXCHANGE_KITS contains exactly 7 entries all with hasDedicatedPage:true', () => {
+    expect(EXCHANGE_KITS.entries).toHaveLength(7);
     for (const e of EXCHANGE_KITS.entries) {
       expect(e.hasDedicatedPage, `${e.slug}`).toBe(true);
     }

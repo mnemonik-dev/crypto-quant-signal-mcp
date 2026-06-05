@@ -141,6 +141,10 @@ const EXCHANGE_DEMO_URL: Record<string, string> = {
   okx: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/okx',
   bybit: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bybit',
   bitget: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/bitget',
+  // BROKER-PAIRING-CRYPTO-W1 (2026-06-05)
+  gemini: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/gemini',
+  kraken: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/kraken',
+  alpaca: 'https://github.com/AlgoVaultLabs/algovault-skills/tree/main/examples/alpaca',
 };
 
 function renderIndexCard(entry: IntegrationEntry): string {

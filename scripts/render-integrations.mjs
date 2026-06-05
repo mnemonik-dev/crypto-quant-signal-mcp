@@ -26,7 +26,10 @@ import MarkdownIt from 'markdown-it';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const EXCHANGES = ['binance', 'okx', 'bybit', 'bitget'];
+// BROKER-PAIRING-CRYPTO-W1 (2026-06-05): +3 crypto agentic-trading kits
+// (Gemini self-hosted MCP / Kraken CLI / Alpaca crypto MCP) extend the
+// exchange-kit tutorial pattern; sources in algovault-skills/docs/integrations/.
+const EXCHANGES = ['binance', 'okx', 'bybit', 'bitget', 'gemini', 'kraken', 'alpaca'];
 // AI-AGENT-FRAMEWORK-TUTORIALS-W1 (2026-05-18): 4 framework integration mirrors
 // extend the same render pipeline. Same template — eyebrow shows `<slug> integration`,
 // canonical URL = /integrations/<slug>, page title = AlgoVault × <Display>.
@@ -70,6 +73,10 @@ const DISPLAY_NAMES = {
   okx: 'OKX',
   bybit: 'Bybit',
   bitget: 'Bitget',
+  // BROKER-PAIRING-CRYPTO-W1 crypto agentic-trading kits
+  gemini: 'Gemini',
+  kraken: 'Kraken',
+  alpaca: 'Alpaca',
   // AI-AGENT-FRAMEWORK-TUTORIALS-W1 frameworks
   langchain: 'LangChain',
   llamaindex: 'LlamaIndex',
