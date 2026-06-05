@@ -21,6 +21,9 @@ vi.mock('../../src/lib/performance-db.js', () => ({
   recordHoldCount: vi.fn(),
   getFundingZScore: vi.fn().mockResolvedValue(null),
   getDb: vi.fn(),
+  // OPS-GRID-PROCESS-BOUNDARY-W1: cross-asset-grid imports isShortLivedScript from
+  // performance-db (server-only refresh gate); false = server → grid stays active.
+  isShortLivedScript: () => false,
 }));
 
 import { getTradeSignal } from '../../src/tools/get-trade-call.js';

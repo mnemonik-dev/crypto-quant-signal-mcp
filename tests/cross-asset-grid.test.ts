@@ -83,8 +83,11 @@ describe('cross-asset-grid', () => {
     expect(second).toBe(first);
   });
 
-  // ── Test 3: TTL behavior — refresh after TTL expires ───────────────────
-  it('refreshes the grid after the TTL window has elapsed', async () => {
+  // ── Test 3: SWR — stale snapshot served immediately, refresh in background ──
+  // OPS-GRID-PROCESS-BOUNDARY-W1 R3: getGridSnapshot() no longer BLOCKS on a
+  // stale snapshot. It returns the stale snapshot immediately and kicks a single
+  // coalesced background refresh (the warmer's 50s tick stays the primary path).
+  it('serves a stale snapshot immediately and refreshes in the background (SWR)', async () => {
     const handle = makeBuyScorer();
     _setScorerOverride(handle.scorer);
 
@@ -94,7 +97,16 @@ describe('cross-asset-grid', () => {
     // Backdate the cached snapshot so it appears stale (>60s old).
     _setSnapshotForTest(first, Date.now() - 61_000);
 
-    await getGridSnapshot();
+    // The stale read returns the OLD snapshot synchronously (no block on refresh).
+    const t0 = Date.now();
+    const stale = await getGridSnapshot();
+    const elapsed = Date.now() - t0;
+    expect(stale).toBe(first);        // served the stale array, not a fresh rebuild
+    expect(elapsed).toBeLessThan(20); // did not block on the 42-cell refresh
+
+    // The background refresh was kicked; join it (coalesced) and confirm exactly
+    // one more full refresh ran — 84 total, not 126 (no double refresh).
+    await refreshGridIfStale();
     expect(handle.callCount()).toBe(84);
   });
 

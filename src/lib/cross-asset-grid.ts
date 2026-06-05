@@ -15,21 +15,27 @@
 // +1m, +3m, +30m, +2h, -4h.
 //
 // Refresh strategy:
-//   • Lazy: refresh on read when the snapshot is stale (>60s) or empty.
+//   • Server-only (OPS-GRID-PROCESS-BOUNDARY-W1): only the long-lived server
+//     refreshes; short-lived cron/seed/backfill procs serve cache-or-empty.
+//   • Stale-while-revalidate: a stale snapshot is served immediately while a
+//     single coalesced background refresh runs (batch weight class). Only a
+//     cold cache (never computed) blocks-and-fills.
 //   • Promise-coalesced: concurrent callers during a refresh share the same
 //     in-flight promise instead of triggering parallel scorer fan-outs.
 //   • Cell-isolated: a single scorer throw cannot crash the entire refresh —
 //     failed cells are logged at debug level and skipped.
 //   • Slow-grid circuit breaker (SHADOW-SEED-W1): if 3 consecutive refreshes
 //     each exceed 30s, fall back to FALLBACK_TIMEFRAMES (the v1.9.0 set) for
-//     1 hour, then retry full grid. Telegram WARNING on every fallback.
+//     1 hour, then retry full grid. Forensic console.warn only — the fallback
+//     is self-recovering, so it never pages (per the alert contract).
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pLimit from 'p-limit';
 import type { GridCell, ExchangeId } from '../types.js';
 import { getTradeSignal } from '../tools/get-trade-call.js';
 import { UpstreamRateLimitError } from './errors.js';
-import { sendAlert } from './telegram.js';
+import { isShortLivedScript } from './performance-db.js';
+import { runAsBatch } from './upstream-weight-budget.js';
 
 export const GRID_ASSETS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE'] as const;
 
@@ -91,18 +97,34 @@ const CIRCUIT_OPEN_DURATION_MS = 60 * 60_000;   // 1 hour
 const REFRESH_HISTORY_SIZE = 3;
 let refreshDurations: number[] = [];            // FIFO, max length REFRESH_HISTORY_SIZE
 let circuitOpenUntil: number = 0;
-// OPS-BINANCE-RATELIMITER-W1: dedup the slow-grid TG alert. It was un-cooled →
-// during the Binance-418 incident the breaker re-tripped across repeated container
-// restarts (each restart resets module state) → alert spam. Cap to ≤1 alert per
-// cooldown window per process (defense-in-depth; the Binance budget + 418→fast-throw
-// remove the slow refreshes that trip this in the first place).
-let lastSlowGridAlertAt: number = 0;
-const SLOW_GRID_ALERT_COOLDOWN_MS = CIRCUIT_OPEN_DURATION_MS; // ≥1h between alerts
+// OPS-GRID-PROCESS-BOUNDARY-W1 (R2): the slow-grid breaker no longer pages. Post
+// budget-unification a "slow" refresh just means cells are WAITING behind the venue
+// weight budget (self-recovering), not an upstream failure — so the trip is demoted
+// to a forensic console.warn. The former per-process `lastSlowGridAlertAt` cooldown
+// could never work across short-lived cron processes (each starts fresh module state
+// → 5 concurrent crons = 5 alerts/min); it is gone with the alert.
 
 // ── Module-private state ──
 let cachedSnapshot: GridCell[] | null = null;
 let cachedAt: number = 0;
 let inflight: Promise<void> | null = null;
+
+// ── OPS-GRID-PROCESS-BOUNDARY-W1 (R1): process-identity gate ──
+// The 42-cell grid refresh is the long-lived server's job ONLY. A short-lived
+// cron/seed/backfill process (`dist/scripts/*`) starts with an empty cache, so a
+// lazy refresh there fans out 42 Binance-scored cells PER PROCESS — duplicated
+// across every concurrent cron (a hidden upstream-budget sink + a seed-fire
+// amplifier, since the first coin's signal awaits the in-flight refresh). The
+// enrichment fields it would populate (`closest_tradeable`/`also_see`) are
+// response-only, omitted when the grid is empty, never persisted by recordSignal,
+// and unread by the seeders → gating refresh OFF in short-lived procs is zero data
+// impact. Resolved ONCE at module load; the test seam flips it deterministically.
+let _processIsShortLived: boolean = isShortLivedScript(process.argv[1]);
+
+/** Test seam (R1) — override the resolved process identity. server=false, cron=true. */
+export function _setProcessIdentityForTest(isScript: boolean): void {
+  _processIsShortLived = isScript;
+}
 
 // v1.10.2: upstream-rate-limit self-DoS guard.
 // OPS-GRID-EXCHANGE-TRUTH-W1 (2026-06-05) RESOLVED the prior scoring-vs-label
@@ -137,7 +159,6 @@ export function _resetRateLimitBackoff(): void {
 export function _resetCircuitBreaker(): void {
   refreshDurations = [];
   circuitOpenUntil = 0;
-  lastSlowGridAlertAt = 0;
 }
 
 /** SHADOW-SEED-W1 test seam — push synthetic refresh durations to drive the breaker. */
@@ -268,21 +289,17 @@ async function refreshGrid(): Promise<void> {
     if (allSlow && circuitOpenUntil <= Date.now()) {
       circuitOpenUntil = Date.now() + CIRCUIT_OPEN_DURATION_MS;
       const measured = refreshDurations.map((d) => `${(d / 1000).toFixed(1)}s`).join(', ');
+      // OPS-GRID-PROCESS-BOUNDARY-W1 (R2): forensic-only, never pages. Post
+      // budget-unification a "slow" refresh means cells are WAITING behind the
+      // venue weight budget, not an upstream failure — the fallback is
+      // self-recovering, so per the alert contract ("Recovery alerts are noise —
+      // default silent recovery") this stays in the logs and never alerts. The
+      // full measured-durations line is preserved for forensics.
       console.warn(
         `[cross-asset-grid] slow-grid circuit breaker TRIPPED — ` +
         `last ${REFRESH_HISTORY_SIZE} refreshes [${measured}] all > ${SLOW_REFRESH_THRESHOLD_MS / 1000}s. ` +
         `Falling back to ${FALLBACK_TIMEFRAMES.length}-timeframe grid (${FALLBACK_TIMEFRAMES.join(',')}) for ${CIRCUIT_OPEN_DURATION_MS / 60_000}min.`
       );
-      // OPS-BINANCE-RATELIMITER-W1: cooldown-gated so it can't spam.
-      if (Date.now() - lastSlowGridAlertAt > SLOW_GRID_ALERT_COOLDOWN_MS) {
-        lastSlowGridAlertAt = Date.now();
-        sendAlert(
-          `Cross-asset grid slow-grid circuit breaker TRIPPED.\n` +
-          `Last ${REFRESH_HISTORY_SIZE} refreshes: ${measured}\n` +
-          `Falling back to ${FALLBACK_TIMEFRAMES.join(',')} for ${CIRCUIT_OPEN_DURATION_MS / 60_000}min.`,
-          'warning',
-        ).catch(() => { /* swallow */ });
-      }
       // Reset history so post-fallback re-evaluation starts fresh.
       refreshDurations = [];
     }
@@ -313,30 +330,48 @@ async function refreshGrid(): Promise<void> {
 }
 
 /**
+ * OPS-GRID-PROCESS-BOUNDARY-W1 (R3): create-or-reuse the single in-flight refresh
+ * promise. The refresh runs under the `batch` upstream weight class so background
+ * warming (and rare cold-start fills) consume only the batch budget, never the
+ * interactive reserve held for user-facing tool calls. Coalesces concurrent
+ * callers onto one refresh.
+ */
+function ensureRefreshInflight(): Promise<void> {
+  if (inflight === null) {
+    inflight = runAsBatch(() => refreshGrid()).finally(() => {
+      inflight = null;
+    });
+  }
+  return inflight;
+}
+
+/**
  * LATENCY-W1 C3: thin wrapper used by the background warmer in src/index.ts.
  * Returns immediately if cache is fresh; otherwise triggers refresh (with the
  * same in-flight coalescing as `getGridSnapshot`). Idempotent under concurrent
  * calls — N concurrent invocations share one refresh, not N.
  */
 export async function refreshGridIfStale(): Promise<void> {
+  // R1: short-lived cron/seed/backfill processes never refresh the grid.
+  if (_processIsShortLived) return;
   const now = Date.now();
   if (cachedSnapshot !== null && now - cachedAt <= GRID_TTL_MS) return;
   // v1.10.2: respect the rate-limit-backoff pause. If we're inside the
   // backoff window, return immediately (existing stale snapshot stays
   // visible to consumers; better than running 24 cells we KNOW will 429).
   if (rateLimitPausedUntil > now) return;
-  if (inflight === null) {
-    inflight = refreshGrid().finally(() => {
-      inflight = null;
-    });
-  }
-  await inflight;
+  await ensureRefreshInflight();
 }
 
 /**
- * Returns the full pre-computed grid snapshot. Refreshes lazily when stale
- * (>60s) or when no snapshot has ever been computed. Concurrent callers
- * share a single in-flight refresh via promise coalescing.
+ * Returns the full pre-computed grid snapshot.
+ *
+ * OPS-GRID-PROCESS-BOUNDARY-W1: server-only + stale-while-revalidate.
+ *   • Short-lived cron/seed/backfill procs (R1) serve cache-or-empty, never refresh.
+ *   • Fresh cache → returned as-is.
+ *   • Stale cache (R3) → returned IMMEDIATELY while a single coalesced background
+ *     refresh runs (the warmer's tick stays the primary refresher).
+ *   • Cold cache (never computed) → blocks-and-fills under the batch weight class.
  *
  * Re-entrancy: when called recursively from within a grid refresh (i.e.
  * `getTradeSignal` → enrichment → `getGridSnapshot`), returns the current
@@ -348,16 +383,24 @@ export async function getGridSnapshot(): Promise<GridCell[]> {
   if (refreshContext.getStore() === true) {
     return cachedSnapshot ?? [];
   }
+  // R1: short-lived cron/seed/backfill processes never refresh — they serve
+  // whatever is cached (usually empty in a fresh process, which is correct: the
+  // enrichment fields are response-only + unread by the seeders).
+  if (_processIsShortLived) {
+    return cachedSnapshot ?? [];
+  }
   const now = Date.now();
   if (cachedSnapshot !== null && now - cachedAt <= GRID_TTL_MS) {
     return cachedSnapshot;
   }
-  if (inflight === null) {
-    inflight = refreshGrid().finally(() => {
-      inflight = null;
-    });
+  // R3 (stale-while-revalidate): a stale snapshot is served immediately while a
+  // single coalesced background refresh runs (rate-limit-aware via
+  // refreshGridIfStale). Only a COLD cache blocks-and-fills.
+  if (cachedSnapshot !== null) {
+    void refreshGridIfStale().catch(() => { /* background refresh; forensic logs only */ });
+    return cachedSnapshot;
   }
-  await inflight;
+  await ensureRefreshInflight();
   return cachedSnapshot ?? [];
 }
 
