@@ -54,6 +54,19 @@ class SqliteBackend implements DbBackend {
 // ── PostgreSQL Backend ──
 
 /**
+ * OPS-SCRIPT-POOL-MAX-W1: short-lived cron processes (`dist/scripts/*` — seed,
+ * backfill, monitor) run many at once; a 12-conn pool each blew past Postgres
+ * max_connections (observed 101/100, 95 idle). They do sequential work, so they
+ * get a small per-process connection budget; the long-lived server keeps the
+ * bigger one. Pure (argv passed in) so it is unit-testable.
+ */
+export function isShortLivedScript(scriptPath: string | undefined): boolean {
+  return /[\\/]scripts[\\/]/.test(scriptPath ?? '');
+}
+
+const DEFAULT_POOL_MAX = isShortLivedScript(process.argv[1]) ? 2 : 12;
+
+/**
  * OPS-POSTGRES-MEM-RIGHTSIZE-W1 — hardened, env-tunable pg Pool config.
  *
  * `new Pool({ connectionString })` inherited the pg defaults, which left the
@@ -68,6 +81,7 @@ class SqliteBackend implements DbBackend {
 export function buildPoolConfig(
   connectionString: string,
   env: NodeJS.ProcessEnv = process.env,
+  defaultMax: number = DEFAULT_POOL_MAX,
 ): import('pg').PoolConfig {
   const posInt = (raw: string | undefined, fallback: number): number => {
     const n = Number(raw);
@@ -75,7 +89,7 @@ export function buildPoolConfig(
   };
   return {
     connectionString,
-    max: posInt(env.PG_POOL_MAX, 12),
+    max: posInt(env.PG_POOL_MAX, defaultMax),
     connectionTimeoutMillis: posInt(env.PG_CONNECTION_TIMEOUT_MS, 10_000),
     idleTimeoutMillis: posInt(env.PG_IDLE_TIMEOUT_MS, 30_000),
     statement_timeout: posInt(env.PG_STATEMENT_TIMEOUT_MS, 120_000),

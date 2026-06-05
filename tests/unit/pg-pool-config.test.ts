@@ -9,7 +9,7 @@
  * asserted without opening a real connection.
  */
 import { describe, it, expect } from 'vitest';
-import { buildPoolConfig } from '../../src/lib/performance-db.js';
+import { buildPoolConfig, isShortLivedScript } from '../../src/lib/performance-db.js';
 
 describe('buildPoolConfig', () => {
   it('passes the connection string through unchanged', () => {
@@ -43,5 +43,31 @@ describe('buildPoolConfig', () => {
     expect(cfg.max).toBe(12);
     expect(cfg.statement_timeout).toBe(120_000);
     expect(cfg.idleTimeoutMillis).toBe(30_000);
+  });
+
+  // OPS-SCRIPT-POOL-MAX-W1: many concurrent short-lived crons each opening a
+  // 12-conn pool exhausted Postgres max_connections (101/100, 95 idle). They do
+  // sequential work — a small per-process budget keeps N crons under the cap.
+  it('uses the provided defaultMax so short-lived scripts get a small budget while the server keeps a big one', () => {
+    expect(buildPoolConfig('postgres://x', {}, 2).max).toBe(2);
+    expect(buildPoolConfig('postgres://x', {}, 12).max).toBe(12);
+  });
+
+  it('PG_POOL_MAX env still overrides the defaultMax', () => {
+    expect(buildPoolConfig('postgres://x', { PG_POOL_MAX: '6' }, 2).max).toBe(6);
+  });
+});
+
+describe('isShortLivedScript', () => {
+  it('detects dist/scripts/* cron processes (seed, backfill, monitor)', () => {
+    expect(isShortLivedScript('/app/dist/scripts/seed-signals.js')).toBe(true);
+    expect(isShortLivedScript('/app/dist/scripts/backfill-outcomes.js')).toBe(true);
+    expect(isShortLivedScript('/app/dist/scripts/monitor.js')).toBe(true);
+  });
+
+  it('treats the long-lived server entrypoint + unknown argv as not-a-script', () => {
+    expect(isShortLivedScript('/app/dist/index.js')).toBe(false);
+    expect(isShortLivedScript(undefined)).toBe(false);
+    expect(isShortLivedScript('')).toBe(false);
   });
 });
