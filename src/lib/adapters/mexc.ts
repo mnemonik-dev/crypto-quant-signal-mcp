@@ -35,11 +35,9 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
-import { UpstreamRateLimitError } from '../errors.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://contract.mexc.com';
-const TIMEOUT_MS = 4000;
 const MAX_RETRIES = 1;
 
 // MEXC kline intervals: Min1, Min5, Min15, Min30, Min60, Hour4, Hour8, Day1, Week1, Month1

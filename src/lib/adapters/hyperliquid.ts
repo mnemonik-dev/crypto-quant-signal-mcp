@@ -18,7 +18,6 @@ import { type WeightClass } from '../upstream-weight-budget.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://api.hyperliquid.xyz/info';
-const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 1;
 
 // ── OPS-HL-RATELIMITER-W2: HL `/info` request → rate-limit weight ──

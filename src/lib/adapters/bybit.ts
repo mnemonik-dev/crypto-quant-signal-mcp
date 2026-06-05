@@ -14,7 +14,6 @@ import type {
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://api.bybit.com';
-const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 1;
 
 // AlgoVault-canonical → Bybit-native base symbol for TradFi assets where Bybit's

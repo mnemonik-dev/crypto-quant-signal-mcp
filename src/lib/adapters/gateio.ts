@@ -30,7 +30,6 @@ import type {
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://api.gateio.ws';
-const TIMEOUT_MS = 4000;
 const MAX_RETRIES = 1;
 
 // Gate.io kline intervals: '10s', '1m', '5m', '15m', '30m', '1h', '4h', '8h', '1d', '7d', '30d'

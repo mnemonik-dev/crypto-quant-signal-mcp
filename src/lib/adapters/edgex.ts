@@ -26,11 +26,9 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
-import { UpstreamRateLimitError } from '../errors.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://pro.edgex.exchange';
-const TIMEOUT_MS = 4000;
 const MAX_RETRIES = 1;
 
 // Map AlgoVault canonical intervals to edgeX klineType values

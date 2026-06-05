@@ -32,19 +32,10 @@ export interface ExchangeAsset {
 
 type PromotedExchangeId = 'HL' | 'BINANCE' | 'BYBIT' | 'OKX' | 'BITGET';
 
-const TIMEOUT_MS = 5000;
-
-async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status} on ${url}`);
-    return res;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// OPS-ADAPTER-RATELIMIT-UNIFY-W1 (C1/C4): the former local `fetchWithTimeout`
+// helper + its TIMEOUT_MS were removed — all five fetchers now route through the
+// shared `upstreamFetch` (Bybit/OKX/Bitget) or the adapter coalescers (HL/Binance),
+// each carrying its own per-venue timeout from VENUE_FETCH_CONFIGS.
 
 /** HL: `metaAndAssetCtxs` returns OI + markPx + dayNtlVlm. `dayNtlVlm` is natively USD-notional. */
 async function fetchHL(limit: number): Promise<ExchangeAsset[]> {

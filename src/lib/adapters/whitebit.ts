@@ -36,11 +36,9 @@ import type {
   FundingData,
   DexType,
 } from '../../types.js';
-import { UpstreamRateLimitError } from '../errors.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
 
 const BASE_URL = 'https://whitebit.com';
-const TIMEOUT_MS = 4000;
 const MAX_RETRIES = 1;
 const KLINE_LIMIT = 1000;
 
