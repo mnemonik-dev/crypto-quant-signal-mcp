@@ -56,7 +56,12 @@ import { listVenues, stampSeedingStarted } from '../lib/venue-store.js';
 // Internal license bypasses free-tier gating
 const INTERNAL_LICENSE: LicenseInfo = { tier: 'pro', key: 'internal-seed' };
 
-// Per-exchange delay between API calls (ms)
+// Per-exchange delay between API calls (ms).
+// OPS-SHADOW-PIPELINE-W1 V2 (2026-06-05): the 12 shadow-venue values are now
+// derived from the deep-research per-IP budget table (≤50% of each documented
+// limit; gentler on the ban-escalators BITMART/XT/PHEMEX; EDGEX 750ms since its
+// limit is unpublished). SoT: research/shadow-venues-api-limits-2026-06-05.md.
+// Promoted-venue values are the house calibration reference (unchanged).
 const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // OPS-HL-RATELIMIT-W1 (2026-05-22): bumped 500 → 750ms as safety margin
   // alongside adapter-layer metaAndAssetCtxs coalescing (hyperliquid.ts).
@@ -83,27 +88,27 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // branch — ASTER is callable via explicit `get_trade_call({exchange:'ASTER'})`
   // but won't auto-accumulate from this cron until follow-up wave extends
   // the seed-loop branches. Tracked as PILOT-ADAPTERS-SEED-LOOP-W2 (deferred).
-  'ASTER':   300,
+  'ASTER':   250,
   // PILOT-ADAPTERS-W1 / C2 (2026-05-16): EDGEX shadow venue. Same scope
   // deferral as ASTER — Record<ExchangeId, number> key required for type-
   // system compat; seed-loop branch is OUT of C2 scope (PILOT-ADAPTERS-
   // SEED-LOOP-W2 follow-up). Slightly higher delay (400ms) because edgeX
   // has no published rate-limit budget; conservative throttle for unknown.
-  'EDGEX':   400,
+  'EDGEX':   750,
   // PILOT-ADAPTERS-W2 / C1 (2026-05-19): GATE shadow venue. Same scope
   // deferral as ASTER/EDGEX — Record<ExchangeId, number> key required for
   // type-system compat; seed-loop branch is OUT of C1 scope per Scope Rule
   // (deferred to PILOT-ADAPTERS-SEED-LOOP-W2). Conservative 300ms delay.
-  'GATE':    300,
+  'GATE':    250,
   // PILOT-ADAPTERS-W2 / C2 (2026-05-19): MEXC shadow venue. Same deferral
   // as ASTER/EDGEX/GATE — Record<ExchangeId, number> key required for
   // type-system compat; seed-loop branch deferred to PILOT-ADAPTERS-SEED-
   // LOOP-W2. MEXC has aggressive listing cadence (881 perps), conservative
   // 350ms delay.
-  'MEXC':    350,
+  'MEXC':    300,
   // PILOT-ADAPTERS-W2 / C3 (2026-05-19): KUCOIN shadow venue. Type-system
   // cascade only; seed-loop branch deferred to PILOT-ADAPTERS-SEED-LOOP-W2.
-  'KUCOIN':  300,
+  'KUCOIN':  250,
   // PILOT-ADAPTERS-W3A / C1 (2026-05-20): PHEMEX shadow venue. Type-system
   // cascade only; seed-loop branch deferred to PILOT-ADAPTERS-SEED-LOOP-W2.
   // Phemex hedged USDT-M perpetual (perpProductsV2, 538 USDT-listed). Per-
@@ -113,20 +118,20 @@ const DELAY_PER_EXCHANGE: Record<ExchangeId, number> = {
   // cascade only; seed-loop branch deferred to PILOT-ADAPTERS-SEED-LOOP-W2.
   // BingX Swap V2 USDT-M perpetual (638 USDT-listed). Rate-limit upgrade
   // 2025-10-16 (per primary docs); conservative 300ms.
-  'BINGX':   300,
+  'BINGX':   250,
   // PILOT-ADAPTERS-W3A / C3 (2026-05-20): HTX shadow venue. Type-system
   // cascade only; seed-loop branch deferred to PILOT-ADAPTERS-SEED-LOOP-W2.
   // HTX (formerly Huobi) Linear USDT-Margined Swap (233 USDT-listed). Most-
   // generous rate limit of W3A batch (800req/s per-IP market data); 200ms.
-  'HTX':     200,
+  'HTX':     150,
   // PILOT-ADAPTERS-W3B / C1 (2026-05-20): WEEX shadow venue. cmt_ prefix + 4h funding.
   'WEEX':    300,
   // PILOT-ADAPTERS-W3B / C2 (2026-05-20): BITMART shadow venue. Binance-style symbol BTCUSDT; 8h cadence.
-  'BITMART': 300,
+  'BITMART': 500,
   // PILOT-ADAPTERS-W3B / C3 (2026-05-20): XT shadow venue. Lowercase btc_usdt; 8h cadence.
-  'XT':      300,
+  'XT':      400,
   // PILOT-ADAPTERS-W3B / C4 (2026-05-20): WHITEBIT shadow venue. _PERP suffix + 8h cadence; EU-regulated.
-  'WHITEBIT':300,
+  'WHITEBIT':200,
 };
 
 // Idempotency windows per timeframe (slightly less than the interval)

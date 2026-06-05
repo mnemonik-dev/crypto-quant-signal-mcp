@@ -115,3 +115,74 @@
 - **C6**: status.md + system-map.md + WIS; firewall greps.
 
 **Gate tokens:** `CH1_GREEN`…`CH6_GREEN`.
+
+---
+
+# V2-RESUME (2026-06-05) — parity cadence on CPX42 (supersedes the 2026-06-01 15m-only sizing)
+
+**Trigger:** prompt rewritten 2026-06-05 14:04. Mr.1 upgraded the box (2-vCPU → **CPX42 8-vCPU/16GB**) and directed **promoted-parity seeding +3m** for the 12 shadow venues — superseding V1's 15m-only/floor-500 cadence. This is the canonical V2-RESUME: C1/C2/C4/C5 shipped 2026-06-01 are **unchanged**; the work is concentrated in **C3** + a thin confirm of the rest.
+
+## Pre-resolved drift corrections (V1 shipped → V2 state)
+| # | V1 (2026-06-01, shipped) | V2 (2026-06-05) | Action |
+|---|---|---|---|
+| 1 | C1 `UNIVERSE_FETCHERS` registry + table-driven `main()` + `--status` | unchanged | **thin confirm** (deployed: `UNIVERSE_FETCHERS`×6 in dist) |
+| 2 | C2 12 shadow fetchers | unchanged | **thin confirm** (deployed: `fetchWeexCoins`×3) |
+| 3 | C3 cadence = **15m-only top-30** | **full promoted matrix +3m** (3m/5m/15m/30m/1h/2h/4h/8h/12h/1d) | **REPLACE cron** |
+| 4 | C3 `min_buy_sell_sample` = **500** (all 12) | **revert to originals** (ASTER 4100 … BITMART 9490) | **REVERT prod UPDATE** |
+| 5 | C3 `DELAY_PER_EXCHANGE` shadow = 300ms (all) | **per-venue from SoT** (250/750/250/300/250/300/250/150/300/500/400/200) | **code edit** |
+| 6 | C3 48h gate (fired 06-03, inactive) | new 48h gate for the parity mutation | **re-arm** |
+| 7 | C4 promote/retire + `ready_for_promotion` | unchanged | **thin confirm** (live: `promote-venue GATE` refuses) |
+| 8 | C5 readiness report + 06:05 cron | unchanged (auto-reflects new cadence) | **thin confirm** |
+
+## Step-0.5 — parity-load feasibility (verify, not size)
+- **Probe 1 box identity:** `nproc=8`, 15 GB RAM, hostname AlgoVault-MCP = **CPX42 ✓ (no HALT)**.
+- **CPU baseline:** load 0.75 (15-min) / 8 vCPU = **~9% normalized**; mcp-server 5% of one core, 4.5 GB. Parity 5→17 venues ≈ 3.4× seed load on 4× CPU at 9% baseline ⇒ **trivially FITS, peak ≪ 60%** (Q-A).
+- **Throttle audit:** per-venue `DELAY_PER_EXCHANGE` from the SoT table (§2), all ≤50% of documented budget; gentlest on ban-escalators BITMART(500)/XT(400)/PHEMEX(300); EDGEX 750ms (unpublished limit). 
+
+## Parity template (live promoted cron matrix, captured 2026-06-05)
+`5m top50 · 15m top100 · 30m top100 · 1h · 2h · 4h · 8h · 12h · 1d` — each × 5 promoted venues, per-`--exchange` lines.
+**Shadow parity = this matrix + 3m**, schedulable as **10 `--status shadow` lines** (one per tf; each seeds all 12 venues sequentially — bounded peak, reuses V1 `--status` architecture), staggered off the promoted minutes.
+
+## ⚠️ KEY DECISION (Q-C) — interval-gap handling: substitution-parity vs aggregateKlines
+**Finding (code-as-written vs prompt-assumed):** the prompt assumes a NEW `aggregateKlines(candles,factor)` primitive (3×1m→3m, 2×1h→2h, 2×4h→8h, 3×4h→12h) for venues missing native long bars. BUT:
+- **No aggregation mechanism exists.** The adapters (shadow AND promoted) use **SUBSTITUTION fallback** — e.g. `weex.ts '2h':'1h','8h':'4h','12h':'4h'`, `phemex.ts '2h':3600 // no 2h; fall back to 1h`, `bitget.ts '2h':'1H'`. A `2h` request returns coarser native candles labeled `2h`.
+- **Promoted venues serve their dashboard 8h via this same substitution** (Build Rule 3 forbids changing promoted behaviour).
+- ∴ **TRUE parity ("seed exactly like the promoted venues" — Mr.1) = shadow reuses the SAME substitution.** The shadow adapters ALREADY have these maps. Zero new code; zero promoted/shadow divergence.
+- Building `aggregateKlines` (shadow-only) would make shadow venues **diverge from** (be more correct than) promoted — anti-parity + Build-Rule-3 tension + large per-adapter wiring.
+
+**Resolution options for the architect:**
+- **(1) Substitution-parity [RECOMMENDED]:** shadow venues use the existing substitution fallback, identical to promoted. No `aggregateKlines`. Literal parity, 0-regression-safe, minimal C3. Missing-interval signals are coarser-resolution (same fidelity promoted venues already ship).
+- **(2) aggregateKlines for BOTH:** build it + wire into promoted+shadow → correct bars everywhere, consistent — but VIOLATES Build Rule 3 (changes promoted); needs Mr.1 to lift that + a bigger wave.
+- **(3) aggregateKlines shadow-only:** the prompt's literal text → correct shadow bars but promoted/shadow inconsistency.
+
+## HALT triage
+0 fictional primitives, 0 HALT. Box confirmed, endpoints live (SoT-cited; my V1 fetchers use older-but-still-200 paths — WEEX /capi/v2, XT v1, MEXC contract.mexc.com — optional V3 upgrade deferred, non-blocking). The aggregateKlines question is a genuine design decision (Q-C), not a fictional.
+
+## Ratifications
+- **Q-A:** parity FITS on CPX42 (~9% baseline, peak ≪60%) — confirm.
+- **Q-C:** interval-gap handling — **(1) substitution-parity recommended** vs (2)/(3) aggregateKlines. **DECISION NEEDED.**
+- **Q-D:** revert shadow `min_buy_sell_sample` 500 → originals — confirm.
+- **Q (delays):** per-venue `DELAY_PER_EXCHANGE` from SoT §2 — confirm.
+
+## AMENDMENT (2026-06-05 14:19) — seed-shadow-3m ALSO retired (cutover), updates Q-H + probe 7b
+**Prompt re-edited (line 18):** BOTH `seed-shadow-*` experiment lines retired. 1m REJECTED on **<1s serving-latency** (not WR) — internal-cron-only removal; **1m stays in the on-demand tool `timeframe` enum, schemas UNTOUCHED** (live-verified `get_trade_call BTC 1m` works). 3m PROMOTED → cut into the standard matrix.
+
+**Probe 7b (re-run live 2026-06-05):**
+- `seed-shadow-3m` = **2 lines** (`1-58/3 … --timeframe 3m --exchange HL --restricted-universe 20`; `1-59/3 … --timeframe 3m --exchange-list BINANCE,BYBIT,OKX,BITGET --top 50`).
+- **0 main-pattern 3m lines ⇒ `seed-shadow-3m` is the SOLE 3m producer** ⇒ **add-before-remove cutover MANDATORY** (not straight removal).
+- **Continuity baseline (promoted 3m, last 24h):** BINANCE 220 · BITGET 266 · BYBIT 442 · HL 11 · OKX 213 (Σ≈1152/day). HL low (restricted-universe 20).
+- **3m is PUBLIC** — top-level `byTimeframe.3m` WR **94.6%** (matches the prompt). Retiring without replacement freezes a public number ⇒ Data Integrity violation.
+
+**Q-H resolution (UPDATED):**
+1. **1m:** `seed-shadow-1m` already absent (retired by OPS-1M-SEED-DECOM-W1) → no-op confirm. 1m on-demand tool path untouched.
+2. **3m cutover (add-before-remove):** (a) ADD a standard 3m line `--timeframe 3m --top 50` table-driven (all 17 venues — promoted full-universe top-50 replaces the restricted-universe experiment; shadow venues get 3m via the same line); (b) run ≥1 cycle, VERIFY promoted 3m accrual within **±20%** of the Σ≈1152/day baseline; (c) THEN remove the 2 `seed-shadow-3m` lines. Net promoted 3m change ≈ 0. Shadow venues without native 3m substitute 3m→5m (per Q-C decision) — does NOT affect the public (promoted-only) 3m number.
+
+**Updated C3 cron plan (replaces V1's single 15m line):**
+- 3m cutover: `--timeframe 3m --top 50` (all 17, table-driven) [+verify ±20% → remove seed-shadow-3m×2].
+- Shadow parity (9 lines, `--status shadow`): 5m top50 · 15m top100 · 30m top100 · 1h · 2h · 4h · 8h · 12h · 1d.
+- Per-venue `DELAY_PER_EXCHANGE` shadow values from SoT §2 (code edit).
+- Revert shadow `min_buy_sell_sample` 500 → originals.
+- New 48h CPU gate (re-arm).
+- All staggered off the promoted minutes + each other; no 1-minute interval.
+
+**Step-0 VERDICT: ✅ NO HALT (V2-RESUME).** Box CPX42 confirmed; parity fits (~9% baseline); 0 fictional primitives; 3m cutover path resolved (sole producer → add-before-remove). One design decision pending architect: **Q-C (substitution-parity vs aggregateKlines)**. Awaiting Q-A/Q-C/Q-D + delays confirmation before state mutation.
