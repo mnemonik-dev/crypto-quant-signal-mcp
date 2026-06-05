@@ -8,7 +8,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { sendAlert, sendDigest } from '../lib/telegram.js';
 import { getPerformanceStatsAsync, dbQuery } from '../lib/performance-db.js';
-import { evaluatePfeWinRate } from './monitor-pfe.js';
+import { evaluatePfeWinRate, internalPerfPublicUrl } from './monitor-pfe.js';
 import { hlInfoPost } from '../lib/adapters/hyperliquid.js';
 import { UpstreamRateLimitError } from '../lib/errors.js';
 import { WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
@@ -51,9 +51,9 @@ function parseArgs(): 'critical' | 'digest' {
   return mode;
 }
 
-async function fetchJson(url: string, options?: RequestInit): Promise<{ ok: boolean; status: number; data: unknown }> {
+async function fetchJson(url: string, options?: RequestInit, timeoutMs: number = FETCH_TIMEOUT): Promise<{ ok: boolean; status: number; data: unknown }> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT), ...options });
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), ...options });
     const data = await res.json().catch(() => null);
     return { ok: res.ok, status: res.status, data };
   } catch (err) {
@@ -357,13 +357,15 @@ async function checkBackfillQueue(): Promise<{ error: string | null; count: numb
 }
 
 async function checkPfeWinRate(): Promise<{ error: string | null; rate: number | null }> {
-  // OPS-POSTGRES-MEM-RIGHTSIZE-W1: read the server-side-cached public surface
-  // instead of recomputing the full ~6 s / 152k-row stats query in this short-
-  // lived cron process. Verdict logic lives in the pure, unit-tested
-  // evaluatePfeWinRate(); an outright outage is caught by server_health/database.
-  const { ok, status, data } = await fetchJson(`${API_BASE}/api/performance-public`);
+  // Read the server-side-cached stats instead of recomputing the ~6 s / 152k-row
+  // query in this cold cron process. Hit the co-located server on 127.0.0.1:$PORT
+  // (NOT the public Cloudflare hairpin — it intermittently returned HTTP 0) with
+  // a 15 s timeout, since /api/performance-public takes ~4.7 s on a cold 60 s-cache
+  // miss and brushed the generic 5 s FETCH_TIMEOUT. Verdict logic in the pure,
+  // unit-tested evaluatePfeWinRate(); an outage is caught by server_health/database.
+  const { ok, status, data } = await fetchJson(internalPerfPublicUrl(), {}, 15_000);
   if (!ok) {
-    return { error: `PFE check failed: /api/performance-public HTTP ${status}`, rate: null };
+    return { error: `PFE check failed: performance-public HTTP ${status}`, rate: null };
   }
   return evaluatePfeWinRate(data);
 }

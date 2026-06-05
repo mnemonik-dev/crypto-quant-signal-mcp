@@ -20,3 +20,16 @@ export function evaluatePfeWinRate(data: unknown): { error: string | null; rate:
   }
   return { error: null, rate };
 }
+
+/**
+ * Internal URL for the monitor's PFE check — hits the co-located server on
+ * 127.0.0.1:$PORT directly instead of the public api.algovault.com host. The
+ * monitor runs via `docker exec` in the SAME container as the server (PID 1,
+ * listening on $PORT, default 3000), so the loopback is reliable + fast. The
+ * public hairpin (container → Cloudflare → back) intermittently returned
+ * HTTP 0 when the ~4.7 s cache-miss recompute brushed the 5 s fetch timeout.
+ */
+export function internalPerfPublicUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const port = env.PORT && /^\d+$/.test(env.PORT) ? env.PORT : '3000';
+  return `http://127.0.0.1:${port}/api/performance-public`;
+}

@@ -9,7 +9,7 @@
  * alerting when the rate is unknown (null / missing / malformed).
  */
 import { describe, it, expect } from 'vitest';
-import { evaluatePfeWinRate } from '../../src/scripts/monitor-pfe.js';
+import { evaluatePfeWinRate, internalPerfPublicUrl } from '../../src/scripts/monitor-pfe.js';
 
 describe('evaluatePfeWinRate', () => {
   it('returns no error for a healthy win rate', () => {
@@ -39,5 +39,17 @@ describe('evaluatePfeWinRate', () => {
     expect(evaluatePfeWinRate(null).error).toBeNull();
     expect(evaluatePfeWinRate({ overall: {} }).rate).toBeNull();
     expect(evaluatePfeWinRate({ overall: { pfeWinRate: 'oops' } }).rate).toBeNull();
+  });
+});
+
+describe('internalPerfPublicUrl', () => {
+  it('targets the in-container server on 127.0.0.1 with the PORT env (avoids the public Cloudflare hairpin that intermittently returns HTTP 0)', () => {
+    expect(internalPerfPublicUrl({ PORT: '3000' })).toBe('http://127.0.0.1:3000/api/performance-public');
+    expect(internalPerfPublicUrl({ PORT: '8080' })).toBe('http://127.0.0.1:8080/api/performance-public');
+  });
+
+  it('defaults to port 3000 when PORT is unset or non-numeric', () => {
+    expect(internalPerfPublicUrl({})).toBe('http://127.0.0.1:3000/api/performance-public');
+    expect(internalPerfPublicUrl({ PORT: 'abc' })).toBe('http://127.0.0.1:3000/api/performance-public');
   });
 });
