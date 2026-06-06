@@ -6,7 +6,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { recordRateLimitEvent } from '../../src/lib/rate-limit-events.js';
 import { recordRateLimitEventImpl } from '../../src/lib/performance-db.js';
-import { p95, aggregateRateLimit, evaluateRateLimitTriggers } from '../../src/scripts/shadow-digest-weekly.js';
+import { currentCaller, runAsCaller, runAsBatch } from '../../src/lib/upstream-weight-budget.js';
+import { p95, aggregateRateLimit, aggregateCallers, evaluateRateLimitTriggers } from '../../src/scripts/shadow-digest-weekly.js';
 
 describe('recordRateLimitEvent — fail-open', () => {
   afterEach(() => {
@@ -27,6 +28,15 @@ describe('recordRateLimitEvent — fail-open', () => {
   it('thin recorder runs fail-open when RATE_LIMIT_EVENTS_TEST=1 (no throw, fire-and-forget)', () => {
     process.env.RATE_LIMIT_EVENTS_TEST = '1';
     expect(() => recordRateLimitEvent('TestVenue', 'throw', 'BUDGET_CEILING', 'interactive')).not.toThrow();
+  });
+
+  it('impl never throws with the caller arg (6-arg path, table missing — DB-down equivalent)', () => {
+    expect(() => recordRateLimitEventImpl('Hyperliquid', 'throw', 'BUDGET_CEILING', 'interactive', null, 'get_trade_call')).not.toThrow();
+  });
+
+  it('thin recorder forwards caller fail-open when RATE_LIMIT_EVENTS_TEST=1', () => {
+    process.env.RATE_LIMIT_EVENTS_TEST = '1';
+    expect(() => recordRateLimitEvent('Hyperliquid', 'throw', 'BUDGET_CEILING', 'interactive', undefined, 'grid_warmer')).not.toThrow();
   });
 });
 
@@ -94,5 +104,60 @@ describe('evaluateRateLimitTriggers — both sides of every threshold', () => {
     const joined = r.lines.join('\n');
     expect(joined).toMatch(/W\{NEXT\}/);
     expect(joined).not.toMatch(/-W\d/); // no OPS-...-W1 / -W2 / etc.
+  });
+});
+
+describe('caller-attribution ALS (OPS-RATELIMIT-CALLER-ATTRIBUTION-W1)', () => {
+  it('defaults to "unknown" outside any runAsCaller scope', () => {
+    expect(currentCaller()).toBe('unknown');
+  });
+
+  it('runAsCaller tags the context and propagates across awaits; restored on exit', async () => {
+    const tagged = await runAsCaller('get_trade_call', async () => {
+      await Promise.resolve();
+      return currentCaller();
+    });
+    expect(tagged).toBe('get_trade_call');
+    expect(currentCaller()).toBe('unknown'); // scope-local — restored after exit
+  });
+
+  it('runAsBatch(fn, caller) sets the caller too (the one-line batch entry-point tag)', async () => {
+    expect(await runAsBatch(async () => currentCaller(), 'grid_warmer')).toBe('grid_warmer');
+  });
+
+  it('runAsBatch(fn) without a caller leaves it "unknown" (back-compat preserved)', async () => {
+    expect(await runAsBatch(async () => currentCaller())).toBe('unknown');
+  });
+
+  it('nested runAsCaller — innermost wins; outer restored after the inner scope', async () => {
+    const r = await runAsCaller('outer', async () => {
+      const inner = await runAsCaller('inner', async () => currentCaller());
+      return { inner, afterInner: currentCaller() };
+    });
+    expect(r).toEqual({ inner: 'inner', afterInner: 'outer' });
+  });
+});
+
+describe('aggregateCallers — per-caller HL throw attribution (R4)', () => {
+  it('groups + sums by caller, sorted desc, capped at topN', () => {
+    const out = aggregateCallers(
+      [
+        { caller: 'get_trade_call', n: 30 },
+        { caller: 'scan_funding_arb', n: 12 },
+        { caller: 'get_trade_call', n: 10 }, // same caller → summed to 40
+        { caller: 'grid_warmer', n: 3 },
+        { caller: 'unknown', n: 1 },
+      ],
+      3,
+    );
+    expect(out).toEqual([
+      { caller: 'get_trade_call', n: 40 },
+      { caller: 'scan_funding_arb', n: 12 },
+      { caller: 'grid_warmer', n: 3 },
+    ]); // 'unknown' dropped by the topN=3 cap
+  });
+
+  it('empty input → empty (digest renders no driver line)', () => {
+    expect(aggregateCallers([])).toEqual([]);
   });
 });

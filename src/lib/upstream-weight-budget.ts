@@ -61,19 +61,37 @@ export class WeightBudgetSkipError extends Error {
 // ── Priority-class context (AsyncLocalStorage, default interactive) ──
 const weightClassContext = new AsyncLocalStorage<WeightClass>();
 
+// ── Caller-attribution context (OPS-RATELIMIT-CALLER-ATTRIBUTION-W1) ──
+// Sibling ALS carrying WHICH entry point issued the demand (tool name / grid_warmer /
+// backfill / seed:<tf>). Read by the recorder at the throw/wait/skip + ban sites so the
+// rate_limit_events stream self-pins the driver. Orthogonal to weight class — caller is
+// the WHO, class is the priority lane. Default 'unknown' (fail-open: an untagged path
+// attributes to 'unknown', never breaks).
+const callerContext = new AsyncLocalStorage<string>();
+
+/** Current caller for the running async context. Defaults to `'unknown'`. */
+export function currentCaller(): string {
+  return callerContext.getStore() ?? 'unknown';
+}
+
+/** Run `fn` (and all async work it spawns) tagged with `caller` (weight class unchanged). */
+export function runAsCaller<T>(caller: string, fn: () => T): T {
+  return callerContext.run(caller, fn);
+}
+
 /** Current weight class for the running async context. Defaults to `interactive`. */
 export function currentWeightClass(): WeightClass {
   return weightClassContext.getStore() ?? 'interactive';
 }
 
-/** Run `fn` (and all async work it spawns) under the `batch` weight class. */
-export function runAsBatch<T>(fn: () => Promise<T>): Promise<T> {
-  return weightClassContext.run('batch', fn);
+/** Run `fn` (and all async work it spawns) under the `batch` weight class; optionally tag `caller`. */
+export function runAsBatch<T>(fn: () => Promise<T>, caller?: string): Promise<T> {
+  return weightClassContext.run('batch', caller === undefined ? fn : () => callerContext.run(caller, fn));
 }
 
-/** Run `fn` under the `interactive` weight class (explicit override of a batch scope). */
-export function runAsInteractive<T>(fn: () => Promise<T>): Promise<T> {
-  return weightClassContext.run('interactive', fn);
+/** Run `fn` under the `interactive` weight class (explicit override of a batch scope); optionally tag `caller`. */
+export function runAsInteractive<T>(fn: () => Promise<T>, caller?: string): Promise<T> {
+  return weightClassContext.run('interactive', caller === undefined ? fn : () => callerContext.run(caller, fn));
 }
 
 interface Ledger {
@@ -198,7 +216,7 @@ export class WeightBudget {
 
       if (decision === 'acquired') {
         // Telemetry: a batch acquire that WAITED before fitting (interactive never waits).
-        if (totalWaitMs > 0) recordRateLimitEvent(this.venue, 'wait', null, 'batch', totalWaitMs);
+        if (totalWaitMs > 0) recordRateLimitEvent(this.venue, 'wait', null, 'batch', totalWaitMs, currentCaller());
         return;
       }
 
@@ -212,7 +230,7 @@ export class WeightBudget {
             retry_after_seconds: secondsToRoll,
           }),
         );
-        recordRateLimitEvent(this.venue, 'throw', 'BUDGET_CEILING', cls);
+        recordRateLimitEvent(this.venue, 'throw', 'BUDGET_CEILING', cls, undefined, currentCaller());
         throw new UpstreamRateLimitError(this.venue, secondsToRoll);
       }
 
@@ -226,7 +244,7 @@ export class WeightBudget {
             max_batch_wait_ms: this.maxBatchWaitMs,
           }),
         );
-        recordRateLimitEvent(this.venue, 'skip', null, 'batch', totalWaitMs || null);
+        recordRateLimitEvent(this.venue, 'skip', null, 'batch', totalWaitMs || null, currentCaller());
         throw new WeightBudgetSkipError(this.venue, weight);
       }
 

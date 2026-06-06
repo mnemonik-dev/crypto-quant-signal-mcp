@@ -24,7 +24,7 @@
  * banStatuses anywhere.
  */
 import { UpstreamRateLimitError } from '../errors.js';
-import { WeightBudgetSkipError, currentWeightClass, type WeightClass } from '../upstream-weight-budget.js';
+import { WeightBudgetSkipError, currentWeightClass, currentCaller, type WeightClass } from '../upstream-weight-budget.js';
 import { getVenueBudget } from '../venue-budget-registry.js';
 import { recordRateLimitEvent } from '../rate-limit-events.js';
 
@@ -94,7 +94,7 @@ export async function upstreamFetch<T>(cfg: VenueFetchConfig, req: UpstreamReque
       if (cfg.banStatuses.includes(res.status)) {
         const ra = res.headers.get(cfg.retryAfterHeader ?? 'Retry-After');
         const seconds = ra ? parseInt(ra, 10) : null;
-        recordRateLimitEvent(cfg.venueName, 'throw', String(res.status), req.cls ?? currentWeightClass());
+        recordRateLimitEvent(cfg.venueName, 'throw', String(res.status), req.cls ?? currentWeightClass(), undefined, currentCaller());
         throw new UpstreamRateLimitError(cfg.venueName, Number.isFinite(seconds) ? seconds : null);
       }
       if (!res.ok) {
@@ -103,7 +103,7 @@ export async function upstreamFetch<T>(cfg: VenueFetchConfig, req: UpstreamReque
       const json = (await res.json()) as T;
       if (cfg.banBodyCodes && isBanBody(json, cfg.banBodyCodes)) {
         const code = (json as { code?: unknown }).code;
-        recordRateLimitEvent(cfg.venueName, 'throw', code != null ? String(code) : 'BODY_CODE', req.cls ?? currentWeightClass());
+        recordRateLimitEvent(cfg.venueName, 'throw', code != null ? String(code) : 'BODY_CODE', req.cls ?? currentWeightClass(), undefined, currentCaller());
         throw new UpstreamRateLimitError(cfg.venueName, null);
       }
       return json;

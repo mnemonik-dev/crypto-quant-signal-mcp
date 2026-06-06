@@ -60,7 +60,7 @@ import {
   summarizeCheckoutCompleted,
 } from './lib/stripe.js';
 import { UpstreamRateLimitError, EXCHANGE_FALLBACKS, TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError, InsufficientCandlesError, buildInsufficientCandlesPayload } from './lib/errors.js';
-import { runAsBatch } from './lib/upstream-weight-budget.js';
+import { runAsBatch, runAsCaller } from './lib/upstream-weight-budget.js';
 import { listVenues } from './lib/venue-store.js';
 import { checkBotInternalAuth } from './lib/bot-auth.js';
 import { getWelcomePageHtml } from './lib/welcome-page.js';
@@ -294,7 +294,7 @@ function createServer(): McpServer {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
-        const result = await getTradeSignal({ coin, timeframe, includeReasoning, exchange, license });
+        const result = await runAsCaller(toolNameForAnalytics, () => getTradeSignal({ coin, timeframe, includeReasoning, exchange, license }));
         // Verdict stored for x402 settlement skip (HOLDs don't settle)
         setRequestVerdict(result.call);
         // Quota tracking is handled inside getTradeSignal (HOLDs are free)
@@ -358,7 +358,7 @@ function createServer(): McpServer {
       try {
         const license = getRequestLicense();
         // Quota tracking is handled inside scanFundingArb
-        const result = await scanFundingArb({ minSpreadBps, limit, license });
+        const result = await runAsCaller('scan_funding_arb', () => scanFundingArb({ minSpreadBps, limit, license }));
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'scan_funding_arb',
@@ -398,7 +398,7 @@ function createServer(): McpServer {
       try {
         const license = getRequestLicense();
         // Quota tracking is handled inside getMarketRegime
-        const result = await getMarketRegime({ coin, timeframe, exchange });
+        const result = await runAsCaller('get_market_regime', () => getMarketRegime({ coin, timeframe, exchange }));
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'get_market_regime',
@@ -448,7 +448,7 @@ function createServer(): McpServer {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
-        const result = await getEquityCall({ symbol, license });
+        const result = await runAsCaller('get_equity_call', () => getEquityCall({ symbol, license }));
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'get_equity_call',
@@ -473,7 +473,7 @@ function createServer(): McpServer {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
-        const result = await getEquityRegime({ symbol, license });
+        const result = await runAsCaller('get_equity_regime', () => getEquityRegime({ symbol, license }));
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'get_equity_regime',
@@ -502,10 +502,10 @@ function createServer(): McpServer {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
-        const result = await runScanTradeCall(
+        const result = await runAsCaller('scan_trade_calls', () => runScanTradeCall(
           { topN, timeframe, exchange, minConfidence, includeHolds, limit },
           license,
-        );
+        ));
         logRequest({
           sessionId: getRequestSessionId(),
           toolName: 'scan_trade_calls',
@@ -550,7 +550,7 @@ function createServer(): McpServer {
       try {
         const license = getRequestLicense();
         const { index, engine } = await getKnowledgeSearch();
-        const results = await engine.query(query, limit ?? 10);
+        const results = await runAsCaller('search_knowledge', () => engine.query(query, limit ?? 10));
         const bundle = index.getBundle();
         const response = formatSearchKnowledgeResponse(query, results, bundle);
         logRequest({
@@ -616,7 +616,7 @@ function createServer(): McpServer {
           };
           return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
         }
-        const result = await chatEngine.chat(question, { model });
+        const result = await runAsCaller('chat_knowledge', () => chatEngine.chat(question, { model }));
         // Record AFTER successful LLM call (rate-limit reflects actual usage)
         await rateLimit.record(quotaKey, result.usage);
         const bundle = index.getBundle();
@@ -2220,8 +2220,8 @@ async function startHttp() {
     // OPS-HL-RATELIMITER-W2: the in-server backfill is bulk → run in `batch`
     // weight class so its HL candle fetches wait behind the shared weight budget
     // and yield the interactive reserve to live MCP tool callers.
-    setTimeout(() => runAsBatch(() => runBackfill()).catch(() => {}), 10_000); // first run after 10s
-    setInterval(() => runAsBatch(() => runBackfill()).catch(() => {}), 300_000); // then every 5 min
+    setTimeout(() => runAsBatch(() => runBackfill(), 'backfill').catch(() => {}), 10_000); // first run after 10s
+    setInterval(() => runAsBatch(() => runBackfill(), 'backfill').catch(() => {}), 300_000); // then every 5 min
 
     // CALL-REGIME-WEBHOOK-LAYER-W1 (2026-05-29): outbound webhook delivery worker.
     // Ships DARK — only starts when WEBHOOK_DELIVERY_ENABLED=true. Flag-off = zero

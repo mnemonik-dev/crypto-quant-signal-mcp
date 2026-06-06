@@ -338,7 +338,7 @@ async function refreshGrid(): Promise<void> {
  */
 function ensureRefreshInflight(): Promise<void> {
   if (inflight === null) {
-    inflight = runAsBatch(() => refreshGrid()).finally(() => {
+    inflight = runAsBatch(() => refreshGrid(), 'grid_warmer').finally(() => {
       inflight = null;
     });
   }

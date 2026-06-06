@@ -942,11 +942,12 @@ export function recordRateLimitEventImpl(
   code: string | null,
   cls: 'interactive' | 'batch',
   waitMs: number | null,
+  caller: string = 'unknown',
 ): void {
   try {
     getBackend().run(
-      `INSERT INTO rate_limit_events (venue, kind, http_or_body_code, class, wait_ms) VALUES (?, ?, ?, ?, ?)`,
-      venue, kind, code, cls, waitMs,
+      `INSERT INTO rate_limit_events (venue, kind, http_or_body_code, class, wait_ms, caller) VALUES (?, ?, ?, ?, ?, ?)`,
+      venue, kind, code, cls, waitMs, caller,
     );
   } catch (e) {
     // Fail-open: telemetry must never break or delay the fetch/acquire path.

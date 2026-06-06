@@ -178,6 +178,20 @@ export function aggregateRateLimit(counts: { venue: string; kind: string; class:
   return [...byVenue.values()].sort((a, b) => b.throws - a.throws);
 }
 
+/**
+ * Top callers by throw count for a venue (pure; testable with synthetic rows).
+ * OPS-RATELIMIT-CALLER-ATTRIBUTION-W1 R4 — self-pins the HL interactive-demand driver
+ * in the weekly digest so the websocket scope is visible without a manual query.
+ */
+export function aggregateCallers(rows: { caller: string; n: number }[], topN = 5): { caller: string; n: number }[] {
+  const byCaller = new Map<string, number>();
+  for (const r of rows) byCaller.set(r.caller, (byCaller.get(r.caller) ?? 0) + r.n);
+  return [...byCaller.entries()]
+    .map(([caller, n]) => ({ caller, n }))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, topN);
+}
+
 async function buildRateLimitSection(): Promise<string[]> {
   const header = ['', '⚡ *Rate-limit telemetry (7d)*'];
   try {
@@ -193,14 +207,24 @@ async function buildRateLimitSection(): Promise<string[]> {
         WHERE ts > NOW() - INTERVAL '7 days' AND venue = $1 AND kind = 'wait' AND class = 'batch' AND wait_ms IS NOT NULL`,
       [HL_VENUE_NAME],
     );
+    // R4 — per-caller HL throw attribution (the OPS-RATELIMIT-CALLER-ATTRIBUTION-W1 payoff).
+    const hlCallerRows = await dbQuery<{ caller: string; n: string }>(
+      `SELECT caller, COUNT(*)::text AS n
+         FROM rate_limit_events
+        WHERE ts > NOW() - INTERVAL '7 days' AND venue = $1 AND kind = 'throw'
+        GROUP BY caller`,
+      [HL_VENUE_NAME],
+    );
     const perVenue = aggregateRateLimit(rawCounts.map((c) => ({ ...c, n: Number(c.n) })));
     const hlWaitP95Ms = p95(hlWaits.map((r) => Number(r.wait_ms)));
+    const hlTopCallers = aggregateCallers(hlCallerRows.map((c) => ({ caller: c.caller, n: Number(c.n) })));
 
     const body = perVenue.length === 0
       ? ['   (no rate-limit events — all venues healthy)']
       : [
           ...perVenue.map((v) => `   *${v.venue}*: ${v.throws} throws (i:${v.iThrows}/b:${v.bThrows}), ${v.waits} waits, ${v.skips} skips`),
           ...(perVenue.some((v) => v.venue === HL_VENUE_NAME) ? [`   HL batch-wait p95: ${(hlWaitP95Ms / 1000).toFixed(1)}s`] : []),
+          ...(hlTopCallers.length ? [`   HL throw drivers (by caller, 7d): ${hlTopCallers.map((c) => `${c.caller} (${c.n})`).join(', ')}`] : []),
         ];
     const { lines } = evaluateRateLimitTriggers(perVenue, hlWaitP95Ms);
     return [...header, ...body, ...(lines.length ? ['', ...lines] : [])];

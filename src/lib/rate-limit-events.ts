@@ -24,12 +24,13 @@ export function recordRateLimitEvent(
   code: string | null,
   cls: RateLimitClass,
   waitMs?: number | null,
+  caller: string = 'unknown',
 ): void {
   // Offline under vitest by default so a throw/skip/wait in a budget/adapter test
   // never spins up the SQLite backend. `RATE_LIMIT_EVENTS_TEST=1` re-enables the real
   // path for the fail-open recorder test (R4).
   if (process.env.VITEST && process.env.RATE_LIMIT_EVENTS_TEST !== '1') return;
   void import('./performance-db.js')
-    .then((m) => m.recordRateLimitEventImpl(venue, kind, code, cls, waitMs ?? null))
+    .then((m) => m.recordRateLimitEventImpl(venue, kind, code, cls, waitMs ?? null, caller))
     .catch((e) => console.warn(`[rate-limit-events] record failed (fail-open): ${e instanceof Error ? e.message : e}`));
 }

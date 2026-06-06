@@ -28,7 +28,7 @@
 import { getSignalsNeedingUnifiedBackfillAsync, updateSignalOutcomes, closeDb } from '../lib/performance-db.js';
 import { getAdapter } from '../lib/exchange-adapter.js';
 import { getDexForCoin } from '../lib/asset-tiers.js';
-import { runAsBatch, WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
+import { runAsBatch, runAsCaller, WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
 import type { Candle, ExchangeId, SignalRecord } from '../types.js';
 
 const DELAY_BETWEEN_FETCHES_MS = 300; // polite to HL API
@@ -319,7 +319,7 @@ async function main() {
   });
 }
 
-main().catch((err) => {
+runAsCaller('backfill', main).catch((err) => {
   console.error('Fatal:', err);
   closeDb();
   process.exit(1);
