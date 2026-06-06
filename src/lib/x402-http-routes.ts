@@ -26,6 +26,7 @@
  */
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import Ajv, { type ValidateFunction } from 'ajv';
+import { encodePaymentRequiredHeader } from '@x402/core/http';
 import { resolveLicense, requestContext } from './license.js';
 import { hashIp, logRequest } from './analytics.js';
 import { generate402Response, settleX402Async } from './x402.js';
@@ -62,6 +63,25 @@ function logCrawl(req: Request, res: Response, next: NextFunction): void {
     console.log(`[x402-route] ${req.method} ${req.path} status=${res.statusCode} xpayment=${paid} ua="${ua}"`);
   });
   next();
+}
+
+/**
+ * Send the x402 402 challenge. **The x402 v2 HTTP transport delivers the PaymentRequired
+ * payload via a base64-encoded `PAYMENT-REQUIRED` response HEADER — the CDP Bazaar crawler
+ * reads it THERE, not in the body** (CDP eng, 2026-06-06: "embeds it in the response body
+ * — bazaar discovery will reject it"). We set the header (canonical SDK encoder) AND keep
+ * the JSON body (human/debug + existing clients).
+ */
+function send402(res: Response, tool: string): void {
+  const r = generate402Response(tool, {
+    resourceUrl: bazaarResourceUrl(tool),
+    description: bazaarRouteDescription(tool),
+    includeExtensions: true,
+  });
+  try {
+    res.setHeader('PAYMENT-REQUIRED', encodePaymentRequiredHeader(r.body as Parameters<typeof encodePaymentRequiredHeader>[0]));
+  } catch { /* best-effort; body still carries the payload */ }
+  res.status(r.status).json(r.body);
 }
 
 /** The paid, Bazaar-discoverable HTTP tools (must match BAZAAR_ROUTES / TOOL_PRICING). */
@@ -139,12 +159,7 @@ export function mountX402HttpRoutes(app: Express): string[] {
     // 405s on GET; a POST-only route 404s on GET and stays unlisted forever despite the
     // settle returning `processing`). The actual paid invocation is the POST below.
     app.get(routePath, logCrawl, (_req: Request, res: Response) => {
-      const r = generate402Response(tool, {
-        resourceUrl: bazaarResourceUrl(tool),
-        description: bazaarRouteDescription(tool),
-        includeExtensions: true,
-      });
-      res.status(r.status).json(r.body);
+      send402(res, tool);
     });
 
     app.post(routePath, logCrawl, tolerantJson, async (req: Request, res: Response) => {
@@ -157,12 +172,8 @@ export function mountX402HttpRoutes(app: Express): string[] {
       // Paywall: require a settled-capable x402 payment. No payment → 402 carrying
       // the HTTP resource URL + bazaar extension (the channel that earns the listing).
       if (license.tier !== 'x402' || !pendingSettlement) {
-        const r = generate402Response(tool, {
-          resourceUrl: bazaarResourceUrl(tool),
-          description: bazaarRouteDescription(tool),
-          includeExtensions: true,
-        });
-        return res.status(r.status).json(r.body);
+        send402(res, tool);
+        return;
       }
 
       // Validate body against the SAME schema declared to the Bazaar (defaults applied).

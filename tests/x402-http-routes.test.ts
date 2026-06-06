@@ -163,6 +163,24 @@ describe('x402 HTTP routes — paywall + listing channel (R2, R3, item K)', () =
       expect(res.status, `body=${JSON.stringify(body)}`).toBe(402);
     }
   });
+
+  it('402 delivers PaymentRequired via the base64 PAYMENT-REQUIRED header (x402 v2 HTTP transport)', async () => {
+    await bootApp({ facilitator: 'cdp', bazaar: 'true' });
+    for (const method of ['GET', 'POST'] as const) {
+      const res = await fetch(`${baseUrl}/x402/scan_funding_arb`, method === 'POST'
+        ? { method, headers: { 'Content-Type': 'application/json' }, body: '{}' }
+        : { method });
+      expect(res.status, method).toBe(402);
+      const hdr = res.headers.get('payment-required');
+      expect(hdr, `${method} PAYMENT-REQUIRED header present`).toBeTruthy();
+      const decoded = JSON.parse(Buffer.from(hdr as string, 'base64').toString('utf8')) as {
+        x402Version?: number; accepts?: Array<{ network?: string }>; extensions?: { bazaar?: { info?: { input?: { type?: string } } } };
+      };
+      expect(decoded.x402Version).toBe(2);
+      expect(decoded.accepts?.[0]?.network).toBe('eip155:8453');
+      expect(decoded.extensions?.bazaar?.info?.input?.type).toBe('http');
+    }
+  });
 });
 
 describe('x402 HTTP routes — handler parity (R1: same core fn + args as MCP)', () => {
