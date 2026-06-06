@@ -1,6 +1,6 @@
 import { getPerformanceStatsAsync, getSignalsNeedingUnifiedBackfillAsync, updateSignalOutcomes } from '../lib/performance-db.js';
 import { getAdapter } from '../lib/exchange-adapter.js';
-import { runAsCaller } from '../lib/upstream-weight-budget.js';
+import { runAsBatch } from '../lib/upstream-weight-budget.js';
 import type { Candle, ExchangeId, PerformanceStats, SignalRecord } from '../types.js';
 
 /** Timeframe → milliseconds per candle */
@@ -107,17 +107,37 @@ function computePFEMAE(
 }
 
 /**
+ * OPS-HL-BACKFILL-BATCH-W1: single-flight the lazy outcome-backfill so concurrent
+ * `getSignalPerformance` reads SHARE one batch sweep. Mirrors
+ * `cross-asset-grid.ts ensureRefreshInflight` EXACTLY (set-on-start / clear-on-settle).
+ * `runBackfill` is a GLOBAL no-arg "all due outcomes" sweep
+ * (`getSignalsNeedingUnifiedBackfillAsync()` takes no args) → one in-flight covers every
+ * concurrent reader; reader B's needs are satisfied by reader A's sweep.
+ *
+ * NOTE (generator hygiene): this is the 2nd hand-rolled pure-single-flight-void wrapper
+ * (`ensureRefreshInflight` = 1st; `coalescedCache` doesn't fit — it caches a value, this
+ * returns none). Below the 3-example extraction threshold → inline. A 3rd warrants a
+ * shared `singleFlight()` helper (WIS-flagged).
+ */
+let backfillInflight: Promise<void> | null = null;
+
+/**
  * Get signal performance stats (the MCP resource handler).
  * Backfill runs in the background — never blocks the response.
  */
 export async function getSignalPerformance(): Promise<PerformanceStats> {
-  // Fire-and-forget backfill — don't block the resource response.
-  // OPS-RATELIMIT-CALLER-ATTRIBUTION-W1: tag the lazy outcome-backfill — the DOMINANT HL
-  // interactive driver (up to 50 candleSnapshot fetches/read, fired on every resource /
-  // dashboard / API / capabilities read of getSignalPerformance). Tagged WITHOUT changing
-  // its weight class (still interactive) — zero behavior change per spec. FINDING: this is
-  // the ONLY outcome-backfill path NOT in `batch` (the scheduled + cron + standalone copies
-  // all run `runAsBatch`); moving it to batch is the saturation fix this attribution scopes.
-  runAsCaller('signal_perf_backfill', () => runBackfill()).catch(() => {});
+  // OPS-HL-BACKFILL-BATCH-W1: run the lazy outcome-backfill in the BATCH lane — it was the
+  // SOLE interactive backfill path (100% of HL interactive BUDGET_CEILING throws per
+  // OPS-RATELIMIT-CALLER-ATTRIBUTION-W1); in batch it WAITS under budget pressure instead of
+  // stealing the interactive reserve from live `get_trade_call(HL)` callers. Single-flighted
+  // so concurrent reads share one batch sweep. Keeps the `signal_perf_backfill` caller tag.
+  // Fire-and-forget — never blocks the read: `getPerformanceStatsAsync` below is untouched,
+  // so returned-stats freshness is identical (only the background backfill coalesces).
+  if (backfillInflight === null) {
+    backfillInflight = runAsBatch(() => runBackfill(), 'signal_perf_backfill').finally(() => {
+      backfillInflight = null;
+    });
+  }
+  void backfillInflight.catch(() => {});
   return getPerformanceStatsAsync();
 }
