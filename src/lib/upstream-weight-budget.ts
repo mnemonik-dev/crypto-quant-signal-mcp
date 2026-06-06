@@ -34,6 +34,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import { UpstreamRateLimitError } from './errors.js';
+import { recordRateLimitEvent } from './rate-limit-events.js';
 
 export type WeightClass = 'interactive' | 'batch';
 
@@ -153,6 +154,7 @@ export class WeightBudget {
    */
   async acquire(weight: number, cls: WeightClass): Promise<void> {
     const deadline = this.now() + this.maxBatchWaitMs;
+    let totalWaitMs = 0; // accumulated across wait iterations → exactly 1 'wait'/'skip' telemetry row per acquire
 
     for (;;) {
       const fd = this.tryLock();
@@ -194,7 +196,11 @@ export class WeightBudget {
         this.releaseLock(fd);
       }
 
-      if (decision === 'acquired') return;
+      if (decision === 'acquired') {
+        // Telemetry: a batch acquire that WAITED before fitting (interactive never waits).
+        if (totalWaitMs > 0) recordRateLimitEvent(this.venue, 'wait', null, 'batch', totalWaitMs);
+        return;
+      }
 
       if (decision === 'throw') {
         this.log(
@@ -206,6 +212,7 @@ export class WeightBudget {
             retry_after_seconds: secondsToRoll,
           }),
         );
+        recordRateLimitEvent(this.venue, 'throw', 'BUDGET_CEILING', cls);
         throw new UpstreamRateLimitError(this.venue, secondsToRoll);
       }
 
@@ -219,6 +226,7 @@ export class WeightBudget {
             max_batch_wait_ms: this.maxBatchWaitMs,
           }),
         );
+        recordRateLimitEvent(this.venue, 'skip', null, 'batch', totalWaitMs || null);
         throw new WeightBudgetSkipError(this.venue, weight);
       }
 
@@ -239,6 +247,7 @@ export class WeightBudget {
           }),
         );
       }
+      totalWaitMs += waitMs;
       await this.sleep(waitMs);
     }
   }

@@ -121,12 +121,102 @@ function formatTfBlock(d: TfDigest): string {
     .join('\n');
 }
 
+// ── Rate-limit telemetry section (OPS-RATELIMIT-TELEMETRY-DIGEST-W1 R3) ──
+// One durable event stream (rate_limit_events) → a per-venue 7d summary + the two
+// deferred self-watching triggers. NOT an alert path (digest section only); the
+// trigger lines emit the template form OPS-<CLASS>-W{NEXT} (operator/Cowork resolves
+// the number at dispatch — literal wave numbers are forbidden per CLAUDE.md).
+
+const PROMOTED_VENUE_NAMES = ['Hyperliquid', 'Binance', 'Bybit', 'OKX', 'Bitget'];
+const HL_VENUE_NAME = 'Hyperliquid';
+const SHADOW_THROW_TRIGGER = 3;            // ≥3 typed throws/7d on ANY non-promoted (shadow) venue
+const HL_INTERACTIVE_THROW_TRIGGER = 25;   // "sustained" HL interactive (budget self-throttle) throws/7d — tunable
+const HL_WAIT_P95_TRIGGER_MS = 20_000;     // HL batch-wait p95 > 20s
+
+interface VenueRl { venue: string; throws: number; waits: number; skips: number; iThrows: number; bThrows: number; }
+
+/** p95 of a sample (backend-agnostic; avoids PG-only percentile_cont so the trigger logic is pure-testable). */
+export function p95(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.max(0, Math.min(s.length - 1, Math.ceil(0.95 * s.length) - 1))];
+}
+
+/**
+ * PURE trigger evaluation — unit-tested both sides of each threshold (R4). Emits a
+ * `dispatch OPS-…-W{NEXT}` line ONLY when a threshold trips; silent otherwise.
+ */
+export function evaluateRateLimitTriggers(
+  perVenue: VenueRl[],
+  hlWaitP95Ms: number,
+): { lines: string[]; shadowBudget: boolean; hlWebsocket: boolean } {
+  const lines: string[] = [];
+  const shadowHit = perVenue.find((v) => !PROMOTED_VENUE_NAMES.includes(v.venue) && v.throws >= SHADOW_THROW_TRIGGER);
+  const hl = perVenue.find((v) => v.venue === HL_VENUE_NAME);
+  const hlInteractive = hl?.iThrows ?? 0;
+  const shadowBudget = !!shadowHit;
+  const hlWebsocket = hlInteractive >= HL_INTERACTIVE_THROW_TRIGGER || hlWaitP95Ms > HL_WAIT_P95_TRIGGER_MS;
+  if (shadowBudget) {
+    lines.push(`⚠️ ${shadowHit!.venue}: ${shadowHit!.throws} throws/7d (≥${SHADOW_THROW_TRIGGER}) — Action: dispatch OPS-SHADOW-BUDGET-W{NEXT} via Cowork → Claude Code`);
+  }
+  if (hlWebsocket) {
+    lines.push(`⚠️ HL: ${hlInteractive} interactive throws/7d, batch-wait p95 ${(hlWaitP95Ms / 1000).toFixed(1)}s — Action: dispatch OPS-HL-WEBSOCKET-W{NEXT} via Cowork → Claude Code`);
+  }
+  return { lines, shadowBudget, hlWebsocket };
+}
+
+/** Aggregate the raw count rows into per-venue totals (pure; testable with synthetic rows). */
+export function aggregateRateLimit(counts: { venue: string; kind: string; class: string; n: number }[]): VenueRl[] {
+  const byVenue = new Map<string, VenueRl>();
+  for (const c of counts) {
+    const v = byVenue.get(c.venue) ?? { venue: c.venue, throws: 0, waits: 0, skips: 0, iThrows: 0, bThrows: 0 };
+    if (c.kind === 'throw') { v.throws += c.n; if (c.class === 'interactive') v.iThrows += c.n; else v.bThrows += c.n; }
+    else if (c.kind === 'wait') v.waits += c.n;
+    else if (c.kind === 'skip') v.skips += c.n;
+    byVenue.set(c.venue, v);
+  }
+  return [...byVenue.values()].sort((a, b) => b.throws - a.throws);
+}
+
+async function buildRateLimitSection(): Promise<string[]> {
+  const header = ['', '⚡ *Rate-limit telemetry (7d)*'];
+  try {
+    const rawCounts = await dbQuery<{ venue: string; kind: string; class: string; n: string }>(
+      `SELECT venue, kind, class, COUNT(*)::text AS n
+         FROM rate_limit_events
+        WHERE ts > NOW() - INTERVAL '7 days'
+        GROUP BY venue, kind, class`,
+      [],
+    );
+    const hlWaits = await dbQuery<{ wait_ms: number }>(
+      `SELECT wait_ms FROM rate_limit_events
+        WHERE ts > NOW() - INTERVAL '7 days' AND venue = $1 AND kind = 'wait' AND class = 'batch' AND wait_ms IS NOT NULL`,
+      [HL_VENUE_NAME],
+    );
+    const perVenue = aggregateRateLimit(rawCounts.map((c) => ({ ...c, n: Number(c.n) })));
+    const hlWaitP95Ms = p95(hlWaits.map((r) => Number(r.wait_ms)));
+
+    const body = perVenue.length === 0
+      ? ['   (no rate-limit events — all venues healthy)']
+      : [
+          ...perVenue.map((v) => `   *${v.venue}*: ${v.throws} throws (i:${v.iThrows}/b:${v.bThrows}), ${v.waits} waits, ${v.skips} skips`),
+          ...(perVenue.some((v) => v.venue === HL_VENUE_NAME) ? [`   HL batch-wait p95: ${(hlWaitP95Ms / 1000).toFixed(1)}s`] : []),
+        ];
+    const { lines } = evaluateRateLimitTriggers(perVenue, hlWaitP95Ms);
+    return [...header, ...body, ...(lines.length ? ['', ...lines] : [])];
+  } catch (e) {
+    // Fail-open: a telemetry-query failure must never break the weekly digest.
+    return [...header, `   (rate-limit telemetry unavailable: ${e instanceof Error ? e.message : e})`];
+  }
+}
+
 export async function buildDigest(): Promise<{ text: string; sections: string[]; perTfVerdicts: Record<string, string> }> {
   const weekEnding = new Date().toISOString().slice(0, 10);
   const digests = await Promise.all(SHADOW_TIMEFRAMES.map((tf) => digestForTimeframe(tf)));
   const verdicts: Record<string, string> = {};
   for (const d of digests) verdicts[d.timeframe] = verdictFor(d);
 
+  const rateLimitSection = await buildRateLimitSection();
   const sections = [
     `📊 *SHADOW-SEED WEEKLY DIGEST* (week ending ${weekEnding})`,
     '',
@@ -134,6 +224,7 @@ export async function buildDigest(): Promise<{ text: string; sections: string[];
     '',
     `*Decision threshold*: PFE WR ≥${(PFE_WR_THRESHOLD * 100).toFixed(0)}% AND samples ≥${SAMPLE_THRESHOLD.toLocaleString()} per TF`,
     ...digests.map((d) => `*${d.timeframe} verdict*: ${verdicts[d.timeframe]}`),
+    ...rateLimitSection,
   ];
   return { text: sections.join('\n'), sections, perTfVerdicts: verdicts };
 }

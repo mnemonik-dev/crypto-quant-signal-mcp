@@ -17,6 +17,7 @@ insert-scale-factor for each append-only table.
 | `equity_verdicts` | append + nightly UPDATE (outcome fill) | UPDATE path keeps autovacuum active; ANALYZE still useful |
 | `equity_universe` | small, re-frozen periodically | negligible |
 | `equity_symbol_misses` | append (out-of-universe demand log) | EQUITY-LAUNCH-READINESS-W1; low-volume; no PII (tickers only); safe to trim >180d |
+| `rate_limit_events` | append (typed rate-limit events) | OPS-RATELIMIT-TELEMETRY-DIGEST-W1; low-volume (rows only on a ban/self-throttle/batch-wait/skip — rare); read weekly by `shadow-digest-weekly`; index `(ts, venue)`; no PII; safe to trim >90d. Like `equity_symbol_misses`, too low-write to need the monthly cron line — a `VACUUM (ANALYZE) rate_limit_events;` on demand suffices. |
 
 ### Monthly cron (host root crontab, off-:00, low-traffic window)
 ```

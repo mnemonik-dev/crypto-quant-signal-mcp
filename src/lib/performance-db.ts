@@ -921,6 +921,37 @@ export function recordFunding(coin: string, fundingRate: number): void {
   );
 }
 
+/**
+ * OPS-RATELIMIT-TELEMETRY-DIGEST-W1 R2 — durable, FAIL-OPEN write of one typed
+ * rate-limit event. Fire-and-forget via the shared backend (works from the
+ * long-lived MCP server AND short-lived `docker exec` seed crons — both reach the
+ * same `getBackend()`). NEVER throws; `ts` defaults to `now()` in the DB. Read
+ * weekly by `shadow-digest-weekly`.
+ *
+ * The PUBLIC entry point is `recordRateLimitEvent` in `./rate-limit-events.ts`,
+ * which lazy-`import()`s THIS impl at call time — the transport modules must not
+ * statically import performance-db (it closes a cycle:
+ * performance-db → asset-tiers → exchange-universe → _upstream-fetch →
+ * venue-budget-registry → upstream-weight-budget). The vitest guard lives there.
+ */
+export function recordRateLimitEventImpl(
+  venue: string,
+  kind: 'throw' | 'wait' | 'skip',
+  code: string | null,
+  cls: 'interactive' | 'batch',
+  waitMs: number | null,
+): void {
+  try {
+    getBackend().run(
+      `INSERT INTO rate_limit_events (venue, kind, http_or_body_code, class, wait_ms) VALUES (?, ?, ?, ?, ?)`,
+      venue, kind, code, cls, waitMs,
+    );
+  } catch (e) {
+    // Fail-open: telemetry must never break or delay the fetch/acquire path.
+    console.warn(`[rate-limit-events] record failed (fail-open): ${(e as Error).message}`);
+  }
+}
+
 /** Increment the HOLD counter for a coin/timeframe/day. Lightweight — one row per combo. */
 export function recordHoldCount(coin: string, timeframe: string): void {
   const b = getBackend();
