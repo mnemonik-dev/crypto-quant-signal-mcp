@@ -9,3 +9,6 @@ dist/
 # MCP registry publishing tokens (local-only, never commit)
 .mcpregistry_github_token
 .mcpregistry_registry_token
+
+# Parallel-session worktrees (native `claude -w` / scripts/cc-session.sh)
+/.claude/worktrees/
