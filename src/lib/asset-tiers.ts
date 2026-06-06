@@ -10,6 +10,8 @@
 
 import type { DexType, ExchangeId } from '../types.js';
 import { getExchangeTopAssetsWithVolume } from './exchange-universe.js';
+import { coalescedCache } from './coalesced-cache.js';
+import { isShortLivedScript } from './runtime.js';
 
 export type AssetTier = 1 | 2 | 3 | 4;
 
@@ -109,8 +111,8 @@ export function getDexForCoin(coin: string): DexType {
 
 // ── Top 20 OI (for Tier 2 classification) ──
 
-let cachedTop20: { coins: Set<string>; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 3_600_000;
+const TOP20_NEGATIVE_TTL_MS = 45_000; // negative-cache window on an HL throttle (jittered)
 
 /**
  * DASH-W1-FIX-2 (2026-05-03): static fallback for the cold-start-during-HL-429
@@ -141,29 +143,34 @@ const FALLBACK_TOP20: Set<string> = new Set([
   'TAO', 'HYPE', 'ZEC', 'XMR', 'ENA', 'PAXG', 'ARB', 'OP', 'FIL', 'ICP',
 ]);
 
-export async function getTop20ByOI(): Promise<Set<string>> {
-  if (cachedTop20 && Date.now() - cachedTop20.fetchedAt < CACHE_TTL_MS) {
-    return cachedTop20.coins;
-  }
-  try {
+// OPS-HL-CACHE-STAMPEDE-GENERATOR-W1 C3: getTop20ByOI is the call EVERY getTradeSignal
+// makes (incl. the server warmer's 42 grid scorers every ~50s) — its cache-on-success-
+// only shape (no single-flight, no negative cache) was the storm's entry point: a
+// throttled cold cache never filled, so every call re-hit HL. Now routed through the
+// shared coalescedCache: single-flight collapses concurrent cold-fills to ONE fetch, a
+// throttle is negative-cached (~45s jittered) not re-stormed, stale-or-FALLBACK_TOP20 is
+// served on failure (values unchanged), and a PROCESS-BOUNDARY GATE makes short-lived
+// seed crons serve cache/FALLBACK_TOP20 + NEVER cold-fill HL (closes class B). The
+// returned Set + fallback values are byte-identical to before.
+const top20Cache = coalescedCache<Set<string>>({
+  load: async () => {
     const { getTopAssetsByOI } = await import('./oi-ranking.js');
     const assets = await getTopAssetsByOI(20);
-    const coinSet = new Set(
+    return new Set(
       assets
         .map((a: { coin: string }) => a.coin.toUpperCase())
         .filter((c: string) => !TIER_1.has(c) && !MEME_KNOWN.has(c) && !isKnownTradFi(c))
     );
-    cachedTop20 = { coins: coinSet, fetchedAt: Date.now() };
-    return coinSet;
-  } catch {
-    // DASH-W1-FIX-2 (2026-05-03): preserve stale cache on error rather than
-    // returning empty Set. If even stale cache is unavailable (cold-start
-    // during HL 429), fall back to the hardcoded canonical top-20 list so
-    // the Major Alts dashboard panel stays populated.
-    if (cachedTop20) return cachedTop20.coins;
-    console.warn('[asset-tiers] getTop20ByOI: HL fetch failed AND no cached data — using FALLBACK_TOP20');
-    return FALLBACK_TOP20;
-  }
+  },
+  ttlMs: CACHE_TTL_MS,
+  staleOk: true,
+  fallback: () => FALLBACK_TOP20,
+  negativeTtlMs: TOP20_NEGATIVE_TTL_MS,
+  processGate: () => isShortLivedScript(process.argv[1]),
+});
+
+export function getTop20ByOI(): Promise<Set<string>> {
+  return top20Cache.get('top20');
 }
 
 /**
@@ -171,7 +178,7 @@ export async function getTop20ByOI(): Promise<Set<string>> {
  * runs in isolation. Underscore-prefixed; non-public.
  */
 export function _clearTop20Cache(): void {
-  cachedTop20 = null;
+  top20Cache._clear();
 }
 
 /**

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import type { SignalRecord, SignalVerdict, PerformanceStats } from '../types.js';
 import { classifyAsset, TIER_DEFINITIONS, getTop20ByOI } from './asset-tiers.js';
+import { isShortLivedScript } from './runtime.js';
 
 const DB_DIR = path.join(os.homedir(), '.crypto-quant-signal');
 const DB_PATH = path.join(DB_DIR, 'performance.db');
@@ -60,9 +61,10 @@ class SqliteBackend implements DbBackend {
  * get a small per-process connection budget; the long-lived server keeps the
  * bigger one. Pure (argv passed in) so it is unit-testable.
  */
-export function isShortLivedScript(scriptPath: string | undefined): boolean {
-  return /[\\/]scripts[\\/]/.test(scriptPath ?? '');
-}
+// OPS-HL-CACHE-STAMPEDE-GENERATOR-W1 C3: moved to ./runtime.js (dependency-free) so
+// asset-tiers can import it without a cycle; re-exported here for back-compat
+// (cross-asset-grid imports `isShortLivedScript` from performance-db).
+export { isShortLivedScript };
 
 const DEFAULT_POOL_MAX = isShortLivedScript(process.argv[1]) ? 2 : 12;
 
