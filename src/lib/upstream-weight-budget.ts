@@ -79,11 +79,6 @@ export function runAsCaller<T>(caller: string, fn: () => T): T {
   return callerContext.run(caller, fn);
 }
 
-// TEMP DIAGNOSTIC (OPS-RATELIMIT-CALLER-ATTRIBUTION-W1): pin the residual untagged
-// interactive throw driver — logs the first few unknown-caller throw stacks (Node async
-// stack traces), then goes quiet. REMOVED in the same wave once the driver is tagged.
-let _dbgUnknownThrows = 0;
-
 /** Current weight class for the running async context. Defaults to `interactive`. */
 export function currentWeightClass(): WeightClass {
   return weightClassContext.getStore() ?? 'interactive';
@@ -235,12 +230,7 @@ export class WeightBudget {
             retry_after_seconds: secondsToRoll,
           }),
         );
-        const _dbgCaller = currentCaller();
-        if (_dbgCaller === 'unknown' && _dbgUnknownThrows < 6) {
-          _dbgUnknownThrows++;
-          console.log(`[caller-debug] unknown ${this.venue} interactive throw #${_dbgUnknownThrows}:\n${new Error('caller-trace').stack}`);
-        }
-        recordRateLimitEvent(this.venue, 'throw', 'BUDGET_CEILING', cls, undefined, _dbgCaller);
+        recordRateLimitEvent(this.venue, 'throw', 'BUDGET_CEILING', cls, undefined, currentCaller());
         throw new UpstreamRateLimitError(this.venue, secondsToRoll);
       }
 
