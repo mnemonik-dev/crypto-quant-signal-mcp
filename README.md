@@ -240,9 +240,14 @@ Quota-only tiers. Every tier gets all venues, all assets, all timeframes — you
 
 ---
 
-## What's new in v1.20.0
+## What's new in v1.20.1
 
-Live since 2026-06-04:
+Live since 2026-06-05:
+
+- **🔌 Three new exchange pairings: Gemini, Kraken, Alpaca.** Step-by-step tutorials + runnable keyless demos that wire AlgoVault's analysis into each venue's own MCP execution kit — built for autonomous trading agents. AlgoVault calls the trade (composite verdict, market regime, and the `scan_trade_calls` market sweep); the venue executes. Browse them at [algovault.com/integrations](https://algovault.com/integrations); tutorials live in [algovault-skills](https://github.com/AlgoVaultLabs/algovault-skills).
+- **🤖 Same drop-in pattern across every venue.** ≤5 minutes to a runnable demo, testnet/demo only — zero real-money risk. AlgoVault stays the analysis layer; your agent and the venue handle execution.
+
+### v1.20.0 highlights (recap)
 
 - **📡 `scan_trade_calls` — market-wide scanner.** One call scans the top-N perps (1–100, ranked by open interest) on your chosen venue and returns every actionable BUY/SELL with confidence and regime. HOLDs stay free — quota counts only actionable calls.
 - **🔔 Webhooks: dynamic `top:N` watchlists.** Subscribe with `assets: ["top:25"]` and your webhook follows the venue's top perps automatically. No manual list upkeep.
