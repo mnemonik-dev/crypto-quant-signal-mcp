@@ -5,6 +5,14 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.1] - 2026-06-05
+
+### Added — Exchange pairings: Gemini, Kraken, Alpaca
+- Three new pairing tutorials + runnable keyless demos for autonomous trading agents. Each wires AlgoVault's analysis (composite verdict, market regime, and the `scan_trade_calls` scanner) into the venue's own MCP execution kit — AlgoVault calls it, the venue executes. Browse at [algovault.com/integrations](https://algovault.com/integrations); tutorials in [algovault-skills](https://github.com/AlgoVaultLabs/algovault-skills). Testnet/demo only.
+
+### Internal
+- Cross-venue rate-limit unification, seed orchestration, grid hardening, and SEO/observability. No public MCP tool surface change (`tools/list` unchanged at 9).
+
 ## [1.20.0] - 2026-06-04
 
 ### Added — scan_trade_calls market scanner
