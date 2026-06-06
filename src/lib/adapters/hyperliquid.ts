@@ -16,6 +16,7 @@ import type {
 import { UpstreamRateLimitError } from '../errors.js';
 import { type WeightClass } from '../upstream-weight-budget.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './_upstream-fetch.js';
+import { coalescedCache } from '../coalesced-cache.js';
 
 const BASE_URL = 'https://api.hyperliquid.xyz/info';
 const MAX_RETRIES = 1;
@@ -128,38 +129,30 @@ export async function hlInfoPost<T>(
 // single backend fetch. Cross-process coalescing (separate cron-fire node
 // processes) is out of scope and deferred to OPS-HL-RATELIMITER-W2.
 const META_TTL_MS = 60_000;
-type MetaCacheEntry = { value: unknown; ts: number };
-const metaCache = new Map<string, MetaCacheEntry>();
-const metaInflight = new Map<string, Promise<unknown>>();
 
 function metaCacheKey(dex: DexType): string {
   return dex === 'xyz' ? 'xyz' : 'standard';
 }
 
-async function getMetaAndAssetCtxsCoalesced<T>(dex: DexType): Promise<T> {
-  const key = metaCacheKey(dex);
-  const cached = metaCache.get(key);
-  if (cached && Date.now() - cached.ts < META_TTL_MS) {
-    return cached.value as T;
-  }
-  const existing = metaInflight.get(key);
-  if (existing) {
-    return existing as Promise<T>;
-  }
-  const body: Record<string, unknown> = { type: 'metaAndAssetCtxs' };
-  if (dex === 'xyz') body.dex = 'xyz';
-  const promise = hlInfoPost<T>(body)
-    .then((value) => {
-      metaCache.set(key, { value, ts: Date.now() });
-      metaInflight.delete(key);
-      return value;
-    })
-    .catch((err) => {
-      metaInflight.delete(key);
-      throw err;
-    });
-  metaInflight.set(key, promise as Promise<unknown>);
-  return promise;
+// OPS-HL-CACHE-STAMPEDE-GENERATOR-W1 C2: the single-flight + 60s-TTL coalescing that
+// lived in the metaCache/metaInflight maps now routes through the shared
+// `coalescedCache` primitive. BYTE-EQUIVALENT: single-flight per dex key, 60s TTL,
+// throw-on-error (staleOk=false, negativeTtlMs=0 → no stale-serve, no negative memo —
+// meta already can't stampede thanks to its single-flight), budget `acquire` called
+// exactly once per real fetch (inside hlInfoPost, unchanged).
+const metaCacheImpl = coalescedCache<unknown>({
+  load: (key) => {
+    const body: Record<string, unknown> = { type: 'metaAndAssetCtxs' };
+    if (key === 'xyz') body.dex = 'xyz';
+    return hlInfoPost<unknown>(body);
+  },
+  ttlMs: META_TTL_MS,
+  staleOk: false,
+  negativeTtlMs: 0,
+});
+
+function getMetaAndAssetCtxsCoalesced<T>(dex: DexType): Promise<T> {
+  return metaCacheImpl.get(metaCacheKey(dex)) as Promise<T>;
 }
 
 /**
@@ -167,8 +160,7 @@ async function getMetaAndAssetCtxsCoalesced<T>(dex: DexType): Promise<T> {
  * Production code MUST NOT call this — used by unit tests to isolate cases.
  */
 export function _resetHyperliquidMetaCache(): void {
-  metaCache.clear();
-  metaInflight.clear();
+  metaCacheImpl._clear();
 }
 
 // OPS-ADAPTER-RATELIMIT-UNIFY-W1: the raw `hlPost` POST/retry/429 loop was retired —

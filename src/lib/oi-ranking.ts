@@ -4,6 +4,7 @@
  */
 
 import { hlInfoPost } from './adapters/hyperliquid.js';
+import { coalescedCache } from './coalesced-cache.js';
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -14,37 +15,45 @@ interface OIAsset {
   openInterest: number;
 }
 
-let cache: { assets: OIAsset[]; ts: number } | null = null;
+// OPS-HL-CACHE-STAMPEDE-GENERATOR-W1 C2: the success-only caches here were THE storm
+// source — `getTopAssetsByOI(20)` is what every `getTradeSignal`'s `getTop20ByOI` hits
+// (incl. the warmer's 42 grid scorers every ~50s), and a direct `hlInfoPost` with no
+// single-flight + no negative cache meant a throttled cold cache re-hit HL on every
+// call. Both rankings now route through the shared `coalescedCache`: single-flight
+// collapses concurrent cold-fills to ONE HL fetch per key, a throttle is negative-cached
+// (~45s jittered) instead of re-stormed, and stale is served on failure (preserving the
+// prior stale-or-throw values). hlInfoPost's budget `acquire` is unchanged (once/fetch).
+const NEGATIVE_TTL_MS = 45_000;
 
-export async function getTopAssetsByOI(limit: number = 50): Promise<OIAsset[]> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) {
-    return cache.assets.slice(0, limit);
-  }
-
-  try {
-    // OPS-HL-RATELIMITER-W2: route through the shared HL weight budget (was a
-    // direct fetch that bypassed the adapter chokepoint). hlInfoPost owns the
-    // timeout + 429 handling; a budget rate-limit/skip falls through to stale cache.
+const stdRankingCache = coalescedCache<OIAsset[]>({
+  load: async () => {
     const raw = await hlInfoPost<[{ universe: { name: string }[] }, { openInterest: string; markPx: string }[]]>({
       type: 'metaAndAssetCtxs',
     });
     const meta = raw[0];
     const ctxs = raw[1];
-
     const assets: OIAsset[] = meta.universe.map((a, i) => {
       const oi = parseFloat(ctxs[i].openInterest || '0');
       const px = parseFloat(ctxs[i].markPx || '0');
       return { coin: a.name, notionalOI: oi * px, markPx: px, openInterest: oi };
     });
-
     assets.sort((a, b) => b.notionalOI - a.notionalOI);
-    cache = { assets, ts: Date.now() };
-    return assets.slice(0, limit);
-  } catch (err) {
-    // Return stale cache if available (incl. on a budget rate-limit/skip).
-    if (cache) return cache.assets.slice(0, limit);
-    throw err;
-  }
+    return assets;
+  },
+  ttlMs: CACHE_TTL_MS,
+  staleOk: true,
+  negativeTtlMs: NEGATIVE_TTL_MS,
+});
+
+export async function getTopAssetsByOI(limit: number = 50): Promise<OIAsset[]> {
+  const assets = await stdRankingCache.get('std');
+  return assets.slice(0, limit);
+}
+
+/** Test-only: clears the OI-ranking caches (std + xyz) between cases. */
+export function _resetOiRankingCache(): void {
+  stdRankingCache._clear();
+  xyzRankingCache._clear();
 }
 
 export function getTopAssetNames(assets: OIAsset[]): string[] {
@@ -53,27 +62,20 @@ export function getTopAssetNames(assets: OIAsset[]): string[] {
 
 // ── xyz (TradFi) OI ranking ──
 
-let xyzCache: { assets: OIAsset[]; ts: number } | null = null;
-
 /**
  * Fetch all xyz (TradFi) perps from Hyperliquid, sorted by notional OI.
  * Uses "dex": "xyz" parameter to access HIP-3 builder-deployed perps.
- * 1-hour cache, stale fallback on error.
+ * 1-hour cache, stale fallback on error. (C2: routed through coalescedCache —
+ * single-flight + negative-cache + stale-serve; values/TTL unchanged.)
  */
-export async function getXyzAssetsByOI(): Promise<OIAsset[]> {
-  if (xyzCache && Date.now() - xyzCache.ts < CACHE_TTL_MS) {
-    return xyzCache.assets;
-  }
-
-  try {
-    // OPS-HL-RATELIMITER-W2: route the xyz (TradFi) meta fetch through the budget too.
+const xyzRankingCache = coalescedCache<OIAsset[]>({
+  load: async () => {
     const raw = await hlInfoPost<[{ universe: { name: string }[] }, { openInterest: string; markPx: string; dayNtlVlm?: string }[]]>({
       type: 'metaAndAssetCtxs',
       dex: 'xyz',
     });
     const meta = raw[0];
     const ctxs = raw[1];
-
     const assets: OIAsset[] = meta.universe
       .map((a, i) => {
         const oi = parseFloat(ctxs[i].openInterest || '0');
@@ -82,14 +84,16 @@ export async function getXyzAssetsByOI(): Promise<OIAsset[]> {
         return { coin: a.name.replace(/^xyz:/i, ''), notionalOI: oi * px, markPx: px, openInterest: oi };
       })
       .filter(a => a.notionalOI > 0); // skip unlisted/zero-OI assets
-
     assets.sort((a, b) => b.notionalOI - a.notionalOI);
-    xyzCache = { assets, ts: Date.now() };
     return assets;
-  } catch (err) {
-    if (xyzCache) return xyzCache.assets;
-    throw err;
-  }
+  },
+  ttlMs: CACHE_TTL_MS,
+  staleOk: true,
+  negativeTtlMs: NEGATIVE_TTL_MS,
+});
+
+export async function getXyzAssetsByOI(): Promise<OIAsset[]> {
+  return xyzRankingCache.get('xyz');
 }
 
 /**
