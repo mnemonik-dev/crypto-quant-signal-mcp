@@ -21,7 +21,8 @@ import { runScanTradeCall, SCAN_TRADE_CALLS_SCHEMA, SCAN_TRADE_CALLS_DESCRIPTION
 import { getSignalPerformance, runBackfill } from './resources/signal-performance.js';
 import { refreshGridIfStale } from './lib/cross-asset-grid.js';
 import { closeDb, getConfidenceBands, getHoldStats, getMerkleBatches, getSignalWithBatch, getSignalByHash, upsertAgentSession, getSampleSignalsFromLatestBatch, getRecentCallsAsync, type RecentCall } from './lib/performance-db.js';
-import { registerWebhookRoutes } from './lib/webhook-api.js';
+import { registerWebhookRoutes, resolveOwner, authRequired } from './lib/webhook-api.js';
+import { formatShadowVenuePublic, formatVenueForResource } from './lib/venue-public-formatter.js';
 import { startDeliveryWorker } from './lib/webhook-delivery.js';
 import { PKG_VERSION } from './lib/pkg-version.js';
 import { buildErc8004ReputationBody } from './lib/erc8004-reputation.js';
@@ -780,7 +781,7 @@ function createServer(): McpServer {
     'venues',
     'mcp://algovault/venues',
     {
-      description: "Per-venue lifecycle state machine: shadow / promoted / retired. Each venue carries asset_count, min_buy_sell_sample, integration timestamp, and last evaluation stats. New venues default to 'shadow' (experimental — not yet on the public /track-record dashboard) and auto-promote via daily cron when PFE WR ≥0.80 over asset_count×10 BUY/SELL signals (HOLDs excluded). Agents querying with a shadow venue's exchange_id should surface an 'experimental' caveat to the end user.",
+      description: "Per-venue lifecycle state machine: shadow / promoted / retired. Each venue carries asset_count, integration + lifecycle timestamps (integrated_at / promoted_at / retired_at), and extension_count. New venues default to 'shadow' (experimental — not yet on the public /track-record dashboard) and are flagged ready-for-promotion when PFE WR clears the internal bar; an operator launches the promotion. Agents querying with a shadow venue's exchange_id should surface an 'experimental' caveat to the end user.",
       mimeType: 'application/json',
     },
     async () => {
@@ -791,20 +792,10 @@ function createServer(): McpServer {
           version: PKG_VERSION,
           ts: new Date().toISOString(),
         },
-        venues: venues.map(v => ({
-          exchange_id: v.exchange_id,
-          status: v.status,
-          asset_count: v.asset_count,
-          min_buy_sell_sample: v.min_buy_sell_sample,
-          integrated_at: v.integrated_at,
-          promoted_at: v.promoted_at,
-          retired_at: v.retired_at,
-          extension_count: v.extension_count,
-          last_eval_at: v.last_eval_at,
-          last_eval_pfe_wr: v.last_eval_pfe_wr,
-          last_eval_buy_sell_count: v.last_eval_buy_sell_count,
-          notes: v.notes,
-        })),
+        // SV-01 (OPS-AUDIT-REMEDIATION-MED-W1): allow-list formatter strips the
+        // internal promotion threshold (min_buy_sell_sample) + last_eval_*
+        // evaluation internals. Single source shared with /api/performance-shadow.
+        venues: venues.map(formatVenueForResource),
       };
       return {
         contents: [{
@@ -1504,25 +1495,31 @@ async function startHttp() {
         : stats.byTimeframe;
       // EXCHANGE-SHADOW-PROMOTE-W1 / C4: filter `byExchange` to only
       // `venues.status='promoted'` rows. Existing 5 venues all promoted
-      // post-C1 backfill → no behavior change at deploy. Shadow venues
-      // (when they exist post-C5) get their own /api/performance-shadow
-      // endpoint. Fail-open: if venue-store lookup throws, fall through
-      // to unfiltered byExchange so the public surface doesn't break on
-      // a venues-table outage.
-      let filteredByExchange = stats.byExchange;
+      // post-C1 backfill → no behavior change at deploy. Shadow venues get
+      // their own (auth-gated) /api/performance-shadow endpoint.
+      //
+      // SV-02 (OPS-AUDIT-REMEDIATION-MED-W1): FAIL-CLOSED. The prior code
+      // defaulted to the UNFILTERED stats.byExchange and skipped the filter
+      // when the promoted set was empty (and the catch left it unfiltered) —
+      // so a venues-table outage / empty-table leaked shadow rows onto the
+      // PUBLIC surface (Data-Integrity LAW violation). Now: default EMPTY,
+      // ALWAYS filter to promotedIds (empty-promoted → empty, never all), and
+      // on any lookup error set EMPTY. The happy path (5 promoted) is
+      // byte-identical. Never let a missing filter dependency widen the
+      // public response.
+      let filteredByExchange: typeof stats.byExchange = {};
       let shadow_venue_count = 0;
       try {
         const promoted = await listVenues('promoted');
         const shadow = await listVenues('shadow');
         shadow_venue_count = shadow.length;
         const promotedIds = new Set(promoted.map(v => v.exchange_id));
-        if (promotedIds.size > 0) {
-          filteredByExchange = Object.fromEntries(
-            Object.entries(stats.byExchange).filter(([ex]) => promotedIds.has(ex)),
-          );
-        }
+        filteredByExchange = Object.fromEntries(
+          Object.entries(stats.byExchange).filter(([ex]) => promotedIds.has(ex)),
+        );
       } catch (err) {
-        console.error('[performance-public] venues filter failed (fail-open):', err instanceof Error ? err.message : err);
+        console.error('[performance-public] venues filter failed → fail-CLOSED → empty byExchange:', err instanceof Error ? err.message : err);
+        filteredByExchange = {};
       }
       const filteredStats = { ...stats, byTimeframe: filteredByTimeframe, byExchange: filteredByExchange };
 
@@ -1543,41 +1540,33 @@ async function startHttp() {
   // ── /api/performance-shadow (EXCHANGE-SHADOW-PROMOTE-W1 / C4) ──
   // Transparency endpoint for shadow venues — same per-venue stat shape as
   // /api/performance-public.byExchange.<EX> but filtered to status='shadow'
-  // rows. Public, no auth. Adds lifecycle metadata (asset_count,
-  // min_buy_sell_sample, days_since_integration, extension_count,
-  // last_eval_*) so consumers can see how close each shadow venue is to
-  // promotion.
-  app.get('/api/performance-shadow', async (_req, res) => {
+  // rows. AUTH-GATED (SV-01): requires an API key. Adds public lifecycle
+  // metadata (asset_count, integrated_at, days_since_integration,
+  // extension_count) so authed consumers can see each shadow venue's state.
+  // The internal promotion threshold (min_buy_sell_sample) + last_eval_*
+  // evaluation internals are stripped by the allow-list formatter.
+  app.get('/api/performance-shadow', async (req, res) => {
+    // SV-01 (OPS-AUDIT-REMEDIATION-MED-W1): shadow performance is internal —
+    // auth-gate it behind an API key (same owner-resolution + 401 shape as the
+    // webhook routes; single source). Premature public disclosure of not-yet-
+    // promoted venue performance contradicts the "shadow until promoted" posture
+    // (Mr.1 confirmed auth-gate; prior REVERT-DASHBOARD-SHADOW-COPY-W1).
+    const { license } = await resolveOwner(req);
+    if (!license.key) {
+      return authRequired(res, 'An API key is required.');
+    }
     try {
       const shadow = await listVenues('shadow');
       const stats = shadow.length > 0 ? await getSignalPerformance() : null;
       const nowSec = Math.floor(Date.now() / 1000);
-      const venues = shadow.map(v => {
-        const integratedSec = Math.floor(new Date(v.integrated_at).getTime() / 1000);
-        const ex = stats?.byExchange?.[v.exchange_id] ?? null;
-        return {
-          exchange_id: v.exchange_id,
-          status: v.status,
-          asset_count: v.asset_count,
-          min_buy_sell_sample: v.min_buy_sell_sample,
-          integrated_at: v.integrated_at,
-          days_since_integration: Math.floor((nowSec - integratedSec) / 86400),
-          extension_count: v.extension_count,
-          last_eval_at: v.last_eval_at,
-          last_eval_pfe_wr: v.last_eval_pfe_wr,
-          last_eval_buy_sell_count: v.last_eval_buy_sell_count,
-          // Mirror the per-venue aggregate shape from byExchange (when stats
-          // include the venue; some shadow venues may not yet have signals).
-          current_buy_sell_count: ex?.count ?? 0,
-          current_pfe_wr: ex?.pfeWinRate ?? null,
-          byTimeframe: ex?.byTimeframe ?? {},
-          byTier: ex?.byTier ?? {},
-          byCallType: ex?.byCallType ?? {},
-        };
-      });
-      res.json({ venues, updated_at: new Date().toISOString() });
+      // SV-01: allow-list formatter — strips min_buy_sell_sample + last_eval_*
+      // (shared with the mcp://venues resource so both surfaces inherit it).
+      const venues = shadow.map(v =>
+        formatShadowVenuePublic(v, stats?.byExchange?.[v.exchange_id] ?? null, nowSec),
+      );
+      return res.json({ venues, updated_at: new Date().toISOString() });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to fetch shadow venue stats' });
+      return res.status(500).json({ error: 'Failed to fetch shadow venue stats' });
     }
   });
 
