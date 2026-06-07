@@ -131,7 +131,8 @@ const PROMOTED_VENUE_NAMES = ['Hyperliquid', 'Binance', 'Bybit', 'OKX', 'Bitget'
 const HL_VENUE_NAME = 'Hyperliquid';
 const SHADOW_THROW_TRIGGER = 3;            // ≥3 typed throws/7d on ANY non-promoted (shadow) venue
 const HL_INTERACTIVE_THROW_TRIGGER = 25;   // "sustained" HL interactive (budget self-throttle) throws/7d — tunable
-const HL_WAIT_P95_TRIGGER_MS = 20_000;     // HL batch-wait p95 > 20s
+// (OPS-RATELIMIT-DIGEST-THRESHOLD-RECAL-W1: the HL batch-wait p95 trigger was REMOVED — batch
+// waits are by-design, not a fault. Both triggers are now denial-based; see evaluateRateLimitTriggers.)
 
 interface VenueRl { venue: string; throws: number; waits: number; skips: number; iThrows: number; bThrows: number; }
 
@@ -143,33 +144,38 @@ export function p95(xs: number[]): number {
 }
 
 /**
- * PURE trigger evaluation — unit-tested both sides of each threshold (R4). Emits a
- * `dispatch OPS-…-W{NEXT}` line ONLY when a threshold trips; silent otherwise.
+ * PURE trigger evaluation — unit-tested both sides of each threshold. Emits a trigger line
+ * ONLY when a threshold trips; silent otherwise. BOTH triggers are DENIAL-based (typed throws
+ * = live-caller denial); by-design batch waits/skips are NOT triggers
+ * (OPS-RATELIMIT-DIGEST-THRESHOLD-RECAL-W1 — see the HL block).
  */
 export function evaluateRateLimitTriggers(
   perVenue: VenueRl[],
-  hlWaitP95Ms: number,
-): { lines: string[]; shadowBudget: boolean; hlWebsocket: boolean } {
+): { lines: string[]; shadowBudget: boolean; hlDenial: boolean } {
   const lines: string[] = [];
   const shadowHit = perVenue.find((v) => !PROMOTED_VENUE_NAMES.includes(v.venue) && v.throws >= SHADOW_THROW_TRIGGER);
   const hl = perVenue.find((v) => v.venue === HL_VENUE_NAME);
   const hlInteractive = hl?.iThrows ?? 0;
   const shadowBudget = !!shadowHit;
-  const hlWebsocket = hlInteractive >= HL_INTERACTIVE_THROW_TRIGGER || hlWaitP95Ms > HL_WAIT_P95_TRIGGER_MS;
+  const hlDenial = hlInteractive >= HL_INTERACTIVE_THROW_TRIGGER;
   if (shadowBudget) {
     lines.push(`⚠️ ${shadowHit!.venue}: ${shadowHit!.throws} throws/7d (≥${SHADOW_THROW_TRIGGER}) — Action: dispatch OPS-SHADOW-BUDGET-W{NEXT} via Cowork → Claude Code`);
   }
-  if (hlWebsocket) {
-    // OPS-RATELIMIT-TIDYUP-W1: action REDIRECTED off the cancelled `OPS-HL-WEBSOCKET-W{NEXT}`
-    // wave (CANCELLED — OPS-HL-BACKFILL-BATCH-W1 proved the HL saturation was historical-candle
-    // backfill-on-read, not live demand; a websocket can't fetch post-signal candles) to a
-    // driver-agnostic line. Lesson encoded: never blind-recommend a structural fix — attribute
-    // via the per-caller breakdown first. Threshold/mechanism unchanged (the batch-wait p95>20s
-    // condition now false-positives on by-design batch waits → OPS-RATELIMIT-DIGEST-THRESHOLD-
-    // RECAL-W{NEXT}, NOT retuned in this tidy-up).
-    lines.push(`⚠️ HL: ${hlInteractive} interactive throws/7d, batch-wait p95 ${(hlWaitP95Ms / 1000).toFixed(1)}s — Action: investigate the HL interactive driver via the per-caller breakdown above (attribute first; do NOT prescribe a structural wave blind)`);
+  if (hlDenial) {
+    // OPS-RATELIMIT-DIGEST-THRESHOLD-RECAL-W1: DENIAL-ONLY trigger — fires solely on sustained HL
+    // interactive throws (live-caller denial → HL→Binance fallback → provenance loss = the real,
+    // operator-actionable signal). The old `batch-wait p95 > 20s` disjunct was REMOVED: post
+    // OPS-HL-BACKFILL-BATCH-W1 the backfill correctly runs in the batch lane, which is DESIGNED to
+    // wait (up to ~5min) to yield the interactive reserve, so its p95 (~179s live) perpetually
+    // tripped on a NON-problem (alert noise that trains the operator to ignore the digest). Batch
+    // waits/skips are by-design, not faults — only throws are actionable. The action stays
+    // driver-agnostic (OPS-RATELIMIT-TIDYUP-W1): OPS-HL-WEBSOCKET was cancelled (saturation was
+    // backfill-on-read, not live demand) — attribute via the per-caller breakdown first, never
+    // blind-recommend a structural wave. p95 stays in the informational SECTION (diagnostics),
+    // NOT this alert (actionable signal only).
+    lines.push(`⚠️ HL: ${hlInteractive} interactive throws/7d — Action: investigate the HL interactive driver via the per-caller breakdown above (attribute first; do NOT prescribe a structural wave blind)`);
   }
-  return { lines, shadowBudget, hlWebsocket };
+  return { lines, shadowBudget, hlDenial };
 }
 
 /** Aggregate the raw count rows into per-venue totals (pure; testable with synthetic rows). */
@@ -233,7 +239,7 @@ async function buildRateLimitSection(): Promise<string[]> {
           ...(perVenue.some((v) => v.venue === HL_VENUE_NAME) ? [`   HL batch-wait p95: ${(hlWaitP95Ms / 1000).toFixed(1)}s`] : []),
           ...(hlTopCallers.length ? [`   HL throw drivers (by caller, 7d): ${hlTopCallers.map((c) => `${c.caller} (${c.n})`).join(', ')}`] : []),
         ];
-    const { lines } = evaluateRateLimitTriggers(perVenue, hlWaitP95Ms);
+    const { lines } = evaluateRateLimitTriggers(perVenue);
     return [...header, ...body, ...(lines.length ? ['', ...lines] : [])];
   } catch (e) {
     // Fail-open: a telemetry-query failure must never break the weekly digest.

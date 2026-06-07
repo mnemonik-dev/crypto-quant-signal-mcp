@@ -30,18 +30,20 @@ describe('buildDigest — rate-limit telemetry section', () => {
   it('renders the per-venue section + BOTH trigger lines when thresholds trip', async () => {
     routeQueries(
       [
-        { venue: 'Aster', kind: 'throw', class: 'batch', n: '4' },          // shadow ≥3 → SHADOW-BUDGET
-        { venue: 'Hyperliquid', kind: 'wait', class: 'batch', n: '3' },
+        { venue: 'Aster', kind: 'throw', class: 'batch', n: '4' },               // shadow ≥3 → SHADOW-BUDGET
+        { venue: 'Hyperliquid', kind: 'throw', class: 'interactive', n: '30' },  // HL ≥25 interactive throws → DENIAL trigger
+        { venue: 'Hyperliquid', kind: 'wait', class: 'batch', n: '3' },          // by-design batch waits (diagnostics only, NOT a trigger)
       ],
-      [{ wait_ms: 25000 }, { wait_ms: 30000 }],                              // HL p95 30s > 20s → HL-WEBSOCKET
+      [{ wait_ms: 25000 }, { wait_ms: 30000 }],                                   // p95 30s — shown in the SECTION, never the alert
     );
     const { text } = await buildDigest();
     expect(text).toContain('⚡ *Rate-limit telemetry (7d)*');
     expect(text).toContain('*Aster*: 4 throws (i:0/b:4)');
-    expect(text).toContain('HL batch-wait p95: 30.0s');
+    expect(text).toContain('HL batch-wait p95: 30.0s');                          // p95 stays in the diagnostic section
     expect(text).toContain('OPS-SHADOW-BUDGET-W{NEXT}');
-    // OPS-RATELIMIT-TIDYUP-W1: HL action redirected (OPS-HL-WEBSOCKET cancelled) — the HL
-    // trigger still fires but now recommends attribution, not the cancelled structural wave.
+    // OPS-RATELIMIT-DIGEST-THRESHOLD-RECAL-W1: HL trigger is denial-only (fires on the 30
+    // interactive throws), driver-agnostic action (OPS-HL-WEBSOCKET cancelled). The ALERT carries
+    // NO batch-wait p95 — that's diagnostics, in the section above, not an alarm.
     expect(text).toContain('investigate the HL interactive driver');
     expect(text).not.toContain('OPS-HL-WEBSOCKET');
     expect(text).not.toMatch(/-W\d/); // never a literal wave number

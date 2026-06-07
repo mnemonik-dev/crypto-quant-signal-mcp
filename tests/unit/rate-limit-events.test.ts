@@ -70,42 +70,46 @@ describe('evaluateRateLimitTriggers — both sides of every threshold', () => {
     ({ venue, throws: 0, iThrows: 0, bThrows: 0, waits: 0, skips: 0, ...o });
 
   it('all-healthy → no trigger lines', () => {
-    const r = evaluateRateLimitTriggers([venue('Hyperliquid'), venue('Aster')], 0);
+    const r = evaluateRateLimitTriggers([venue('Hyperliquid'), venue('Aster')]);
     expect(r.lines).toHaveLength(0);
     expect(r.shadowBudget).toBe(false);
-    expect(r.hlWebsocket).toBe(false);
+    expect(r.hlDenial).toBe(false);
   });
 
   it('shadow throws: 2 = silent, 3 = OPS-SHADOW-BUDGET trigger', () => {
-    expect(evaluateRateLimitTriggers([venue('Aster', { throws: 2 })], 0).shadowBudget).toBe(false);
-    const hit = evaluateRateLimitTriggers([venue('Aster', { throws: 3 })], 0);
+    expect(evaluateRateLimitTriggers([venue('Aster', { throws: 2 })]).shadowBudget).toBe(false);
+    const hit = evaluateRateLimitTriggers([venue('Aster', { throws: 3 })]);
     expect(hit.shadowBudget).toBe(true);
     expect(hit.lines.join('\n')).toContain('OPS-SHADOW-BUDGET-W{NEXT}');
   });
 
   it('promoted-venue throws do NOT trip the shadow trigger (only non-promoted venues are "shadow")', () => {
-    expect(evaluateRateLimitTriggers([venue('Bybit', { throws: 99 })], 0).shadowBudget).toBe(false);
+    expect(evaluateRateLimitTriggers([venue('Bybit', { throws: 99 })]).shadowBudget).toBe(false);
   });
 
-  it('HL interactive throws: 24 = silent, 25 = HL trigger (driver-agnostic action; OPS-HL-WEBSOCKET cancelled)', () => {
-    expect(evaluateRateLimitTriggers([venue('Hyperliquid', { iThrows: 24, throws: 24 })], 0).hlWebsocket).toBe(false);
-    const hit = evaluateRateLimitTriggers([venue('Hyperliquid', { iThrows: 25, throws: 25 })], 0);
-    expect(hit.hlWebsocket).toBe(true);
-    // OPS-RATELIMIT-TIDYUP-W1: the action was redirected from `dispatch OPS-HL-WEBSOCKET-W{NEXT}`
-    // (cancelled — saturation was backfill-on-read, not live demand) to a driver-agnostic
-    // "attribute first" line. The trigger mechanism/threshold is unchanged.
+  it('HL interactive throws (denial): 24 = silent, 25 = trigger with the driver-agnostic action', () => {
+    expect(evaluateRateLimitTriggers([venue('Hyperliquid', { iThrows: 24, throws: 24 })]).hlDenial).toBe(false);
+    const hit = evaluateRateLimitTriggers([venue('Hyperliquid', { iThrows: 25, throws: 25 })]);
+    expect(hit.hlDenial).toBe(true);
+    // OPS-RATELIMIT-DIGEST-THRESHOLD-RECAL-W1: denial-only trigger; driver-agnostic action
+    // (OPS-HL-WEBSOCKET cancelled). The ALERT carries NO batch-wait p95 (that's diagnostics, not signal).
     const joined = hit.lines.join('\n');
     expect(joined).toContain('investigate the HL interactive driver');
     expect(joined).not.toContain('OPS-HL-WEBSOCKET');
+    expect(joined).not.toContain('batch-wait p95');
   });
 
-  it('HL batch-wait p95: 19s = silent, 21s = HL trigger (independent of throws)', () => {
-    expect(evaluateRateLimitTriggers([venue('Hyperliquid')], 19_000).hlWebsocket).toBe(false);
-    expect(evaluateRateLimitTriggers([venue('Hyperliquid')], 21_000).hlWebsocket).toBe(true);
+  it('by-design batch waits NEVER trigger — denial-only (OPS-RATELIMIT-DIGEST-THRESHOLD-RECAL-W1 false-positive fix)', () => {
+    // Pre-recal this fired on `batch-wait p95 > 20s`. Batch waits are BY-DESIGN (the lane waits to
+    // yield the interactive reserve) → no longer a trigger at all; only sustained interactive throws
+    // (denial) are. A venue with huge batch waits + 0 interactive throws is SILENT.
+    const r = evaluateRateLimitTriggers([venue('Hyperliquid', { waits: 9999, iThrows: 0, throws: 0 })]);
+    expect(r.hlDenial).toBe(false);
+    expect(r.lines).toHaveLength(0);
   });
 
   it('trigger lines use the W{NEXT} template — NEVER a literal wave number', () => {
-    const r = evaluateRateLimitTriggers([venue('Aster', { throws: 9 }), venue('Hyperliquid', { iThrows: 99, throws: 99 })], 99_000);
+    const r = evaluateRateLimitTriggers([venue('Aster', { throws: 9 }), venue('Hyperliquid', { iThrows: 99, throws: 99 })]);
     const joined = r.lines.join('\n');
     expect(joined).toMatch(/W\{NEXT\}/);
     expect(joined).not.toMatch(/-W\d/); // no OPS-...-W1 / -W2 / etc.
