@@ -167,6 +167,12 @@ const top20Cache = coalescedCache<Set<string>>({
   fallback: () => FALLBACK_TOP20,
   negativeTtlMs: TOP20_NEGATIVE_TTL_MS,
   processGate: () => isShortLivedScript(process.argv[1]),
+  // OPS-COALESCED-CACHE-LOAD-TIMEOUT-W1: bound a COLD OI fill so /api/performance-public +
+  // every getTradeSignal (the 42 grid scorers) + getHoldStats never block on an HL batch-yield
+  // (~58s WAIT, not a throw → the fallback catch alone can't help). Healthy cold fill (<2.5s)
+  // returns the real top20; a saturated fill (≥2.5s) degrades to FALLBACK_TOP20 and warms in
+  // the background — the SAME degradation as the existing throw-fallback (values byte-identical).
+  loadTimeoutMs: 2500,
 });
 
 export function getTop20ByOI(): Promise<Set<string>> {

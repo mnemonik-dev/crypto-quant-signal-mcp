@@ -41,6 +41,14 @@ export interface CoalescedCacheOptions<V> {
   /** True (e.g. a short-lived cron) → serve cache-or-fallback and SKIP the loader.
    *  Default: never gated. Consumer passes `() => isShortLivedScript(process.argv[1])`. */
   processGate?: () => boolean;
+  /** OPS-COALESCED-CACHE-LOAD-TIMEOUT-W1: bound a COLD load (ms). When set AND a fresh value
+   *  is absent but stale-or-`fallback` can be served, race `load()` against this timeout; on
+   *  timeout serve stale/fallback IMMEDIATELY and leave the in-flight `load()` running
+   *  (single-flight) to self-warm `store` for the next caller. undefined (default) → await the
+   *  load UNBOUNDED (byte-identical to pre-W1). Needed because `fallback` fires only on a load
+   *  THROW — a slow NON-throwing load (e.g. an HL batch-yield WAIT ~58s) would otherwise block
+   *  every caller for the full load. */
+  loadTimeoutMs?: number;
   /** ± jitter fraction on the negative TTL (default 0.2 = ±20%). */
   jitterPct?: number;
   /** Injectable clock (test seam). */
@@ -63,6 +71,7 @@ export interface CoalescedCache<V> {
 
 export function coalescedCache<V>(opts: CoalescedCacheOptions<V>): CoalescedCache<V> {
   const { load, ttlMs, fallback } = opts;
+  const loadTimeoutMs = opts.loadTimeoutMs;
   const negativeTtlMs = opts.negativeTtlMs ?? 0;
   const staleOk = opts.staleOk ?? false;
   const gate = opts.processGate ?? (() => false);
@@ -106,34 +115,58 @@ export function coalescedCache<V>(opts: CoalescedCacheOptions<V>): CoalescedCach
       if (s.hit) return s.value;
     }
 
-    // (4) single-flight: JOIN an in-flight load for this key
-    const existing = inflight.get(key);
-    if (existing) return existing;
+    // (4)+(5) single-flight: JOIN an in-flight load for this key, or start exactly ONE.
+    let p = inflight.get(key);
+    if (!p) {
+      p = (async () => {
+        try {
+          const value = await load(key);
+          store.set(key, { value, ts: now(), negativeUntil: 0 });
+          return value;
+        } catch (err) {
+          const cur = store.get(key);
+          const negativeUntil = now() + negWindow();
+          if (staleOk && cur && cur.value !== undefined) {
+            store.set(key, { value: cur.value, ts: cur.ts, negativeUntil });
+            return cur.value;
+          }
+          if (fallback) {
+            const fb = fallback(key);
+            store.set(key, { value: fb, ts: 0, negativeUntil });
+            return fb;
+          }
+          throw err; // fail-open: nothing to serve → never worse than today
+        } finally {
+          inflight.delete(key);
+        }
+      })();
+      inflight.set(key, p);
+    }
 
-    // (5) cold/expired → start exactly ONE flight
-    const p = (async () => {
-      try {
-        const value = await load(key);
-        store.set(key, { value, ts: now(), negativeUntil: 0 });
-        return value;
-      } catch (err) {
-        const cur = store.get(key);
-        const negativeUntil = now() + negWindow();
-        if (staleOk && cur && cur.value !== undefined) {
-          store.set(key, { value: cur.value, ts: cur.ts, negativeUntil });
-          return cur.value;
-        }
-        if (fallback) {
-          const fb = fallback(key);
-          store.set(key, { value: fb, ts: 0, negativeUntil });
-          return fb;
-        }
-        throw err; // fail-open: nothing to serve → never worse than today
-      } finally {
-        inflight.delete(key);
+    // (6) OPS-COALESCED-CACHE-LOAD-TIMEOUT-W1 — bound the flight await (whether we JOINED an
+    // existing load at (4) or STARTED one at (5)) so a slow NON-throwing load can't block a
+    // hot read. A WAIT (e.g. HL batch-yield ~58s) is not a throw, so the catch/fallback alone
+    // can't help. When loadTimeoutMs is set AND stale-or-fallback can be served, race `p`
+    // against the timeout; on timeout serve stale/fallback NOW and leave `p` running
+    // (single-flight) so its success branch self-warms `store` for the next caller. The
+    // timeout sets NO negative memo (the load has not failed) and does NOT abort `p`. No
+    // fallback/stale → await `p` (can't serve nothing — today's behavior). undefined
+    // loadTimeoutMs → await `p` unbounded (byte-identical to pre-W1 for every other consumer).
+    if (loadTimeoutMs !== undefined && loadTimeoutMs > 0) {
+      const cur = store.get(key);
+      const hasStale = staleOk && cur !== undefined && cur.value !== undefined;
+      if (hasStale || fallback) {
+        const timedOut = Symbol('coalesced-load-timeout');
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<typeof timedOut>((res) => {
+          timer = setTimeout(() => res(timedOut), loadTimeoutMs);
+        });
+        const winner = await Promise.race([p, timeout]);
+        if (timer) clearTimeout(timer);
+        if (winner !== timedOut) return winner as V;          // load resolved first (real value or its own fallback)
+        return hasStale ? (cur!.value as V) : fallback!(key); // timeout → serve now; `p` self-warms in the background
       }
-    })();
-    inflight.set(key, p);
+    }
     return p;
   }
 

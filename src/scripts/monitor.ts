@@ -376,11 +376,27 @@ async function checkPfeWinRate(): Promise<{ error: string | null; rate: number |
   // a 15 s timeout, since /api/performance-public takes ~4.7 s on a cold 60 s-cache
   // miss and brushed the generic 5 s FETCH_TIMEOUT. Verdict logic in the pure,
   // unit-tested evaluatePfeWinRate(); an outage is caught by server_health/database.
-  const { ok, status, data } = await fetchJson(internalPerfPublicUrl(), {}, 15_000);
-  if (!ok) {
-    return { error: `PFE check failed: performance-public HTTP ${status}`, rate: null };
+  //
+  // OPS-COALESCED-CACHE-LOAD-TIMEOUT-W1 R4: retry the FETCH (transient loopback abort / HTTP 0)
+  // like checkServerHealth — 3 attempts, 5s delay. ONLY the HTTP-error path retries; once `ok`,
+  // a real WR-value breach (evaluatePfeWinRate) still pages FIRST-cycle (NOT masked). The 15s
+  // per-fetch timeout and FAIL_THRESHOLDS.pfe_winrate=1 are UNCHANGED. With the coalesced-cache
+  // loadTimeoutMs fix (R1/R2) the endpoint no longer blocks ~84s on a cold HL fill, so a fetch
+  // abort is now genuinely transient — this closes the consecutive=1 no-retry gap the loopback
+  // hotfix flagged, without masking a sustained slowness or a real WR drop.
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAY_MS = 5_000;
+  let lastStatus = 0;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { ok, status, data } = await fetchJson(internalPerfPublicUrl(), {}, 15_000);
+    if (ok) return evaluatePfeWinRate(data);
+    lastStatus = status;
+    if (attempt < MAX_ATTEMPTS) {
+      console.log(`[monitor] PFE check fetch failed (HTTP ${status}), retry ${attempt}/${MAX_ATTEMPTS - 1} in ${RETRY_DELAY_MS / 1000}s...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    }
   }
-  return evaluatePfeWinRate(data);
+  return { error: `PFE check failed: performance-public HTTP ${lastStatus} after ${MAX_ATTEMPTS} attempts`, rate: null };
 }
 
 async function checkSeedFreshness(): Promise<string | null> {
