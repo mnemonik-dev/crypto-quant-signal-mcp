@@ -1990,6 +1990,182 @@ function computeStats(all: SignalRecord[], top20ByOI: Set<string> | null = null)
   };
 }
 
+// ── OPS-PERFSTATS-SQL-PUSHDOWN-W1 (CH1) — hybrid perf-stats ───────────────────
+// SQL does the O(rows) GROUP-BY counting; JS does the O(groups) rollup + ratios
+// + tier classification. rollupStats is the pure reconstruction proven
+// byte-equivalent to computeStats (the frozen oracle) by
+// tests/unit/perfstats-rollup-equivalence.test.ts. aggregateRowsInJs is the
+// in-JS analogue of CH2's SQL GROUP BY (aggregateSignalsSql mirrors its shape).
+
+/** One grouped count row — the SQL GROUP BY (coalesce(exchange,'HL'), coin, timeframe, signal) output. */
+export interface StatGroupRow {
+  exchange: string;
+  coin: string;
+  timeframe: string;
+  signal: SignalVerdict;
+  cnt: number;       // count(*)
+  pfe_eval: number;  // count(*) FILTER (WHERE pfe_return_pct IS NOT NULL)
+  pfe_win: number;   // count(*) FILTER (... AND ((BUY∧pfe>0)∨(SELL∧pfe<0)))
+  max_ca: number;    // max(created_at) — deterministic byAsset/byExchange order (Q1)
+  max_id: number;    // max(id)
+}
+
+/** Period + grand-total — the SQL `SELECT min(created_at), max(created_at), count(*)`. */
+export interface PeriodRow {
+  min_created_at: number;
+  max_created_at: number;
+  total: number;
+}
+
+const PERF_TF_ORDER = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d'];
+
+/** Win predicate, identical to computeStats: pfe!=null AND ((BUY∧pfe>0)∨(SELL∧pfe<0)). pfe==0 is NOT a win. */
+function isPfeWin(signal: SignalVerdict, pfe: number | null): boolean {
+  if (pfe == null) return false;
+  return signal === 'BUY' ? pfe > 0 : pfe < 0;
+}
+
+/**
+ * In-JS analogue of the CH2 SQL GROUP BY — the reference grouping. Groups raw
+ * rows by (exchange||'HL', coin, timeframe, signal) with the exact computeStats
+ * win/eval predicates. CH2's aggregateSignalsSql produces the identical shape
+ * (the SQL must `GROUP BY coalesce(exchange,'HL'), …` so null-exchange merges to HL).
+ */
+export function aggregateRowsInJs(rows: SignalRecord[]): { groups: StatGroupRow[]; period: PeriodRow } {
+  const map = new Map<string, StatGroupRow>();
+  let minCa = Infinity, maxCa = -Infinity;
+  for (const r of rows) {
+    const ex = r.exchange || 'HL';
+    const key = `${ex} ${r.coin} ${r.timeframe} ${r.signal}`;
+    let g = map.get(key);
+    if (!g) { g = { exchange: ex, coin: r.coin, timeframe: r.timeframe, signal: r.signal, cnt: 0, pfe_eval: 0, pfe_win: 0, max_ca: -Infinity, max_id: -Infinity }; map.set(key, g); }
+    g.cnt++;
+    if (r.pfe_return_pct != null) { g.pfe_eval++; if (isPfeWin(r.signal, r.pfe_return_pct)) g.pfe_win++; }
+    if (r.created_at > g.max_ca) g.max_ca = r.created_at;
+    const rid = r.id ?? 0;
+    if (rid > g.max_id) g.max_id = rid;
+    if (r.created_at < minCa) minCa = r.created_at;
+    if (r.created_at > maxCa) maxCa = r.created_at;
+  }
+  return {
+    groups: [...map.values()],
+    period: { min_created_at: rows.length ? minCa : 0, max_created_at: rows.length ? maxCa : 0, total: rows.length },
+  };
+}
+
+const _sumCnt = (gs: StatGroupRow[]) => gs.reduce((a, g) => a + g.cnt, 0);
+const _sumEval = (gs: StatGroupRow[]) => gs.reduce((a, g) => a + g.pfe_eval, 0);
+const _sumWin = (gs: StatGroupRow[]) => gs.reduce((a, g) => a + g.pfe_win, 0);
+const _wr = (gs: StatGroupRow[]) => { const e = _sumEval(gs); return e > 0 ? _sumWin(gs) / e : null; };
+
+/** Distinct keys ordered by MAX(created_at) DESC, MAX(id) DESC (Q1 — deterministic, ≈ oracle first-seen). */
+function _orderByRecency(keyOf: (g: StatGroupRow) => string, gs: StatGroupRow[]): string[] {
+  const m = new Map<string, { ca: number; id: number }>();
+  for (const g of gs) {
+    const k = keyOf(g);
+    const cur = m.get(k);
+    if (!cur || g.max_ca > cur.ca || (g.max_ca === cur.ca && g.max_id > cur.id)) m.set(k, { ca: g.max_ca, id: g.max_id });
+  }
+  return [...m.keys()].sort((a, b) => { const x = m.get(a)!, y = m.get(b)!; return (y.ca - x.ca) || (y.id - x.id); });
+}
+
+const _byTf = (gs: StatGroupRow[]) => ({ count: _sumEval(gs), evaluated: _sumEval(gs), pfeWinRate: _wr(gs) });
+
+/**
+ * Pure rollup: reconstruct the FULL PerformanceStats from grouped rows + period
+ * + top20 + the pre-fetched top-20 recent rows. Byte-equivalent to computeStats
+ * (proven by the CH1 oracle test). recentRows is the caller's
+ * (created_at DESC, id DESC) LIMIT 20 slice — the pure fn stays row-free otherwise (Q2).
+ */
+export function rollupStats(
+  groups: StatGroupRow[],
+  period: PeriodRow,
+  top20ByOI: Set<string> | null,
+  recentRows: SignalRecord[],
+): PerformanceStats {
+  if (period.total === 0) return emptyStats();
+  const nonHold = groups.filter(g => g.signal !== 'HOLD');
+
+  // byCallType — FIXED literal order incl HOLD (Q3); BUY/SELL count==evaluated
+  const byCallType: PerformanceStats['byCallType'] = {};
+  for (const type of ['BUY', 'SELL', 'HOLD'] as const) {
+    const gs = groups.filter(g => g.signal === type);
+    byCallType[type] = type === 'HOLD'
+      ? { count: _sumCnt(gs), evaluated: 0, pfeWinRate: null }
+      : { count: _sumEval(gs), evaluated: _sumEval(gs), pfeWinRate: _wr(gs) };
+  }
+
+  // byTimeframe — keys = distinct tf across ALL groups (incl HOLD), TF_ORDER; values over nonHold∧tf
+  const byTimeframe: PerformanceStats['byTimeframe'] = {};
+  for (const tf of [...new Set(groups.map(g => g.timeframe))].sort((a, b) => PERF_TF_ORDER.indexOf(a) - PERF_TF_ORDER.indexOf(b))) {
+    byTimeframe[tf] = _byTf(nonHold.filter(g => g.timeframe === tf));
+  }
+
+  // byAsset — distinct coins across ALL groups, recency-ordered (Q1); count incl HOLD, WR over nonHold
+  const byAsset: PerformanceStats['byAsset'] = {};
+  for (const coin of _orderByRecency(g => g.coin, groups)) {
+    const all = groups.filter(g => g.coin === coin);
+    byAsset[coin] = { count: _sumCnt(all), tier: classifyAsset(coin, top20ByOI), pfeWinRate: _wr(all.filter(g => g.signal !== 'HOLD')) };
+  }
+
+  // byTier — FIXED TIER_DEFINITIONS order (Q3); nonHold; assets = sorted distinct nonHold coins∈tier
+  const byTier: PerformanceStats['byTier'] = {};
+  for (const td of TIER_DEFINITIONS) {
+    const gs = nonHold.filter(g => classifyAsset(g.coin, top20ByOI) === td.tier);
+    byTier[`tier${td.tier}`] = { tier: td.tier, name: td.name, label: td.label, color: td.color, count: _sumCnt(gs), evaluated: _sumEval(gs), pfeWinRate: _wr(gs), assets: [...new Set(gs.map(g => g.coin))].sort() };
+  }
+
+  // byExchange — distinct exchange across ALL groups, recency-ordered (Q1)
+  const byExchange: PerformanceStats['byExchange'] = {};
+  for (const ex of _orderByRecency(g => g.exchange, groups)) {
+    const exAll = groups.filter(g => g.exchange === ex);
+    const exNon = exAll.filter(g => g.signal !== 'HOLD');
+    const exTf: PerformanceStats['byExchange'][string]['byTimeframe'] = {};
+    for (const tf of [...new Set(exNon.map(g => g.timeframe))].sort((a, b) => PERF_TF_ORDER.indexOf(a) - PERF_TF_ORDER.indexOf(b))) exTf[tf] = _byTf(exNon.filter(g => g.timeframe === tf));
+    const exTier: PerformanceStats['byExchange'][string]['byTier'] = {};
+    for (const td of TIER_DEFINITIONS) { const gs = exNon.filter(g => classifyAsset(g.coin, top20ByOI) === td.tier); exTier[`tier${td.tier}`] = { count: _sumCnt(gs), evaluated: _sumEval(gs), pfeWinRate: _wr(gs) }; }
+    const exCall: PerformanceStats['byExchange'][string]['byCallType'] = {};
+    for (const type of ['BUY', 'SELL', 'HOLD'] as const) { const gs = exAll.filter(g => g.signal === type); exCall[type] = type === 'HOLD' ? { count: _sumCnt(gs), evaluated: 0, pfeWinRate: null } : { count: _sumEval(gs), evaluated: _sumEval(gs), pfeWinRate: _wr(gs) }; }
+    const exAsset: PerformanceStats['byExchange'][string]['byAsset'] = {};
+    for (const coin of _orderByRecency(g => g.coin, exAll)) { const all = exAll.filter(g => g.coin === coin); exAsset[coin] = { count: _sumCnt(all), tier: classifyAsset(coin, top20ByOI), pfeWinRate: _wr(all.filter(g => g.signal !== 'HOLD')) }; }
+    byExchange[ex] = { exchange: ex, count: _sumCnt(exNon), evaluated: _sumEval(exNon), pfeWinRate: _wr(exNon), byTimeframe: exTf, byTier: exTier, byCallType: exCall, byAsset: exAsset };
+  }
+
+  return {
+    totalCalls: _sumCnt(groups),
+    period: {
+      from: new Date(period.min_created_at * 1000).toISOString().split('T')[0],
+      to: new Date(period.max_created_at * 1000).toISOString().split('T')[0],
+    },
+    overall: { totalCalls: _sumCnt(nonHold), totalEvaluated: _sumEval(nonHold), pfeWinRate: _wr(nonHold) },
+    byCallType,
+    byTimeframe,
+    byAsset,
+    byExchange,
+    byTier,
+    recentSignals: recentRows.slice(0, 20).map(s => formatPublicRecentSignal({
+      id: s.id!, coin: s.coin, timeframe: s.timeframe, tier: classifyAsset(s.coin, top20ByOI), created_at: s.created_at, exchange: s.exchange || 'HL',
+    })),
+    methodology: METHODOLOGY,
+  };
+}
+
+/** Recursive canonical key-sort for byte-equivalence comparison (Q1) + the CH2 probe / CH3 shape gate. */
+export function canonicalizeForCompare(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonicalizeForCompare);
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>).sort()) out[k] = canonicalizeForCompare((v as Record<string, unknown>)[k]);
+    return out;
+  }
+  return v;
+}
+
+/** Test-seam: invoke the FROZEN oracle without exporting/altering computeStats itself. */
+export function _computeStatsOracle(rows: SignalRecord[], top20ByOI: Set<string> | null = null): PerformanceStats {
+  return computeStats(rows, top20ByOI);
+}
+
 // ── Public recent signals (for /api/performance-public.recentSignals[] + /track-record dashboard) ──
 //
 // PERFORMANCE-PUBLIC-SANITIZE-W1 (2026-05-15): closes DESIGN-W11-FF3 flagged
