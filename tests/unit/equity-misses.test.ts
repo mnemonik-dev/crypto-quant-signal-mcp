@@ -1,11 +1,15 @@
 /** Unit tests — EQUITY-LAUNCH-READINESS-W1 R1 miss instrumentation. */
-import { describe, it, expect, vi } from 'vitest';
-import { recordSymbolMiss } from '../../src/lib/equities/equity-misses.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { recordSymbolMiss, _resetMissBoundForTest } from '../../src/lib/equities/equity-misses.js';
 import type { Pool } from 'pg';
 
 const poolWith = (q: ReturnType<typeof vi.fn>) => ({ query: q }) as unknown as Pool;
 
 describe('recordSymbolMiss', () => {
+  // OPS-AUDIT-REMEDIATION-MED-W1: reset the per-symbol cooldown / window-cap state
+  // between cases (several reuse the symbol 'AAPL', which the new bound would skip).
+  beforeEach(() => _resetMissBoundForTest());
+
   it('inserts the normalized symbol; raw_input null when input matches', async () => {
     const q = vi.fn(async () => ({ rowCount: 1 }));
     await recordSymbolMiss(poolWith(q), 'AAPL', 'aapl');

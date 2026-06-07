@@ -35,19 +35,36 @@ function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-async function resolveOwner(req: Request): Promise<{ license: LicenseInfo; ownerKey: string | null }> {
+/**
+ * Resolve the caller's license + owning API key from request headers.
+ * Ownership requires a stable API key. Keyless-anon (free w/o key), x402
+ * (per-request, no persistent identity) and internal cannot own subscriptions.
+ *
+ * EXPORTED (OPS-AUDIT-REMEDIATION-MED-W1 / SV-01) so the auth-gated
+ * `/api/performance-shadow` route reuses the SAME owner-resolution + 401 shape
+ * as the webhook routes — single source, no second auth implementation.
+ */
+export async function resolveOwner(req: Request): Promise<{ license: LicenseInfo; ownerKey: string | null }> {
   const headers = req.headers as Record<string, string | undefined>;
   const { license } = await resolveLicense(headers);
-  // Ownership requires a stable API key. Keyless-anon (free w/o key), x402
-  // (per-request, no persistent identity) and internal cannot own subscriptions.
   return { license, ownerKey: license.key ?? null };
 }
 
-function authRequired(res: Response): Response {
+/**
+ * Emit the canonical 401 `auth_required` body. `error` defaults to the webhook
+ * message (byte-identical to the prior private helper); callers that gate a
+ * different resource pass their own message — e.g. `/api/performance-shadow`
+ * passes "An API key is required." — while keeping the same `code` +
+ * `suggested_action` so the shape is one source.
+ */
+export function authRequired(
+  res: Response,
+  error = 'An API key is required to own a webhook subscription.',
+): Response {
   return res.status(401).json({
     ok: false,
     code: 'auth_required',
-    error: 'An API key is required to own a webhook subscription.',
+    error,
     suggested_action: 'Create a free API key at https://api.algovault.com/signup and send it as `Authorization: Bearer <key>`.',
   });
 }
