@@ -1740,10 +1740,24 @@ export async function getPerformanceStatsAsync(): Promise<PerformanceStats> {
     try {
       const t0 = Date.now();
       const top20 = await getTop20ByOI().catch(() => null);
-      const all = await loadSignalsForStats();
-      const stats = computeStats(all, top20);
+      // OPS-PERFSTATS-SQL-PUSHDOWN-W1 CH2: SQL GROUP-BY pushdown (PG only, default-OFF
+      // flag PERF_STATS_SQL_PUSHDOWN). Byte-equivalent to the loadSignalsForStats +
+      // computeStats scan (CH1 oracle gate); returns in ms without holding a pool
+      // connection for the full-table load. Default-deny: any non-"1"/"true" → scan.
+      const useSql = perfStatsSqlPushdownEnabled() && isPg;
+      let stats: PerformanceStats;
+      let rows: number;
+      if (useSql) {
+        const { groups, period, recentRows } = await aggregateSignalsSql();
+        stats = rollupStats(groups, period, top20, recentRows);
+        rows = period.total;
+      } else {
+        const all = await loadSignalsForStats();
+        stats = computeStats(all, top20);
+        rows = all.length;
+      }
       perfStatsCache.set(bucket, { stats, computedAt: Date.now() });
-      console.debug(`[perf-stats] cache miss bucket=${bucket} rows=${all.length} elapsedMs=${Date.now() - t0}`);
+      console.debug(`[perf-stats] cache miss bucket=${bucket} mode=${useSql ? 'sql' : 'scan'} rows=${rows} elapsedMs=${Date.now() - t0}`);
       return stats;
     } finally {
       perfStatsInflight.delete(bucket);
@@ -2022,7 +2036,9 @@ const PERF_TF_ORDER = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '
 /** Win predicate, identical to computeStats: pfe!=null AND ((BUY∧pfe>0)∨(SELL∧pfe<0)). pfe==0 is NOT a win. */
 function isPfeWin(signal: SignalVerdict, pfe: number | null): boolean {
   if (pfe == null) return false;
-  return signal === 'BUY' ? pfe > 0 : pfe < 0;
+  if (signal === 'BUY') return pfe > 0;
+  if (signal === 'SELL') return pfe < 0;
+  return false;  // HOLD/other never a win — matches the SQL FILTER (BUY∧>0 ∨ SELL∧<0) exactly (computeStats only win-evaluates nonHold, so this is byte-equivalent there too)
 }
 
 /**
@@ -2164,6 +2180,74 @@ export function canonicalizeForCompare(v: unknown): unknown {
 /** Test-seam: invoke the FROZEN oracle without exporting/altering computeStats itself. */
 export function _computeStatsOracle(rows: SignalRecord[], top20ByOI: Set<string> | null = null): PerformanceStats {
   return computeStats(rows, top20ByOI);
+}
+
+// ── OPS-PERFSTATS-SQL-PUSHDOWN-W1 (CH2) — SQL pushdown (PG only, dark behind a flag) ──
+
+/** Default-deny flag parser: ONLY "1"/"true" enable the SQL pushdown (unset/malformed = off). */
+export function _parsePerfStatsPushdownFlag(v: string | undefined): boolean {
+  return v === '1' || v === 'true';
+}
+function perfStatsSqlPushdownEnabled(): boolean {
+  return _parsePerfStatsPushdownFlag(process.env.PERF_STATS_SQL_PUSHDOWN);
+}
+
+/**
+ * The three SQL strings of the pushdown — pure (unit-tested for shape; executed
+ * by aggregateSignalsSql). NO outcome_* (PII LAW), NO time-window (full-table,
+ * Merkle-parity), NO confidence filter (enforced at write). null-exchange
+ * coalesces to 'HL' to match computeStats' `s.exchange || 'HL'`. max(created_at)
+ * + max(id) per group drive rollup's deterministic byAsset/byExchange order (Q1).
+ */
+export function buildStatsAggregateSql(): { groupsSql: string; periodSql: string; recentSql: string } {
+  const winFilter = "WHERE pfe_return_pct IS NOT NULL AND ((signal = 'BUY' AND pfe_return_pct > 0) OR (signal = 'SELL' AND pfe_return_pct < 0))";
+  return {
+    groupsSql:
+      "SELECT coalesce(exchange, 'HL') AS exchange, coin, timeframe, signal, " +
+      'count(*) AS cnt, ' +
+      'count(*) FILTER (WHERE pfe_return_pct IS NOT NULL) AS pfe_eval, ' +
+      `count(*) FILTER (${winFilter}) AS pfe_win, ` +
+      'max(created_at) AS max_ca, max(id) AS max_id ' +
+      "FROM signals GROUP BY coalesce(exchange, 'HL'), coin, timeframe, signal",
+    periodSql:
+      'SELECT min(created_at) AS min_created_at, max(created_at) AS max_created_at, count(*) AS total FROM signals',
+    recentSql:
+      `SELECT ${STATS_COL_PROJECTION} FROM signals ORDER BY created_at DESC, id DESC LIMIT 20`,
+  };
+}
+
+/**
+ * PG-only executor. Returns grouped rows (Number-coerced — node-postgres returns
+ * count/bigint as strings) + period + the deterministic top-20 recent rows (left
+ * in native b.query types so recentSignals byte-matches loadSignalsForStats rows).
+ */
+export async function aggregateSignalsSql(): Promise<{ groups: StatGroupRow[]; period: PeriodRow; recentRows: SignalRecord[] }> {
+  const b = getBackend();
+  if (!(isPg && b instanceof PgBackend)) throw new Error('aggregateSignalsSql: PG backend required');
+  const { groupsSql, periodSql, recentSql } = buildStatsAggregateSql();
+  // Sequential on ONE pooled connection (~150ms total) — fewer concurrent conns
+  // than 3 parallel queries; still ms vs the ~6s full-row-load it replaces.
+  const rawGroups = (await b.query(groupsSql)) as unknown as Array<Record<string, unknown>>;
+  const rawPeriod = (await b.query(periodSql)) as unknown as Array<Record<string, unknown>>;
+  const recentRows = (await b.query(recentSql)) as unknown as SignalRecord[];
+  const groups: StatGroupRow[] = rawGroups.map(r => ({
+    exchange: String(r.exchange), coin: String(r.coin), timeframe: String(r.timeframe), signal: r.signal as SignalVerdict,
+    cnt: Number(r.cnt), pfe_eval: Number(r.pfe_eval), pfe_win: Number(r.pfe_win),
+    max_ca: Number(r.max_ca), max_id: Number(r.max_id),
+  }));
+  const p = rawPeriod[0] ?? {};
+  const period: PeriodRow = { min_created_at: Number(p.min_created_at) || 0, max_created_at: Number(p.max_created_at) || 0, total: Number(p.total) || 0 };
+  return { groups, period, recentRows };
+}
+
+// Probe seams (underscore-prefixed) for the live byte-equivalence gate (audits/perfstats-equivalence-probe.js).
+export async function _perfStatsOldPath(top20: Set<string> | null): Promise<{ stats: PerformanceStats; total: number }> {
+  const all = await loadSignalsForStats();
+  return { stats: computeStats(all, top20), total: all.length };
+}
+export async function _perfStatsNewPath(top20: Set<string> | null): Promise<{ stats: PerformanceStats; total: number }> {
+  const { groups, period, recentRows } = await aggregateSignalsSql();
+  return { stats: rollupStats(groups, period, top20, recentRows), total: period.total };
 }
 
 // ── Public recent signals (for /api/performance-public.recentSignals[] + /track-record dashboard) ──
