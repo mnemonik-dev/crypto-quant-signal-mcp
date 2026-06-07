@@ -76,3 +76,18 @@ export async function getSeedHeartbeats(timeframe: string): Promise<SeedHeartbea
     [timeframe],
   );
 }
+
+/**
+ * OPS-SEED-FRESHNESS-W1 (R1) — freshest ATTEMPT per venue across ALL timeframes
+ * (the 5m line dominates in health). Powers the attempt-staleness pager (the sole
+ * heartbeat paging path). NO timeframe filter — a venue is "alive" if ANY TF
+ * attempted it recently. Read-only (no ensureTable): a missing table on a fresh
+ * box throws → the monitor's fail-open catch reports-not-pages (it never CREATEs
+ * the table — that is the seeder's job).
+ */
+export async function getLatestSeedHeartbeatPerVenue(): Promise<SeedHeartbeatRow[]> {
+  return dbQuery<SeedHeartbeatRow>(
+    `SELECT exchange, max(last_attempt_at) AS last_attempt_at
+       FROM seed_heartbeats GROUP BY exchange`,
+  );
+}

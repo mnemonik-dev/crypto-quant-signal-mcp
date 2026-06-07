@@ -47,3 +47,34 @@ export function evaluateSeedFreshness(
     return { venue: r.exchange, staleMin, stale: staleMin >= thresholdMin };
   });
 }
+
+/**
+ * OPS-SEED-FRESHNESS-W1 — build evaluator rows from the promoted venue list + the
+ * cross-TF heartbeat rows (getLatestSeedHeartbeatPerVenue). Each promoted venue gets
+ * its freshest ATTEMPT (epoch SECONDS → ×1000 ms, mirroring checkSeedFreshness); a
+ * promoted venue with NO heartbeat row → null (report-not-page bootstrap — a new
+ * venue inherits paging only once it has been attempted). Pure (no imports).
+ */
+export function buildSeedFreshnessRows(
+  promotedIds: string[],
+  heartbeats: { exchange: string; last_attempt_at: number | null }[],
+): SeedFreshnessRow[] {
+  const byVenue = new Map(heartbeats.map((h) => [h.exchange, h.last_attempt_at]));
+  return promotedIds.map((exchange) => {
+    const la = byVenue.get(exchange);
+    return { exchange, lastCreatedAtMs: la != null ? Number(la) * 1000 : null };
+  });
+}
+
+/**
+ * OPS-SEED-FRESHNESS-W1 — page string for a seed OUTAGE (any stale venue), else null.
+ * Symptom-only; names ONLY the stale venue(s) + staleMin + a cause hint. NO hardcoded
+ * W<N> wave id (recommendation-drift-canary rule). Pages only on a sustained ≥45-min
+ * attempt outage (the monitor's consecutive-3 ~6-min gate sits on top).
+ */
+export function formatSeedOutagePage(verdicts: SeedFreshnessVerdict[]): string | null {
+  const stale = verdicts.filter((v) => v.stale);
+  if (stale.length === 0) return null;
+  const detail = stale.map((v) => `${v.venue} ${v.staleMin}m`).join(', ');
+  return `Seed OUTAGE: no seed fire reached ${detail} in ≥45m — cron/container/DB-write outage (silent data-flywheel stall)`;
+}

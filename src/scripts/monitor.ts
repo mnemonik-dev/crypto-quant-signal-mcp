@@ -9,8 +9,9 @@ import fs from 'node:fs';
 import { sendAlert, sendDigest } from '../lib/telegram.js';
 import { getPerformanceStatsAsync, dbQuery } from '../lib/performance-db.js';
 import { evaluatePfeWinRate, internalPerfPublicUrl } from './monitor-pfe.js';
-import { evaluateSeedFreshness } from './monitor-seed-freshness.js';
+import { evaluateSeedFreshness, buildSeedFreshnessRows, formatSeedOutagePage } from './monitor-seed-freshness.js';
 import { listVenues } from '../lib/venue-store.js';
+import { getLatestSeedHeartbeatPerVenue } from '../lib/seed-heartbeats.js';
 import { hlInfoPost } from '../lib/adapters/hyperliquid.js';
 import { UpstreamRateLimitError } from '../lib/errors.js';
 import { WeightBudgetSkipError } from '../lib/upstream-weight-budget.js';
@@ -124,6 +125,10 @@ const FAIL_THRESHOLDS: Record<string, number> = {
   // false-positives on every venue). When alerting is re-enabled this 3-cycle
   // (~6 min) consecutive gate applies; until then the check never reaches it.
   seed_freshness: 3,
+  // OPS-SEED-FRESHNESS-W1: the attempt-heartbeat pager (the SOLE heartbeat paging path).
+  // 45-min attempt-staleness = 9 missed 5m fires; market-independent (zero false-positive
+  // surface); this 3-cycle (~6 min) consecutive gate ⇒ pages only on a sustained outage.
+  seed_attempt_freshness: 3,
 };
 
 function loadState(): AlertState {
@@ -415,6 +420,34 @@ async function checkSeedFreshness(): Promise<string | null> {
   return null; // REPORT-ONLY — never pages (alerting deferred to a calibrated redesign).
 }
 
+async function checkSeedAttemptFreshness(): Promise<string | null> {
+  // OPS-SEED-FRESHNESS-W1 — attempt-heartbeat seed-OUTAGE pager (the SOLE heartbeat
+  // paging path; the signal-based checkSeedFreshness above stays report-only forensic).
+  // ATTEMPTS are market-independent: every promoted venue is hit by the 5m line, so a
+  // healthy venue's freshest attempt across all TFs is ≤5 min by construction. 45-min
+  // attempt-staleness = 9 missed 5m fires = a real outage (cron stopped / container down
+  // / DB-write unreachable) — the silent EAI_AGAIN data-flywheel class the report-only
+  // signal check cannot page on. + the consecutive-3 (~6 min) gate ⇒ pages only on a
+  // ≥45-min outage sustained ~6 min. Zero false-positive surface (attempts don't depend
+  // on market activity). Logic is the unit-tested pure helpers; this is thin glue.
+  try {
+    const venues = await listVenues('promoted');
+    const promoted = venues.filter((v) => v.status !== 'retired').map((v) => v.exchange_id);
+    if (promoted.length === 0) return null;
+    const heartbeats = await getLatestSeedHeartbeatPerVenue();
+    const rows = buildSeedFreshnessRows(promoted, heartbeats);
+    const verdicts = evaluateSeedFreshness(rows, Date.now(), 45);
+    console.log(`[monitor] seed-attempt-freshness: ${verdicts.map((v) => `${v.venue}=${v.staleMin}m`).join(' ')}`);
+    return formatSeedOutagePage(verdicts);
+  } catch (err) {
+    // fail-open: the check's OWN error (DB unreachable, missing table on a fresh box) →
+    // log + null. The `database` check owns DB-down paging — never double-page on a
+    // monitor-infra blip (mirrors checkSeedFreshness's report-only catch).
+    console.log(`[monitor] seed-attempt-freshness check error (fail-open, no page): ${(err as Error).message}`);
+    return null;
+  }
+}
+
 async function runCritical(): Promise<void> {
   console.log(`[monitor] critical check at ${new Date().toISOString()}`);
   const state = loadState();
@@ -428,6 +461,7 @@ async function runCritical(): Promise<void> {
     ['backfill', async () => (await checkBackfillQueue()).error],
     ['pfe_winrate', async () => (await checkPfeWinRate()).error],
     ['seed_freshness', checkSeedFreshness],
+    ['seed_attempt_freshness', checkSeedAttemptFreshness],
   ];
 
   let alertCount = 0;
