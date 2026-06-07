@@ -214,6 +214,7 @@ export async function initX402(): Promise<void> {
  */
 export async function verifyX402Payment(
   headers: Record<string, string | undefined>,
+  toolName?: string,
 ): Promise<X402VerificationResult> {
   if (!resourceServer || !initialized) {
     return { valid: false };
@@ -227,10 +228,18 @@ export async function verifyX402Payment(
   try {
     const paymentPayload = JSON.parse(paymentHeader);
 
-    // Collect all requirements across tools to find a match
-    const allReqs = Array.from(toolRequirements.values()).flat();
+    // X402-01 (generator-level hardening): when the caller names the target tool,
+    // match the proof against ONLY that tool's pre-built requirement — never the
+    // flattened cross-tool pool. This binds the proof to the requested route's
+    // price/asset/network/payTo so a $0.01 proof can't deep-equal a $0.02 route's
+    // requirement. Callers that pass no toolName (e.g. the shared `resolveLicense`
+    // gate) still match against the flattened pool, but the HTTP route then
+    // re-asserts the binding via `paymentMatchesToolRoute` (defense-in-depth).
+    const candidateReqs = toolName
+      ? (toolRequirements.get(toolName) ?? [])
+      : Array.from(toolRequirements.values()).flat();
     const matchingReqs = resourceServer.findMatchingRequirements(
-      allReqs as Parameters<typeof resourceServer.findMatchingRequirements>[0],
+      candidateReqs as Parameters<typeof resourceServer.findMatchingRequirements>[0],
       paymentPayload,
     );
 
@@ -358,12 +367,125 @@ export function isX402Configured(): boolean {
   return WALLET_ADDRESS.length > 0;
 }
 
+/** Convert a USD price to atomic USDC units (6 decimals), as a string. */
+function usdToAtomic(usd: number): string {
+  return Math.round(usd * 1_000_000).toString();
+}
+
 /**
- * Check if payment amount covers the tool price.
+ * X402-03: the effective USD price for a tool call, accounting for the
+ * per-timeframe premium. `SIGNAL_TIMEFRAME_PRICING` (e.g. 1m=$0.05) was declared
+ * but never enforced — only the base `TOOL_PRICING` ($0.02) was. The premium
+ * applies to `get_trade_signal` (the only timeframe-priced tool); every other
+ * tool, and any timeframe without a premium entry, falls back to the base price.
+ * Returns `undefined` for an unknown tool.
  */
-export function isPaymentSufficient(toolName: string, paidAmount: number | undefined): boolean {
-  if (paidAmount === undefined) return false;
-  const price = TOOL_PRICING[toolName as keyof X402ToolPricing];
+export function effectivePrice(toolName: string, timeframe?: string): number | undefined {
+  const base = TOOL_PRICING[toolName as keyof X402ToolPricing];
+  if (base === undefined) return undefined;
+  // Premium pricing is only defined for get_trade_signal timeframes.
+  if (toolName === 'get_trade_signal' && timeframe) {
+    const premium = SIGNAL_TIMEFRAME_PRICING[timeframe];
+    if (premium !== undefined) return Math.max(premium, base);
+  }
+  return base;
+}
+
+/**
+ * Check that the paid amount (atomic USDC units) covers the tool's effective
+ * price for the requested timeframe (X402-01 amount check + X402-03 premium).
+ * Now LIVE — wired into `paymentMatchesToolRoute` below (previously dead code,
+ * the gap that let the cross-tool downgrade through).
+ */
+export function isPaymentSufficient(
+  toolName: string,
+  paidAtomic: string | undefined,
+  timeframe?: string,
+): boolean {
+  if (paidAtomic === undefined) return false;
+  const price = effectivePrice(toolName, timeframe);
   if (price === undefined) return false;
-  return paidAmount >= price;
+  const paid = Number(paidAtomic);
+  if (!Number.isFinite(paid)) return false;
+  return paid >= Number(usdToAtomic(price));
+}
+
+/** Read a matched requirement's binding fields (test seam + internal use). */
+function reqFields(req: unknown): {
+  amount?: string; asset?: string; network?: string; payTo?: string;
+} {
+  const r = (req ?? {}) as { amount?: unknown; asset?: unknown; network?: unknown; payTo?: unknown };
+  return {
+    amount: typeof r.amount === 'string' ? r.amount : r.amount != null ? String(r.amount) : undefined,
+    asset: typeof r.asset === 'string' ? r.asset : undefined,
+    network: typeof r.network === 'string' ? r.network : undefined,
+    payTo: typeof r.payTo === 'string' ? r.payTo : undefined,
+  };
+}
+
+/**
+ * X402-01 route-level binding (defense-in-depth on top of the per-tool
+ * `verifyX402Payment(headers, tool)` path). Asserts that a verified settlement's
+ * matched requirement actually belongs to `toolName`'s route AND covers its
+ * effective (timeframe-aware) price:
+ *
+ *  1. amount/asset/network/payTo of the matched requirement must equal this
+ *     tool's pre-built requirement (so a $0.01 scan_funding_arb proof POSTed to
+ *     the $0.02 get_trade_signal route is rejected — they have different amounts);
+ *  2. the paid atomic amount must be ≥ the tool's effective price for `timeframe`
+ *     (so a base-priced $0.02 proof against a premium 1m=$0.05 call is rejected).
+ *
+ * Returns `false` (reject) when x402 isn't initialized, the tool is unknown, the
+ * settlement is malformed, the matched requirement doesn't match the route's
+ * requirement, or the amount is insufficient. The route handler calls this after
+ * `resolveLicense` returns `tier==='x402'` + a `pendingSettlement`; on `false`
+ * it sends 402 and does NOT serve/settle.
+ */
+export function paymentMatchesToolRoute(
+  settlement: { paymentPayload?: unknown; requirements?: unknown } | undefined | null,
+  toolName: string,
+  timeframe?: string,
+): boolean {
+  if (!settlement || !settlement.requirements) return false;
+
+  const expected = toolRequirements.get(toolName);
+  if (!expected || expected.length === 0) return false; // unknown / unpriced tool → reject
+
+  // The settlement's matched requirement (may be a single req or a 1-element array).
+  const matchedRaw = settlement.requirements;
+  const matched = Array.isArray(matchedRaw) ? matchedRaw[0] : matchedRaw;
+  const exp = reqFields(expected[0]);
+  const got = reqFields(matched);
+
+  // (1) Route/identity binding: asset, network, and recipient MUST equal THIS
+  // server's pre-built requirement for the tool. These never vary by the buyer's
+  // payment, so an exact match binds the proof to our wallet/chain/token (and
+  // independently catches the cross-network / wrong-asset / wrong-payTo cases).
+  // The AMOUNT is deliberately NOT required to be byte-equal here — over-payment
+  // and premium-timeframe amounts legitimately differ from the base requirement;
+  // the amount floor is enforced in (2).
+  if (
+    got.asset !== exp.asset ||
+    got.network !== exp.network ||
+    got.payTo !== exp.payTo
+  ) {
+    return false;
+  }
+
+  // (2) Effective-price floor (X402-01 amount + X402-03 premium): the paid atomic
+  // amount must be ≥ the tool's effective (timeframe-aware) price. This is the
+  // check that rejects the cross-tool DOWNGRADE — a $0.01 scan_funding_arb proof
+  // (amount 10000) on the $0.02 get_trade_signal route (effective 20000) fails
+  // 10000 ≥ 20000 — AND the premium underpay (a $0.02 proof on a 1m=$0.05 call).
+  // Over-payment and exact/correct-premium proofs pass (paid ≥ effective).
+  if (!isPaymentSufficient(toolName, got.amount, timeframe)) {
+    return false;
+  }
+
+  return true;
+}
+
+/** Test seam: snapshot the pre-built per-tool requirements (read-only). */
+export function _getToolRequirementsForTest(): Map<string, unknown[]> {
+  return new Map(toolRequirements);
 }

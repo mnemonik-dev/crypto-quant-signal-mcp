@@ -29,7 +29,7 @@ import Ajv, { type ValidateFunction } from 'ajv';
 import { encodePaymentRequiredHeader } from '@x402/core/http';
 import { resolveLicense, requestContext } from './license.js';
 import { hashIp, logRequest } from './analytics.js';
-import { generate402Response, settleX402Async } from './x402.js';
+import { generate402Response, settleX402Async, paymentMatchesToolRoute } from './x402.js';
 import { BAZAAR_ROUTES, bazaarResourceUrl, bazaarRouteDescription } from './x402-bazaar.js';
 import { resolveFacilitatorFromEnv } from './x402-facilitator.js';
 import { getTradeSignal } from '../tools/get-trade-call.js';
@@ -177,6 +177,8 @@ export function mountX402HttpRoutes(app: Express): string[] {
       }
 
       // Validate body against the SAME schema declared to the Bazaar (defaults applied).
+      // Done BEFORE the price-binding check so the (defaults-applied) timeframe is known
+      // for the per-timeframe premium assertion (X402-03).
       const input: Record<string, unknown> = { ...(req.body ?? {}) };
       if (!validate(input)) {
         return res.status(400).json({
@@ -185,6 +187,20 @@ export function mountX402HttpRoutes(app: Express): string[] {
           details: validate.errors ?? [],
           suggested_fix: `Body must satisfy the published JSON Schema for ${tool}.`,
         });
+      }
+
+      // X402-01 / X402-03 — per-route price binding (the chokepoint the audit
+      // flagged). `verifyX402Payment` (called inside resolveLicense) matched the
+      // proof against the FLATTENED cross-tool pool, so a $0.01 scan_funding_arb
+      // proof would satisfy this $0.02 route. Re-assert here that the matched
+      // requirement belongs to THIS tool's route AND covers its effective
+      // (timeframe-aware) price. Mismatch (cross-tool downgrade OR premium-timeframe
+      // underpay) → 402, do NOT serve, do NOT settle.
+      const timeframe = typeof input.timeframe === 'string' ? (input.timeframe as string) : undefined;
+      if (!paymentMatchesToolRoute(pendingSettlement, tool, timeframe)) {
+        console.warn(`[x402-route] payment-binding REJECT for /x402/${tool} (cross-tool or underpaid proof)`);
+        send402(res, tool);
+        return;
       }
 
       const ipHash = clientIpHash(req);
