@@ -19,6 +19,7 @@ import { bazaarResourceServerExtension } from '@x402/extensions/bazaar';
 import type { X402ToolPricing } from '../types.js';
 import { createFacilitatorClient, resolveFacilitatorFromEnv } from './x402-facilitator.js';
 import { declareBazaarRoute } from './x402-bazaar.js';
+import { FEATURE_REGISTRY, getFeature } from './feature-registry.js';
 
 // ── Configuration ──
 
@@ -54,12 +55,26 @@ const USDC_EIP712_NAME: Record<string, string> = {
 };
 const usdcExtra = (caip2: string) => ({ name: USDC_EIP712_NAME[caip2] || 'USD Coin', version: '2' });
 
-// Tool pricing in USD (base price — timeframe-tiered pricing applied at request time)
-export const TOOL_PRICING: X402ToolPricing = {
-  get_trade_signal: 0.02,
-  scan_funding_arb: 0.01,
-  get_market_regime: 0.02,
-};
+// Tool pricing in USD (base price — timeframe-tiered pricing applied at request time).
+// FEATURE-REGISTRY-SOT-W1 CH3: DERIVED from the feature registry (the SoT) instead of being
+// hand-maintained. For each priced feature we emit a key for BOTH the canonical name AND every
+// alias, so the canonical `get_trade_call` AND its back-compat alias `get_trade_signal` both
+// price-resolve to the feature's $0.02 — closing the canonical-key gap (previously ONLY the
+// alias `get_trade_signal` had a key, so a canonical-name payment found no price). The 3
+// pre-existing keys (`get_trade_signal`/`scan_funding_arb`/`get_market_regime`) keep IDENTICAL
+// values; the ONLY delta is the ADDITIVE canonical `get_trade_call` key (architect A3). Scanner
+// + equity stay unpriced (registry `x402:null`) — pricing them is a one-row registry edit.
+// IMPORTANT: this map is the price-RESOLUTION source. The *gated* + Bazaar-discoverable route
+// set is still `HTTP_TOOLS`/`BAZAAR_ROUTES` (alias-keyed `get_trade_signal`, ratified Cowork A2
+// 2026-05-29: `get_trade_call` is intentionally FREE + non-discoverable). Adding the canonical
+// key here does NOT gate `get_trade_call` — the MCP gate keys off `HTTP_TOOLS` (index.ts), so a
+// free caller still calls `get_trade_call` for free; it merely lets a *voluntary* canonical-name
+// payment proof verify. Free-tier generosity (A2) and the canonical-key closure (A3) coexist.
+export const TOOL_PRICING: X402ToolPricing = Object.fromEntries(
+  FEATURE_REGISTRY.flatMap((f) =>
+    f.x402 ? [f.name, ...f.aliases].map((n) => [n, f.x402!.basePriceUsd] as const) : [],
+  ),
+) as unknown as X402ToolPricing;
 
 // Timeframe-specific pricing for get_trade_signal
 export const SIGNAL_TIMEFRAME_PRICING: Record<string, number> = {
@@ -172,7 +187,12 @@ export async function initX402(): Promise<void> {
     return;
   }
 
-  // Pre-build payment requirements for each tool
+  // Pre-build payment requirements for each priced tool NAME (canonical + aliases — TOOL_PRICING
+  // now derives from the registry). FEATURE-REGISTRY-SOT-W1 CH3: the additive canonical
+  // `get_trade_call` key thus gains a verifiable requirement (a canonical-name proof now resolves;
+  // it previously found none), BUT `declareBazaarRoute('get_trade_call')` returns `{}` (no
+  // BAZAAR_ROUTES entry) → no discovery extension → the CDP Bazaar listing stays the 3 ratified
+  // routes. MCP gating is unaffected (it keys off HTTP_TOOLS, not this loop).
   try {
     for (const [tool, price] of Object.entries(TOOL_PRICING)) {
       const resourceConfig: Parameters<typeof resourceServer.buildPaymentRequirements>[0] = {
@@ -433,8 +453,12 @@ function usdToAtomic(usd: number): string {
 export function effectivePrice(toolName: string, timeframe?: string): number | undefined {
   const base = TOOL_PRICING[toolName as keyof X402ToolPricing];
   if (base === undefined) return undefined;
-  // Premium pricing is only defined for get_trade_signal timeframes.
-  if (toolName === 'get_trade_signal' && timeframe) {
+  // FEATURE-REGISTRY-SOT-W1 CH3: the timeframe premium applies to the trade-call FEATURE,
+  // addressed by EITHER its canonical name `get_trade_call` OR its back-compat alias
+  // `get_trade_signal`. Alias-resolve via the registry so both names price IDENTICALLY
+  // (previously only the literal `get_trade_signal` got the premium; the canonical name
+  // silently fell back to base — the same keying gap CH3 closes for the base price).
+  if (timeframe && getFeature(toolName)?.name === 'get_trade_call') {
     const premium = SIGNAL_TIMEFRAME_PRICING[timeframe];
     if (premium !== undefined) return Math.max(premium, base);
   }

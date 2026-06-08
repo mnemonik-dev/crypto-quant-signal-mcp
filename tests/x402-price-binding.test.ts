@@ -101,8 +101,16 @@ describe('effectivePrice — X402-03 premium timeframe pricing', () => {
     expect(x402.effectivePrice('get_market_regime', '1h')).toBe(0.02);
     expect(x402.effectivePrice('scan_funding_arb', undefined)).toBe(0.01);
   });
-  it('unknown tool → undefined', () => {
-    expect(x402.effectivePrice('get_trade_call', '4h')).toBeUndefined();
+  it('unknown / unpriced tool → undefined', () => {
+    expect(x402.effectivePrice('nonexistent_tool', '4h')).toBeUndefined();
+  });
+  it('FEATURE-REGISTRY-SOT-W1 CH3: canonical get_trade_call now price-resolves (gap closed)', () => {
+    // Pre-CH3 only the alias `get_trade_signal` had a TOOL_PRICING key, so the canonical name
+    // resolved to undefined (this used to be the "unknown tool → undefined" case above). CH3
+    // derives pricing from the registry → canonical + alias resolve IDENTICALLY (base + premium).
+    expect(x402.effectivePrice('get_trade_call', '4h')).toBe(0.02);
+    expect(x402.effectivePrice('get_trade_call', '1m')).toBe(0.05);
+    expect(x402.effectivePrice('get_trade_call')).toBe(x402.effectivePrice('get_trade_signal'));
   });
 });
 
@@ -183,6 +191,8 @@ describe('paymentMatchesToolRoute — X402-01 cross-tool downgrade rejection', (
   it('null / malformed settlement / unknown tool → reject (default-deny)', () => {
     expect(x402.paymentMatchesToolRoute(null, 'get_trade_signal')).toBe(false);
     expect(x402.paymentMatchesToolRoute({ requirements: undefined }, 'get_trade_signal')).toBe(false);
-    expect(x402.paymentMatchesToolRoute({ paymentPayload: {}, requirements: req(0.02) }, 'get_trade_call')).toBe(false);
+    // FEATURE-REGISTRY-SOT-W1 CH3: get_trade_call is no longer "unknown" (the canonical name now
+    // has a price key). Use a genuinely-unknown tool to exercise the default-deny path.
+    expect(x402.paymentMatchesToolRoute({ paymentPayload: {}, requirements: req(0.02) }, 'nonexistent_tool')).toBe(false);
   });
 });

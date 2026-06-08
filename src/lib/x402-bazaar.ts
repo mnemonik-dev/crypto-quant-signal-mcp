@@ -13,9 +13,14 @@
  * No `outcome_return_pct`, Phase-E, or internal-wave tokens — enforced by
  * `assertNoBazaarLeak()` at declaration time + a CI test.
  *
- * Scope: ONLY the 3 actually-402-gated tools (TOOL_PRICING) are declared.
- * `get_trade_call` is intentionally FREE (North Star: free-tier generosity) and
- * is therefore NOT discoverable — confirmed by Cowork (A2, 2026-05-29).
+ * Scope: ONLY the 3 actually-402-GATED tools are declared here — the `HTTP_TOOLS`
+ * allow-list (`get_trade_signal` / `scan_funding_arb` / `get_market_regime`).
+ * `get_trade_call` is intentionally FREE (North Star: free-tier generosity) and is
+ * therefore NOT discoverable — confirmed by Cowork (A2, 2026-05-29).
+ * NOTE (FEATURE-REGISTRY-SOT-W1 CH3): `TOOL_PRICING` now ALSO carries a canonical
+ * `get_trade_call` price KEY so a *voluntary* canonical-name x402 proof can verify, but
+ * that is price-RESOLUTION only — `get_trade_call` remains OUT of `HTTP_TOOLS` (not gated)
+ * and OUT of `BAZAAR_ROUTES` (not discoverable). "402-gated" ≠ "has a TOOL_PRICING key".
  *
  * Input schemas mirror the live zod schemas in src/index.ts; output examples
  * mirror the live public response shapes (probed 2026-05-29, leak-verified).

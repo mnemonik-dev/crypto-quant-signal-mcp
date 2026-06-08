@@ -104,7 +104,9 @@ describe('classifyToolRouteMismatch — lockstep with paymentMatchesToolRoute', 
   it('null / malformed settlement / unknown tool → cross_tool (default-deny)', () => {
     expect(x402.classifyToolRouteMismatch(null, 'get_trade_signal')).toBe('cross_tool');
     expect(x402.classifyToolRouteMismatch({ requirements: undefined }, 'get_trade_signal')).toBe('cross_tool');
-    expect(x402.classifyToolRouteMismatch({ paymentPayload: {}, requirements: req(0.02) }, 'get_trade_call')).toBe('cross_tool');
+    // FEATURE-REGISTRY-SOT-W1 CH3: get_trade_call is no longer "unknown" (the canonical name now
+    // has a price key). Use a genuinely-unknown tool to exercise the default-deny path.
+    expect(x402.classifyToolRouteMismatch({ paymentPayload: {}, requirements: req(0.02) }, 'nonexistent_tool')).toBe('cross_tool');
   });
 
   it('accepts a 1-element array requirement (SDK match shape)', () => {

@@ -85,7 +85,19 @@ function send402(res: Response, tool: string): void {
   res.status(r.status).json(r.body);
 }
 
-/** The paid, Bazaar-discoverable HTTP tools (must match BAZAAR_ROUTES / TOOL_PRICING). */
+/**
+ * The paid, GATED + Bazaar-discoverable HTTP tools. This is the x402 ENFORCEMENT allow-list:
+ * `index.ts` keys `isPricedTool` off it, and it must match `BAZAAR_ROUTES` (the discovery SoT).
+ *
+ * FEATURE-REGISTRY-SOT-W1 CH3 — deliberately NOT registry-derived (kept alias-keyed): the
+ * trade-call feature is canonical `get_trade_call` in the registry, but its GATED + discoverable
+ * HTTP name is the back-compat alias `get_trade_signal` (ratified Cowork A2, 2026-05-29 —
+ * `get_trade_call` is intentionally free + non-discoverable). Deriving this list from the
+ * registry's canonical `httpX402` names would SWAP `get_trade_signal`→`get_trade_call`,
+ * simultaneously UN-gating the paid tool AND gating the free one — a non-additive payment-surface
+ * break (architect A3: x402-shape byte-identical). Registry↔HTTP_TOOLS parity is instead enforced
+ * by the CH4 drift canary (alias-resolved).
+ */
 export const HTTP_TOOLS = ['get_trade_signal', 'scan_funding_arb', 'get_market_regime'] as const;
 export type HttpTool = (typeof HTTP_TOOLS)[number];
 

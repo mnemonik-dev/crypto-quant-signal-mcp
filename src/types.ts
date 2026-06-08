@@ -502,6 +502,9 @@ export interface LicenseInfo {
 // ── x402 Types ──
 
 export interface X402ToolPricing {
+  // FEATURE-REGISTRY-SOT-W1 CH3: canonical key (additive). `get_trade_call` and its back-compat
+  // alias `get_trade_signal` are the SAME feature; both price-resolve to $0.02 via the registry.
+  get_trade_call: number;
   get_trade_signal: number;
   scan_funding_arb: number;
   get_market_regime: number;

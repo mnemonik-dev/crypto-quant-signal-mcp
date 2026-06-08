@@ -1,0 +1,48 @@
+{
+  "_comment": "FEATURE-REGISTRY-SOT-W1 CH3 x402 shape SoT. priced_names = TOOL_PRICING keys (price-resolution); gated_http_tools = HTTP_TOOLS (x402-enforced + the route set); bazaar_discoverable = BAZAAR_ROUTES keys. get_trade_call is priced-but-NOT-gated/discoverable (A2 free + A3 canonical-key).",
+  "generated_for": "FEATURE-REGISTRY-SOT-W1 CH3",
+  "priced_names": [
+    "get_market_regime",
+    "get_trade_call",
+    "get_trade_signal",
+    "scan_funding_arb"
+  ],
+  "prices": {
+    "get_trade_call": 0.02,
+    "get_trade_signal": 0.02,
+    "get_market_regime": 0.02,
+    "scan_funding_arb": 0.01
+  },
+  "gated_http_tools": [
+    "get_market_regime",
+    "get_trade_signal",
+    "scan_funding_arb"
+  ],
+  "bazaar_discoverable": [
+    "get_market_regime",
+    "get_trade_signal",
+    "scan_funding_arb"
+  ],
+  "effectivePrice": {
+    "get_trade_call": 0.02,
+    "get_trade_signal": 0.02,
+    "scan_funding_arb": 0.01,
+    "get_market_regime": 0.02
+  },
+  "premium_1m": {
+    "get_trade_call": 0.05,
+    "get_trade_signal": 0.05,
+    "scan_funding_arb": 0.01,
+    "get_market_regime": 0.02
+  },
+  "registry_httpX402_canonical": [
+    "get_market_regime",
+    "get_trade_call",
+    "scan_funding_arb"
+  ],
+  "http_tools_alias_resolved": [
+    "get_market_regime",
+    "get_trade_call",
+    "scan_funding_arb"
+  ]
+}

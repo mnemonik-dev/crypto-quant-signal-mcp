@@ -9,10 +9,19 @@ import {
   bazaarResourceUrl,
 } from '../src/lib/x402-bazaar.js';
 import { TOOL_PRICING } from '../src/lib/x402.js';
+import { HTTP_TOOLS } from '../src/lib/x402-http-routes.js';
 
 describe('Bazaar discovery routes', () => {
-  it('declares exactly the paid tools (stays in sync with TOOL_PRICING)', () => {
-    expect(Object.keys(BAZAAR_ROUTES).sort()).toEqual(Object.keys(TOOL_PRICING).sort());
+  it('declares exactly the GATED + discoverable tools (in sync with HTTP_TOOLS)', () => {
+    // FEATURE-REGISTRY-SOT-W1 CH3: BAZAAR_ROUTES tracks the DISCOVERABLE/gated set (== HTTP_TOOLS),
+    // NOT all of TOOL_PRICING. TOOL_PRICING now ALSO carries the canonical `get_trade_call` key
+    // (price-resolution), but `get_trade_call` is intentionally NON-discoverable (ratified A2), so
+    // it is absent from BAZAAR_ROUTES. The discoverable set == the gated HTTP route set.
+    expect(Object.keys(BAZAAR_ROUTES).sort()).toEqual([...HTTP_TOOLS].sort());
+    // get_trade_call IS priced (resolution) but NOT discoverable + NOT gated:
+    expect(TOOL_PRICING.get_trade_call).toBe(0.02);
+    expect(Object.keys(BAZAAR_ROUTES)).not.toContain('get_trade_call');
+    expect([...HTTP_TOOLS]).not.toContain('get_trade_call');
   });
 
   it('get_trade_call is NOT discoverable (intentionally free — Cowork A2)', () => {
