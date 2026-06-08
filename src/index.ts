@@ -1177,6 +1177,34 @@ async function startHttp() {
         clientReferenceId,
       });
       if (!url) return res.status(500).send('Stripe not configured or missing price IDs');
+      // SUBSCRIBER-ATTRIBUTION-SPINE-W1 (C1): persist the click attribution so
+      // the conversion webhook (C2) can JOIN to it by client_reference_id —
+      // closing the blind spot SUBSCRIBER-ATTRIBUTION-DIAGNOSIS-W1 hit. Lazy-
+      // import + fire-and-forget + fail-open (mirrors the recordFunnelEvent arm
+      // above): a capture error MUST NOT affect the 303 redirect, its latency,
+      // or the client_reference_id value. ip_hash via the existing hashIp helper
+      // (the requestContext ALS is only entered for /mcp, so derive the IP from
+      // the proxy headers like the /mcp handler does).
+      try {
+        const xff = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
+        const clientIp = xff || (req.headers['x-real-ip'] as string | undefined) || req.ip || '';
+        const { recordSignupAttribution } = await import('./lib/subscriber-attribution.js');
+        recordSignupAttribution({
+          clientReferenceId,
+          utmSource: utmSource ?? null,
+          utmMedium: typeof req.query.utm_medium === 'string' ? req.query.utm_medium : null,
+          utmCampaign: utmCampaign ?? null,
+          referrer: (req.headers['referer'] as string | undefined) ?? null,
+          landingPath: typeof req.query.landing_path === 'string'
+            ? req.query.landing_path
+            : (req.headers['referer'] as string | undefined) ?? null,
+          tierRequested: plan,
+          ipHash: clientIp ? hashIp(clientIp) : null,
+          userAgent: (req.headers['user-agent'] as string | undefined) ?? null,
+        });
+      } catch (err) {
+        console.warn('[/signup attribution] capture failed (fail-open):', err instanceof Error ? err.message : err);
+      }
       res.redirect(303, url);
     } catch (err) {
       console.error('Stripe checkout error:', err instanceof Error ? err.message : err);
