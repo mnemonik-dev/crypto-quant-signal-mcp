@@ -275,6 +275,57 @@ function chatQuotaApiKey(licenseKey: string | null, ipHash: string | null): stri
   return licenseKey ?? `ip:${ipHash ?? 'unknown'}`;
 }
 
+/**
+ * OPS-MCP-SESSION-RESILIENCE-W1: single shared session-correlation resolver
+ * (single-derivation rule). Used by BOTH the funnel / skill-attribution emit AND
+ * the per-request requestContext ALS store under stateless transport mode, so every
+ * consumer — recordFunnelEvent + the per-tool cohort sites via getRequestSessionId()
+ * — projects from ONE value, never re-derived per site.
+ *
+ * Precedence (architect A1 = Option B), hardened to NEVER return null/empty (an empty
+ * session_id would collapse the activation funnel as badly as null):
+ *   X-AlgoVault-Track-Token  → preserves the per-(session,track_token) funnel dedup for tagged callers
+ *   ?? ipHash                → stable per-client, privacy-safe, SAME id as the free:${ipHash} quota key
+ *   ?? randomUUID()          → only if both absent (rare behind Caddy)
+ * Stateless issues no Mcp-Session-Id, so this stops COUNT(DISTINCT session_id) collapsing
+ * to null without UUID-inflating it per request.
+ */
+export function resolveSessionCorrelationId(
+  headers: Record<string, unknown>,
+  ipHash: string,
+): string {
+  const trackToken = resolveTrackTokenForRequest(headers);
+  if (trackToken && trackToken.length > 0) return trackToken;
+  if (ipHash && ipHash.length > 0) return ipHash;
+  return crypto.randomUUID();
+}
+
+/**
+ * OPS-MCP-SESSION-RESILIENCE-W1: stateless Streamable-HTTP request handler. A fresh
+ * McpServer + transport per POST (sessionIdGenerator: undefined → no session issued or
+ * validated → nothing can be orphaned by a deploy / idle-reap / restart / replica).
+ * GET/DELETE → 405 (no SSE stream, no session to delete) — matches the official SDK
+ * stateless example. Exported so tests/ops-mcp-session-resilience-w1.test.ts can drive
+ * the REAL handler over a live http.Server.
+ */
+export async function handleMcpStateless(
+  req: import('express').Request,
+  res: import('express').Response,
+  makeServer: () => McpServer,
+): Promise<void> {
+  if (req.method === 'GET' || req.method === 'DELETE') {
+    res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null });
+    return;
+  }
+  const server = makeServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on('close', () => {
+    try { transport.close(); server.close(); } catch { /* best-effort cleanup */ }
+  });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
+}
+
 function createServer(): McpServer {
   const server = new McpServer({
     name: 'crypto-quant-signal-mcp',
@@ -957,26 +1008,42 @@ async function startHttp() {
   app.use('/analytics', rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false }));
   app.use('/webhooks', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false }));
 
-  // Store active transports for session management (with last-activity tracking)
-  const transports = new Map<string, StreamableHTTPServerTransport>();
-  const sessionLastActivity = new Map<string, number>();
-  const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  // OPS-MCP-SESSION-RESILIENCE-W1: the remote MCP transport runs STATELESS by default
+  // (sessionIdGenerator: undefined → no session issued or validated → nothing can be
+  // orphaned by a deploy / idle-reap / restart, and no sticky-routing 404 under horizontal
+  // scale-out). MCP_STATELESS=0 restores the legacy stateful path below (instant rollback).
+  const MCP_STATELESS = process.env.MCP_STATELESS !== '0';
 
-  // Periodic cleanup of stale sessions (every 5 minutes)
-  const sessionCleanupInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [sid, lastActive] of sessionLastActivity) {
-      if (now - lastActive > SESSION_TTL_MS) {
-        const transport = transports.get(sid);
-        if (transport) {
-          transport.close?.();
-          transports.delete(sid);
+  // Stateful-only session registry + idle reaper — allocated and ticking ONLY when
+  // MCP_STATELESS=0. Under the default stateless path nothing allocates and no interval
+  // leaks (R4).
+  let statefulTransports: Map<string, StreamableHTTPServerTransport> | undefined;
+  let statefulLastActivity: Map<string, number> | undefined;
+  let sessionCleanupInterval: ReturnType<typeof setInterval> | undefined;
+  if (!MCP_STATELESS) {
+    // Store active transports for session management (with last-activity tracking)
+    const transports = new Map<string, StreamableHTTPServerTransport>();
+    const sessionLastActivity = new Map<string, number>();
+    const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+    statefulTransports = transports;
+    statefulLastActivity = sessionLastActivity;
+
+    // Periodic cleanup of stale sessions (every 5 minutes)
+    sessionCleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [sid, lastActive] of sessionLastActivity) {
+        if (now - lastActive > SESSION_TTL_MS) {
+          const transport = transports.get(sid);
+          if (transport) {
+            transport.close?.();
+            transports.delete(sid);
+          }
+          sessionLastActivity.delete(sid);
+          console.debug(`Session ${sid.slice(0, 8)}... evicted (idle ${Math.round((now - lastActive) / 60_000)}m)`);
         }
-        sessionLastActivity.delete(sid);
-        console.debug(`Session ${sid.slice(0, 8)}... evicted (idle ${Math.round((now - lastActive) / 60_000)}m)`);
       }
-    }
-  }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000);
+  }
 
   // Glama.ai ownership verification
   app.get('/.well-known/glama.json', (_req, res) => {
@@ -2208,7 +2275,13 @@ async function startHttp() {
       || req.socket.remoteAddress
       || 'unknown';
     const ipHash = hashIp(clientIp);
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    // OPS-MCP-SESSION-RESILIENCE-W1: single-derivation correlation id. Stateless issues no
+    // Mcp-Session-Id, so resolve ONE id (track-token ?? ipHash ?? uuid) used for the funnel +
+    // skill-attribution emit AND the requestContext ALS store (read by getRequestSessionId()
+    // at the per-tool cohort sites). Stateful (=0) preserves the prior header-based value.
+    const sessionId = MCP_STATELESS
+      ? resolveSessionCorrelationId(req.headers as Record<string, unknown>, ipHash)
+      : (req.headers['mcp-session-id'] as string | undefined);
 
     // C6 (algovault-skills SKILLS-W1): per-Skill attribution.
     // If the request carries X-AlgoVault-Skill-Slug AND is a tools/call,
@@ -2295,55 +2368,66 @@ async function startHttp() {
           // The downgrade is already observable via logs/analytics; left as a no-op.
         }
 
-        if (req.method === 'GET') {
+        // OPS-MCP-SESSION-RESILIENCE-W1: default stateless transport — fresh server +
+        // transport per request (no session issued/validated → nothing to orphan on a
+        // deploy / idle-reap / restart / replica). GET/DELETE → 405. The legacy stateful
+        // path is preserved behind MCP_STATELESS=0 as the instant-rollback lever.
+        if (MCP_STATELESS) {
+          await handleMcpStateless(req, res, createServer);
+        } else {
+          const transports = statefulTransports!;
+          const sessionLastActivity = statefulLastActivity!;
+
+          if (req.method === 'GET') {
+            if (sessionId && transports.has(sessionId)) {
+              sessionLastActivity.set(sessionId, Date.now());
+              const transport = transports.get(sessionId)!;
+              await transport.handleRequest(req, res, req.body);
+            } else {
+              res.status(400).json({ error: 'No active session. Send a POST first.' });
+            }
+            return;
+          }
+
+          if (req.method === 'DELETE') {
+            if (sessionId && transports.has(sessionId)) {
+              const transport = transports.get(sessionId)!;
+              await transport.handleRequest(req, res, req.body);
+              transports.delete(sessionId);
+              sessionLastActivity.delete(sessionId);
+            } else {
+              res.status(404).json({ error: 'Session not found' });
+            }
+            return;
+          }
+
+          // POST — main request path
           if (sessionId && transports.has(sessionId)) {
             sessionLastActivity.set(sessionId, Date.now());
             const transport = transports.get(sessionId)!;
             await transport.handleRequest(req, res, req.body);
           } else {
-            res.status(400).json({ error: 'No active session. Send a POST first.' });
-          }
-          return;
-        }
+            // New session
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => crypto.randomUUID(),
+              onsessioninitialized: (sid) => {
+                transports.set(sid, transport);
+                sessionLastActivity.set(sid, Date.now());
+              },
+            });
 
-        if (req.method === 'DELETE') {
-          if (sessionId && transports.has(sessionId)) {
-            const transport = transports.get(sessionId)!;
+            transport.onclose = () => {
+              const sid = (transport as unknown as { sessionId?: string }).sessionId;
+              if (sid) {
+                transports.delete(sid);
+                sessionLastActivity.delete(sid);
+              }
+            };
+
+            const server = createServer();
+            await server.connect(transport);
             await transport.handleRequest(req, res, req.body);
-            transports.delete(sessionId);
-            sessionLastActivity.delete(sessionId);
-          } else {
-            res.status(404).json({ error: 'Session not found' });
           }
-          return;
-        }
-
-        // POST — main request path
-        if (sessionId && transports.has(sessionId)) {
-          sessionLastActivity.set(sessionId, Date.now());
-          const transport = transports.get(sessionId)!;
-          await transport.handleRequest(req, res, req.body);
-        } else {
-          // New session
-          const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(),
-            onsessioninitialized: (sid) => {
-              transports.set(sid, transport);
-              sessionLastActivity.set(sid, Date.now());
-            },
-          });
-
-          transport.onclose = () => {
-            const sid = (transport as unknown as { sessionId?: string }).sessionId;
-            if (sid) {
-              transports.delete(sid);
-              sessionLastActivity.delete(sid);
-            }
-          };
-
-          const server = createServer();
-          await server.connect(transport);
-          await transport.handleRequest(req, res, req.body);
         }
       } catch (err) {
         if (!res.headersSent) {
@@ -2421,14 +2505,16 @@ async function startHttp() {
 
   const shutdown = () => {
     console.log('Shutting down...');
-    clearInterval(sessionCleanupInterval);
+    if (sessionCleanupInterval) clearInterval(sessionCleanupInterval);
     if (adminCleanupInterval) clearInterval(adminCleanupInterval);
     stopScanDigestScheduler();
-    for (const transport of transports.values()) {
-      transport.close?.();
+    if (statefulTransports) {
+      for (const transport of statefulTransports.values()) {
+        transport.close?.();
+      }
+      statefulTransports.clear();
     }
-    transports.clear();
-    sessionLastActivity.clear();
+    statefulLastActivity?.clear();
     closeDb();
     httpServer.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000);
@@ -3650,20 +3736,25 @@ function getSignupPageHtml(): string {
 // TG-BROADCAST-STACK-W1 CH6 (2026-05-28): capture `--track-token=` from
 // process.argv at startup (no-op if absent). Used by the /unlock_premium_alerts
 // viral mechanic — see src/lib/track-token.ts for full semantics.
-captureArgvTrackToken();
+// OPS-MCP-SESSION-RESILIENCE-W1: boot only as the entrypoint (node dist/index.js / npx
+// stdio). The guard makes this module import-safe so the stateless handler + correlation
+// resolver can be unit-tested without binding a port or connecting upstreams.
+if (require.main === module) {
+  captureArgvTrackToken();
 
-const transport = (process.env.TRANSPORT || 'http').toLowerCase();
+  const transport = (process.env.TRANSPORT || 'http').toLowerCase();
 
-if (transport === 'stdio') {
-  startStdio().catch((err) => {
-    console.error('Fatal:', err);
-    closeDb();
-    process.exit(1);
-  });
-} else {
-  startHttp().catch((err) => {
-    console.error('Fatal:', err);
-    closeDb();
-    process.exit(1);
-  });
+  if (transport === 'stdio') {
+    startStdio().catch((err) => {
+      console.error('Fatal:', err);
+      closeDb();
+      process.exit(1);
+    });
+  } else {
+    startHttp().catch((err) => {
+      console.error('Fatal:', err);
+      closeDb();
+      process.exit(1);
+    });
+  }
 }
