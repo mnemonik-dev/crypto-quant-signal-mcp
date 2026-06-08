@@ -35,14 +35,17 @@ describe('FEATURE-REGISTRY-SOT-W1 CH3 — TOOL_PRICING derives from the registry
     expect(TOOL_PRICING.get_market_regime).toBe(0.02);
   });
 
-  it('the ONLY additive key vs the legacy 3 is canonical get_trade_call', () => {
-    const legacy = ['get_trade_signal', 'scan_funding_arb', 'get_market_regime'].sort();
-    const newKeys = Object.keys(TOOL_PRICING).filter((k) => !legacy.includes(k));
-    expect(newKeys).toEqual(['get_trade_call']);
+  it('additive priced keys vs the legacy 3 = get_trade_call + the 3 newly-priced (OPS-X402-PRICING-EXPANSION-W1)', () => {
+    const legacy = ['get_trade_signal', 'scan_funding_arb', 'get_market_regime'];
+    const newKeys = Object.keys(TOOL_PRICING).filter((k) => !legacy.includes(k)).sort();
+    expect(newKeys).toEqual(['get_equity_call', 'get_equity_regime', 'get_trade_call', 'scan_trade_calls']);
     expect(TOOL_PRICING.get_trade_call).toBe(0.02);
+    expect(TOOL_PRICING.scan_trade_calls).toBe(0.02);
+    expect(TOOL_PRICING.get_equity_call).toBe(0.02);
+    expect(TOOL_PRICING.get_equity_regime).toBe(0.02);
   });
 
-  it('does NOT price the unpriced features (scanner / equity / chat / search stay registry x402:null)', () => {
+  it('does NOT price the still-unpriced features (chat / search stay registry x402:null)', () => {
     for (const f of FEATURE_REGISTRY) {
       if (f.x402) continue;
       for (const name of [f.name, ...f.aliases]) {
@@ -70,25 +73,25 @@ describe('FEATURE-REGISTRY-SOT-W1 CH3 — effectivePrice alias-resolves (canonic
     expect(effectivePrice('get_market_regime', '1m')).toBe(0.02);
   });
 
-  it('returns undefined for an unknown / unpriced tool', () => {
+  it('returns undefined for an unknown / still-unpriced tool', () => {
     expect(effectivePrice('unknown_tool')).toBeUndefined();
-    expect(effectivePrice('scan_trade_calls')).toBeUndefined();
     expect(effectivePrice('chat_knowledge')).toBeUndefined();
+    expect(effectivePrice('search_knowledge')).toBeUndefined();
   });
 });
 
 describe('FEATURE-REGISTRY-SOT-W1 CH3 — get_trade_call priced-for-resolution but NOT gated/discoverable (A2)', () => {
-  it('get_trade_call gets NO Bazaar discovery extension (listing stays 3)', () => {
+  it('get_trade_call gets NO Bazaar discovery extension (not in BAZAAR_ROUTES; listing is the 6 gated tools)', () => {
     expect(declareBazaarRoute('get_trade_call')).toEqual({});
     expect(Object.keys(BAZAAR_ROUTES).sort()).toEqual(
-      ['get_market_regime', 'get_trade_signal', 'scan_funding_arb'],
+      ['get_equity_call', 'get_equity_regime', 'get_market_regime', 'get_trade_signal', 'scan_funding_arb', 'scan_trade_calls'],
     );
   });
 
   it('get_trade_call is NOT in the gated HTTP_TOOLS allow-list (free caller stays free)', () => {
     expect([...HTTP_TOOLS]).not.toContain('get_trade_call');
     expect([...HTTP_TOOLS].sort()).toEqual(
-      ['get_market_regime', 'get_trade_signal', 'scan_funding_arb'],
+      ['get_equity_call', 'get_equity_regime', 'get_market_regime', 'get_trade_signal', 'scan_funding_arb', 'scan_trade_calls'],
     );
   });
 

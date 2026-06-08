@@ -107,28 +107,31 @@ export const FEATURE_REGISTRY: FeatureSpec[] = [
     // FEATURE-PARITY-CHANNELS-W1 CH1: the scanner now reaches the webhook
     // (scheduled scan_digest) + bot (/scan pull + /scanwatch push) channels —
     // flipping these two flags is what makes /scan appear on both push channels.
-    channels: { mcp: true, httpX402: false, bot: true, webhook: true },
+    channels: { mcp: true, httpX402: true, bot: true, webhook: true },
     webhookEvent: 'scan_digest',
     quota: { unit: 'per-non-hold-min1', holdFree: true },
-    x402: null, // deferred (next wave, pending $/unit; proposed $0.02/unit → scan = $0.02 × non-HOLD)
+    // OPS-X402-PRICING-EXPANSION-W1: FLAT $0.02/scan. x402 declares the price in the
+    // 402 BEFORE the tool runs, so it CANNOT bill per-result — the per-result
+    // max(1, non-HOLD) rule is the FREE-quota rail ONLY (supersedes the earlier per-unit proposal).
+    x402: { basePriceUsd: 0.02 },
     descriptionRef: 'SCAN_TRADE_CALLS_DESCRIPTION',
     enabled: true,
   },
   {
     name: 'get_equity_call',
     aliases: [],
-    channels: { mcp: true, httpX402: false, bot: false, webhook: false },
+    channels: { mcp: true, httpX402: true, bot: false, webhook: false },
     quota: { unit: 'per-non-hold', holdFree: true }, // HOLD-free per QUOTA-CONSISTENCY-COUNT-ALL-W1
-    x402: null,
+    x402: { basePriceUsd: 0.02 }, // OPS-X402-PRICING-EXPANSION-W1: flat $0.02/call (free rail unchanged)
     descriptionRef: 'GET_EQUITY_CALL_DESCRIPTION',
     enabled: true,
   },
   {
     name: 'get_equity_regime',
     aliases: [],
-    channels: { mcp: true, httpX402: false, bot: false, webhook: false },
+    channels: { mcp: true, httpX402: true, bot: false, webhook: false },
     quota: { unit: 'per-call', holdFree: false },
-    x402: null,
+    x402: { basePriceUsd: 0.02 }, // OPS-X402-PRICING-EXPANSION-W1: flat $0.02/call (free rail unchanged)
     descriptionRef: 'GET_EQUITY_REGIME_DESCRIPTION',
     enabled: true,
   },

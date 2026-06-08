@@ -39,9 +39,12 @@ describe('FEATURE-REGISTRY-SOT-W1 CH1 — registry == current reality', () => {
     expect(getFeature('get_market_regime')!.x402!.basePriceUsd).toBe(0.02);
   });
 
-  it('(b2) unpriced tools are x402:null (scanner/equity/chat/search)', () => {
-    for (const n of ['scan_trade_calls', 'get_equity_call', 'get_equity_regime', 'chat_knowledge', 'search_knowledge']) {
+  it('(b2) chat/search stay x402:null; scanner + equity now priced $0.02 (OPS-X402-PRICING-EXPANSION-W1)', () => {
+    for (const n of ['chat_knowledge', 'search_knowledge']) {
       expect(getFeature(n)!.x402).toBeNull();
+    }
+    for (const n of ['scan_trade_calls', 'get_equity_call', 'get_equity_regime']) {
+      expect(getFeature(n)!.x402?.basePriceUsd).toBe(0.02);
     }
   });
 

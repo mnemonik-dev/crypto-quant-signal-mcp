@@ -1,0 +1,64 @@
+{
+  "_comment": "OPS-X402-PRICING-EXPANSION-W1 x402 shape SoT (supersedes 2026-06-08). priced_names=TOOL_PRICING keys; gated_http_tools=HTTP_TOOLS (force-gated + /x402 route set); bazaar_discoverable=BAZAAR_ROUTES keys. get_trade_call is priced-but-NOT-gated/discoverable (A2 free). scan_trade_calls/get_equity_call/get_equity_regime newly priced FLAT 0.02 (x402 declares price before run; per-result is the free rail only).",
+  "generated_for": "OPS-X402-PRICING-EXPANSION-W1",
+  "priced_names": [
+    "get_equity_call",
+    "get_equity_regime",
+    "get_market_regime",
+    "get_trade_call",
+    "get_trade_signal",
+    "scan_funding_arb",
+    "scan_trade_calls"
+  ],
+  "prices": {
+    "get_trade_call": 0.02,
+    "get_trade_signal": 0.02,
+    "get_market_regime": 0.02,
+    "scan_funding_arb": 0.01,
+    "scan_trade_calls": 0.02,
+    "get_equity_call": 0.02,
+    "get_equity_regime": 0.02
+  },
+  "gated_http_tools": [
+    "get_equity_call",
+    "get_equity_regime",
+    "get_market_regime",
+    "get_trade_signal",
+    "scan_funding_arb",
+    "scan_trade_calls"
+  ],
+  "bazaar_discoverable": [
+    "get_equity_call",
+    "get_equity_regime",
+    "get_market_regime",
+    "get_trade_signal",
+    "scan_funding_arb",
+    "scan_trade_calls"
+  ],
+  "effectivePrice": {
+    "get_equity_call": 0.02,
+    "get_equity_regime": 0.02,
+    "get_market_regime": 0.02,
+    "get_trade_call": 0.02,
+    "get_trade_signal": 0.02,
+    "scan_funding_arb": 0.01,
+    "scan_trade_calls": 0.02
+  },
+  "premium_1m": {
+    "get_equity_call": 0.02,
+    "get_equity_regime": 0.02,
+    "get_market_regime": 0.02,
+    "get_trade_call": 0.05,
+    "get_trade_signal": 0.05,
+    "scan_funding_arb": 0.01,
+    "scan_trade_calls": 0.02
+  },
+  "registry_httpX402_canonical": [
+    "get_equity_call",
+    "get_equity_regime",
+    "get_market_regime",
+    "get_trade_call",
+    "scan_funding_arb",
+    "scan_trade_calls"
+  ]
+}

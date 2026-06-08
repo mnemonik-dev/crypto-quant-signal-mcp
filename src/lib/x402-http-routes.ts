@@ -36,7 +36,10 @@ import { resolveFacilitatorFromEnv } from './x402-facilitator.js';
 import { getTradeSignal } from '../tools/get-trade-call.js';
 import { scanFundingArb } from '../tools/scan-funding-arb.js';
 import { getMarketRegime } from '../tools/get-market-regime.js';
+import { runScanTradeCall } from '../tools/scan-trade-calls.js';
+import { getEquityCall, getEquityRegime } from './equities/equity-tool-formatters.js';
 import { runAsCaller } from './upstream-weight-budget.js';
+import type { ScanExchangeId } from './trade-call-scanner.js';
 import type { ExchangeId, LicenseInfo, TradeCallResult } from '../types.js';
 
 const ajv = new Ajv({ useDefaults: true, coerceTypes: true, allErrors: true });
@@ -98,7 +101,7 @@ function send402(res: Response, tool: string): void {
  * break (architect A3: x402-shape byte-identical). Registry↔HTTP_TOOLS parity is instead enforced
  * by the CH4 drift canary (alias-resolved).
  */
-export const HTTP_TOOLS = ['get_trade_signal', 'scan_funding_arb', 'get_market_regime'] as const;
+export const HTTP_TOOLS = ['get_trade_signal', 'scan_funding_arb', 'get_market_regime', 'scan_trade_calls', 'get_equity_call', 'get_equity_regime'] as const;
 export type HttpTool = (typeof HTTP_TOOLS)[number];
 
 /**
@@ -137,6 +140,32 @@ export async function callCoreHandler(
         timeframe: input.timeframe as string,
         exchange: input.exchange as ExchangeId,
       });
+    // OPS-X402-PRICING-EXPANSION-W1: the 3 newly-priced tools — SAME core fns the MCP
+    // handlers call (index.ts), so the x402-HTTP twin is byte-parity. The x402 CHARGE is
+    // the flat declared 402 price (effectivePrice=$0.02); tier:'x402' bypasses the free
+    // counter, so runScanTradeCall's max(1,N) is a no-op here (flat, never per-result).
+    case 'scan_trade_calls':
+      return runScanTradeCall(
+        {
+          topN: input.topN as number,
+          timeframe: input.timeframe as string,
+          exchange: input.exchange as ScanExchangeId,
+          minConfidence: input.minConfidence as number | undefined,
+          includeHolds: input.includeHolds as boolean,
+          limit: input.limit as number,
+        },
+        license,
+      );
+    case 'get_equity_call':
+      return getEquityCall({ symbol: input.symbol as string, license });
+    case 'get_equity_regime':
+      return getEquityRegime({ symbol: input.symbol as string | undefined, license });
+    default: {
+      // tsc-exhaustiveness: a tool added to HTTP_TOOLS without a dispatch case here is a
+      // COMPILE error (forgot-to-wire is structurally impossible).
+      const _exhaustive: never = tool;
+      throw new Error(`callCoreHandler: unhandled x402 tool ${String(_exhaustive)}`);
+    }
   }
   });
 }
@@ -151,7 +180,7 @@ function clientIpHash(req: Request): string {
 }
 
 /**
- * Mount the 3 HTTP x402 resource routes on the Express app — ONLY when the two-flag
+ * Mount the HTTP x402 resource routes (one per HTTP_TOOLS entry) on the Express app — ONLY when the two-flag
  * firewall resolves to cdp + discoverable. Returns the list of mounted route paths
  * (empty array when flags are off → routes never registered → 404).
  */

@@ -198,6 +198,100 @@ export const BAZAAR_ROUTES: Record<string, BazaarRouteSpec> = {
       },
     },
   },
+
+  // OPS-X402-PRICING-EXPANSION-W1: the 3 newly-priced tools (flat $0.02). Keys MUST
+  // match HTTP_TOOLS + TOOL_PRICING (the canary asserts parity).
+  scan_trade_calls: {
+    toolName: 'scan_trade_calls',
+    description:
+      'Cross-asset market scanner: ranks the top-N perpetual-futures markets by open interest on a venue and returns the actionable BUY / SELL trade calls among them — each with a 0–100 confidence and the current market regime — so an agent can find setups across the whole board in one call instead of polling symbols one-by-one. HOLD markets are excluded by default. Flat per-scan price.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topN: { type: 'integer', minimum: 1, maximum: 100, default: 20, description: 'How many top-open-interest markets to scan (1–100).' },
+        timeframe: {
+          type: 'string',
+          enum: ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d'],
+          default: '15m',
+          description: 'Candle timeframe for each verdict.',
+        },
+        exchange: {
+          type: 'string',
+          enum: ['BINANCE', 'HL', 'BYBIT', 'OKX', 'BITGET'],
+          default: 'BINANCE',
+          description: 'Promoted derivatives venue to scan.',
+        },
+        minConfidence: { type: 'number', minimum: 0, maximum: 100, description: 'Drop non-HOLD calls below this confidence (0–100).' },
+        includeHolds: { type: 'boolean', default: false, description: 'Append HOLD markets after the actionable calls.' },
+        limit: { type: 'integer', minimum: 1, maximum: 100, default: 10, description: 'Maximum ranked calls to return (1–100).' },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    example: { topN: 25, timeframe: '1h', exchange: 'BINANCE', limit: 10 },
+    output: {
+      example: {
+        scanned: 25,
+        eligible_non_hold: 2,
+        holds: 23,
+        errors: 0,
+        partial: false,
+        calls: [
+          { coin: 'BTC', timeframe: '1h', exchange: 'BINANCE', call: 'BUY', confidence: 72, regime: 'TRENDING_UP' },
+          { coin: 'SOL', timeframe: '1h', exchange: 'BINANCE', call: 'SELL', confidence: 64, regime: 'TRENDING_DOWN' },
+        ],
+      },
+    },
+  },
+
+  get_equity_call: {
+    toolName: 'get_equity_call',
+    description:
+      'Daily-bar BUY / SELL / HOLD verdict for a US equity or ETF, with a 0–100 confidence, the current market regime, the multi-factor drivers behind the call, and the session it was computed for. Verdicts are precomputed each session from end-of-day bars.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', maxLength: 12, description: 'US equity/ETF ticker, e.g. AAPL, SPY, BRK.B (BRK-B also accepted).' },
+      },
+      required: ['symbol'],
+      additionalProperties: false,
+    },
+    example: { symbol: 'AAPL' },
+    output: {
+      example: {
+        symbol: 'AAPL',
+        call: 'BUY',
+        confidence: 68,
+        regime: 'TRENDING_UP',
+        factors: ['price above rising 50-day average', 'positive momentum', 'low realized volatility'],
+        as_of_session: '2026-06-06',
+        universe_rank: 12,
+      },
+    },
+  },
+
+  get_equity_regime: {
+    toolName: 'get_equity_regime',
+    description:
+      'Daily market-regime classification for a US equity / ETF (defaults to SPY for the broad market): returns the regime with a 0–100 confidence and the session it was computed for, so an agent can pick a trend-following vs mean-reversion playbook before entering.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', maxLength: 12, description: 'US equity/ETF ticker; defaults to SPY (broad market).' },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    example: { symbol: 'SPY' },
+    output: {
+      example: {
+        symbol: 'SPY',
+        regime: 'TRENDING_UP',
+        confidence: 61,
+        as_of_session: '2026-06-06',
+      },
+    },
+  },
 };
 
 /**
