@@ -19,12 +19,13 @@
  */
 import crypto from 'crypto';
 import { dbQuery } from './performance-db.js';
+import type { ScanCallItem } from './trade-call-scanner.js';
 
 const isPg = (): boolean => !!process.env.DATABASE_URL;
 
 // ── Types ──
 
-export type WebhookEventType = 'trade_call' | 'regime_shift';
+export type WebhookEventType = 'trade_call' | 'regime_shift' | 'scan_digest';
 export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
 
 /**
@@ -32,9 +33,16 @@ export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
  * webhook_deliveries.event_data (JSON). The delivery worker rebuilds the public
  * payload from this — it NEVER reads `signals`, so no forbidden Phase-E key
  * (outcome_*, pfe_*, mae_*, return_pct_*, price_after_*) can ever leak.
+ *
+ * Discriminated on `type`:
+ *   - SignalWebhookEventData      — per-signal events (trade_call | regime_shift),
+ *     produced by the post-insert detection hook (webhook-events.ts).
+ *   - ScanDigestWebhookEventData  — the SCHEDULED whole-market scan digest
+ *     (scan_digest), produced by the cadence scheduler (FEATURE-PARITY-CHANNELS-W1
+ *     CH2). `calls` is the allow-listed ScanCallItem[] (no Phase-E keys by shape).
  */
-export interface WebhookEventData {
-  type: WebhookEventType;
+export interface SignalWebhookEventData {
+  type: 'trade_call' | 'regime_shift';
   coin: string;
   timeframe: string;
   exchange: string;
@@ -46,6 +54,17 @@ export interface WebhookEventData {
   signal_hash?: string | null;
   created_at: number;            // epoch seconds (of the underlying call row)
 }
+
+export interface ScanDigestWebhookEventData {
+  type: 'scan_digest';
+  cadence: string;               // '1h' | '4h' | '1d' — the delivery cadence bucket
+  timeframe: string;             // the scan timeframe (drives cadenceForTimeframe)
+  exchange: string;              // the scanned venue
+  calls: ScanCallItem[];         // allow-listed ranked non-HOLD calls (no Phase-E keys)
+  generated_at: number;          // epoch seconds (when the digest scan ran)
+}
+
+export type WebhookEventData = SignalWebhookEventData | ScanDigestWebhookEventData;
 
 export interface WebhookSubscriptionInput {
   url: string;

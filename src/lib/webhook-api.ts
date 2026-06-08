@@ -13,6 +13,7 @@
 import express, { type Express, type Request, type Response, type RequestHandler } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { resolveLicense, checkQuotaByKey, getUpgradeHint } from './license.js';
+import { webhookEventTypes } from './feature-registry.js';
 import type { LicenseInfo, LicenseTier } from '../types.js';
 import {
   createSubscription,
@@ -28,7 +29,14 @@ import {
 import { deliverOne } from './webhook-delivery.js';
 import { assertEgressAllowed, EgressBlockedError } from './webhook-ssrf.js';
 
-const VALID_EVENTS: WebhookEventType[] = ['trade_call', 'regime_shift'];
+/**
+ * FEATURE-PARITY-CHANNELS-W1 CH1: the accepted webhook event set is now a
+ * PROJECTION of the feature registry (every webhook-flagged tool's `webhookEvent`)
+ * — NOT a hand-maintained 2nd list. Adding a future webhook tool needs only a
+ * registry row; the drift canary (CH5) asserts this equals the registry set.
+ * Exported for the CH1 derive unit test.
+ */
+export const VALID_EVENTS: WebhookEventType[] = webhookEventTypes() as WebhookEventType[];
 const MAX_URL_LEN = 2048;
 
 function nowSec(): number {
@@ -177,7 +185,7 @@ export function registerWebhookRoutes(app: Express): void {
       }
       const events = parseEvents(body.events);
       if (!events) {
-        return res.status(400).json({ ok: false, code: 'invalid_events', error: 'events must be a non-empty array drawn from: trade_call, regime_shift', suggested_action: 'e.g. {"events":["trade_call","regime_shift"]}' });
+        return res.status(400).json({ ok: false, code: 'invalid_events', error: `events must be a non-empty array drawn from: ${VALID_EVENTS.join(', ')}`, suggested_action: `e.g. {"events":["${VALID_EVENTS[0]}"]}` });
       }
       let minConfidence: number | null = null;
       if (body.min_confidence !== undefined && body.min_confidence !== null) {

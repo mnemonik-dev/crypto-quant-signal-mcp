@@ -23,7 +23,7 @@ import {
   enqueueDelivery,
   type WebhookSubscription,
   type WebhookEventType,
-  type WebhookEventData,
+  type SignalWebhookEventData,
 } from './webhooks-store.js';
 import { getTopCoinSet, type ScanExchangeId } from './trade-call-scanner.js';
 
@@ -42,7 +42,9 @@ export interface SignalRecordedParams {
 export interface DetectedEvent {
   type: WebhookEventType;
   eventId: string;
-  data: WebhookEventData;
+  // Detection only ever produces per-signal events (trade_call | regime_shift);
+  // scan_digest is produced by the CH2 cadence scheduler, never by detectEvents.
+  data: SignalWebhookEventData;
 }
 
 const DEFAULT_REGIME_COOLDOWN_SEC = 3600;
@@ -102,10 +104,10 @@ async function regimeShiftInCooldown(
 
 /** Build the allow-listed event-data snapshot (no forbidden Phase-E keys). */
 function buildEventData(
-  type: WebhookEventType,
+  type: 'trade_call' | 'regime_shift',
   p: SignalRecordedParams,
   priorRegime: string | null,
-): WebhookEventData {
+): SignalWebhookEventData {
   return {
     type,
     coin: p.coin,

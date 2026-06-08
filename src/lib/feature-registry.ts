@@ -36,9 +36,14 @@ export interface FeatureSpec {
   aliases: string[];
   /** Which channels expose this feature TODAY. (W2 flips bot/webhook for the scanner, etc.) */
   channels: { mcp: boolean; httpX402: boolean; bot: boolean; webhook: boolean };
-  /** Explicit TG-bot command, if any (push-only features omit it). */
-  botCommand?: string;
-  /** Webhook event type this feature emits, if any. */
+  /**
+   * Webhook event type this feature emits, if any. CONSUMED server-side to derive
+   * webhook-api's VALID_EVENTS (FEATURE-PARITY-CHANNELS-W1 CH1 — the SoT for the
+   * webhook event set). NB: the TG-bot COMMAND name is deliberately NOT a registry
+   * field — a command name is a bot-UX decision, not a universal feature property
+   * /capabilities consumers need; the registry owns the WHAT (channel reach), the
+   * bot owns the HOW (command name), the drift canary enforces no-drift (A1).
+   */
   webhookEvent?: string;
   /** Quota model (see QuotaUnit). */
   quota: { unit: QuotaUnit; holdFree: boolean };
@@ -99,7 +104,11 @@ export const FEATURE_REGISTRY: FeatureSpec[] = [
   {
     name: 'scan_trade_calls',
     aliases: [],
-    channels: { mcp: true, httpX402: false, bot: false, webhook: false },
+    // FEATURE-PARITY-CHANNELS-W1 CH1: the scanner now reaches the webhook
+    // (scheduled scan_digest) + bot (/scan pull + /scanwatch push) channels —
+    // flipping these two flags is what makes /scan appear on both push channels.
+    channels: { mcp: true, httpX402: false, bot: true, webhook: true },
+    webhookEvent: 'scan_digest',
     quota: { unit: 'per-non-hold-min1', holdFree: true },
     x402: null, // deferred (next wave, pending $/unit; proposed $0.02/unit → scan = $0.02 × non-HOLD)
     descriptionRef: 'SCAN_TRADE_CALLS_DESCRIPTION',
@@ -151,6 +160,19 @@ export function getFeature(nameOrAlias: string): FeatureSpec | undefined {
 /** Every live MCP tool NAME (canonical + aliases) — must equal the live `tools/list` set. */
 export function allToolNames(): string[] {
   return FEATURE_REGISTRY.flatMap((f) => [f.name, ...f.aliases]);
+}
+
+/**
+ * The webhook event types — the `webhookEvent` of every ENABLED webhook-flagged
+ * feature, in registry order. The SINGLE SoT for webhook-api's VALID_EVENTS
+ * (FEATURE-PARITY-CHANNELS-W1 CH1): retires the hand-maintained 2nd list, so
+ * adding a future webhook tool needs only a registry row. The drift canary (CH5)
+ * asserts the live VALID_EVENTS equals this set.
+ */
+export function webhookEventTypes(): string[] {
+  return FEATURE_REGISTRY
+    .filter((f) => f.enabled && f.channels.webhook && f.webhookEvent)
+    .map((f) => f.webhookEvent as string);
 }
 
 /** One public-safe descriptor per CALLABLE tool name (canonical + each alias). */

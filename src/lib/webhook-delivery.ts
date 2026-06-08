@@ -21,6 +21,7 @@ import { PKG_VERSION } from './pkg-version.js';
 import { checkQuotaByKey, trackCallByKey } from './license.js';
 import { resolveAndAssertEgress, EgressBlockedError, type ResolveEgressOpts, type PinnedAddress } from './webhook-ssrf.js';
 import type { LicenseTier } from '../types.js';
+import type { ScanCallItem } from './trade-call-scanner.js';
 import {
   pendingDeliveries,
   markDelivery,
@@ -38,7 +39,7 @@ const WEBHOOK_DOCS_URL = 'https://github.com/AlgoVaultLabs/crypto-quant-signal-m
 // ── Public payload shape (ALLOW-LIST — no forbidden Phase-E keys) ──
 
 export interface WebhookPayloadData {
-  type: WebhookEventType;
+  type: 'trade_call' | 'regime_shift';
   coin: string;
   timeframe: string;
   exchange: string;
@@ -51,11 +52,24 @@ export interface WebhookPayloadData {
   verify_url: string | null;
 }
 
+/**
+ * FEATURE-PARITY-CHANNELS-W1 CH1 — the public scan_digest payload. ALLOW-LISTED:
+ * `calls` is ScanCallItem[] (coin/timeframe/exchange/call/confidence/regime only),
+ * so no forbidden Phase-E key can leak by shape.
+ */
+export interface ScanDigestPayloadData {
+  type: 'scan_digest';
+  cadence: string;
+  timeframe: string;
+  exchange: string;
+  calls: ScanCallItem[];
+}
+
 export interface WebhookPayload {
   event: WebhookEventType;
   delivery_id: string;
   created_at: number;
-  data: WebhookPayloadData;
+  data: WebhookPayloadData | ScanDigestPayloadData;
   _algovault: {
     service: 'webhook-delivery';
     version: string;
@@ -69,8 +83,32 @@ export interface WebhookPayload {
  * appear are the allow-listed ones below; the forbidden Phase-E keys
  * (outcome_*, pfe_*, mae_*, return_pct_*, price_after_*) are structurally
  * impossible because the input is itself an allow-listed snapshot.
+ *
+ * Discriminated on `event.type`: scan_digest renders the digest shape (cadence +
+ * ranked ScanCallItem[]); trade_call/regime_shift render the per-signal shape
+ * (BYTE-UNCHANGED from CALL-REGIME-WEBHOOK-LAYER-W1 — the firewall).
  */
 export function buildPayload(event: WebhookEventData, deliveryId: string | number): WebhookPayload {
+  if (event.type === 'scan_digest') {
+    return {
+      event: 'scan_digest',
+      delivery_id: String(deliveryId),
+      created_at: event.generated_at,
+      data: {
+        type: 'scan_digest',
+        cadence: event.cadence,
+        timeframe: event.timeframe,
+        exchange: event.exchange,
+        calls: event.calls,
+      },
+      _algovault: {
+        service: 'webhook-delivery',
+        version: PKG_VERSION,
+        docs: WEBHOOK_DOCS_URL,
+        disclaimer: 'Scan digests are informational, not financial advice.',
+      },
+    };
+  }
   const data: WebhookPayloadData = {
     type: event.type,
     coin: event.coin,
