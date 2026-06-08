@@ -350,6 +350,14 @@ export async function deliverOne(
     };
   }
 
+  // FEATURE-PARITY-CHANNELS-W1 CH2: a scan_digest delivery charges the scanner rule
+  // — max(1, non-HOLD calls in the digest), exactly like the pull scanner. Signal
+  // events stay 1 (byte-identical to CALL-REGIME-WEBHOOK-LAYER-W1). The quota gate
+  // above pauses on exhaustion; this only scales the charge AMOUNT.
+  const quotaUnits = eventData.type === 'scan_digest'
+    ? Math.max(1, eventData.calls.filter((c) => c.call !== 'HOLD').length)
+    : 1;
+
   const payload = buildPayload(eventData, delivery.id);
   const body = JSON.stringify(payload);
 
@@ -375,8 +383,8 @@ export async function deliverOne(
       if (ok) {
         await markDelivery(delivery.id, 'delivered', { attempts, responseCode: status });
         await recordDeliverySuccess(sub.id);
-        // Charge the owner's monthly quota for the delivered event.
-        trackCallByKey(sub.owner_key, sub.tier as LicenseTier);
+        // Charge the owner's monthly quota for the delivered event (scan_digest = N).
+        trackCallByKey(sub.owner_key, sub.tier as LicenseTier, quotaUnits);
         return { deliveryId: delivery.id, status: 'delivered', attempts, responseCode: status, subscriptionDisabled: false };
       }
     } catch {

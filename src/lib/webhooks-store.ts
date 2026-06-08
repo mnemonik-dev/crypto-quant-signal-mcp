@@ -70,10 +70,15 @@ export interface WebhookSubscriptionInput {
   url: string;
   events: WebhookEventType[];
   assets?: string[] | null;       // null/empty = all assets
-  timeframes?: string[] | null;   // null/empty = all timeframes
+  timeframes?: string[] | null;   // null/empty = all timeframes (trade_call/regime event filter)
   minConfidence?: number | null;
   tier: string;                   // owner tier at registration (quota sizing)
   ownerKey: string;               // quota tracker key (paid=license.key, free=free:<ipHash>)
+  // ── scan_digest scheduled-digest params (FEATURE-PARITY-CHANNELS-W1 CH2; null for signal subs) ──
+  cadence?: string | null;        // '1h'|'4h'|'1d'; default = cadenceForTimeframe(timeframe)
+  timeframe?: string | null;      // the SINGULAR scan timeframe (distinct from the plural `timeframes` filter)
+  exchange?: string | null;       // the scanned venue (default BINANCE)
+  topN?: number | null;           // scan universe size (default 20)
 }
 
 export interface WebhookSubscription {
@@ -90,6 +95,11 @@ export interface WebhookSubscription {
   consecutive_failures: number;
   created_at: number;
   last_delivered_at: number | null;
+  // scan_digest params (FEATURE-PARITY-CHANNELS-W1 CH2; null for signal subs)
+  cadence: string | null;
+  timeframe: string | null;       // SINGULAR scan tf (≠ the plural `timeframes` event filter)
+  exchange: string | null;
+  top_n: number | null;
 }
 
 export interface WebhookDelivery {
@@ -145,6 +155,10 @@ function mapSubscription(r: Record<string, unknown>): WebhookSubscription {
     consecutive_failures: num(r.consecutive_failures),
     created_at: num(r.created_at),
     last_delivered_at: numOrNull(r.last_delivered_at),
+    cadence: r.cadence == null ? null : String(r.cadence),
+    timeframe: r.timeframe == null ? null : String(r.timeframe),
+    exchange: r.exchange == null ? null : String(r.exchange),
+    top_n: numOrNull(r.top_n),
   };
 }
 
@@ -182,13 +196,18 @@ export async function createSubscription(input: WebhookSubscriptionInput): Promi
   const minConfidence = input.minConfidence ?? null;
   const activeVal: unknown = isPg() ? true : 1;
   const createdAt = nowSec();
+  // scan_digest params (null for signal subs).
+  const cadence = input.cadence ?? null;
+  const timeframe = input.timeframe ?? null;
+  const exchange = input.exchange ?? null;
+  const topN = input.topN ?? null;
 
   const rows = await dbQuery<Record<string, unknown>>(
     `INSERT INTO webhook_subscriptions
-       (url, secret, events, assets, timeframes, min_confidence, tier, owner_key, active, consecutive_failures, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+       (url, secret, events, assets, timeframes, min_confidence, tier, owner_key, active, consecutive_failures, created_at, cadence, timeframe, exchange, top_n)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
      RETURNING *`,
-    [input.url, secret, events, assets, timeframes, minConfidence, input.tier, input.ownerKey, activeVal, createdAt],
+    [input.url, secret, events, assets, timeframes, minConfidence, input.tier, input.ownerKey, activeVal, createdAt, cadence, timeframe, exchange, topN],
   );
   if (rows.length === 0) {
     throw new Error('createSubscription: INSERT returned no row');

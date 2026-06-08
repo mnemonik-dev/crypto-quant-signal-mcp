@@ -24,6 +24,7 @@ import { closeDb, getConfidenceBands, getHoldStats, getMerkleBatches, getSignalW
 import { registerWebhookRoutes, resolveOwner, authRequired } from './lib/webhook-api.js';
 import { formatShadowVenuePublic, formatVenueForResource } from './lib/venue-public-formatter.js';
 import { startDeliveryWorker } from './lib/webhook-delivery.js';
+import { startScanDigestScheduler, stopScanDigestScheduler } from './lib/scan-digest-scheduler.js';
 import { PKG_VERSION } from './lib/pkg-version.js';
 import { buildErc8004ReputationBody } from './lib/erc8004-reputation.js';
 import { verifyProof } from './lib/merkle.js';
@@ -2388,6 +2389,9 @@ async function startHttp() {
     if (process.env.WEBHOOK_DELIVERY_ENABLED === 'true') {
       console.log('[webhook-delivery] WEBHOOK_DELIVERY_ENABLED=true — starting outbound delivery worker');
       startDeliveryWorker();
+      // FEATURE-PARITY-CHANNELS-W1 CH2: the scheduled scan-digest producer rides the
+      // same flag — it enqueues scan_digest deliveries that the worker above drains.
+      startScanDigestScheduler();
     }
 
     // LATENCY-W1 C3: background grid warmer.
@@ -2419,6 +2423,7 @@ async function startHttp() {
     console.log('Shutting down...');
     clearInterval(sessionCleanupInterval);
     if (adminCleanupInterval) clearInterval(adminCleanupInterval);
+    stopScanDigestScheduler();
     for (const transport of transports.values()) {
       transport.close?.();
     }

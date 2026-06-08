@@ -655,7 +655,11 @@ const CREATE_WEBHOOK_SUBSCRIPTIONS_SQL = process.env.DATABASE_URL
       active BOOLEAN NOT NULL DEFAULT TRUE,
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       created_at BIGINT NOT NULL,
-      last_delivered_at BIGINT NULL
+      last_delivered_at BIGINT NULL,
+      cadence TEXT NULL,
+      timeframe TEXT NULL,
+      exchange TEXT NULL,
+      top_n INTEGER NULL
     );`
   : `CREATE TABLE IF NOT EXISTS webhook_subscriptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -670,7 +674,11 @@ const CREATE_WEBHOOK_SUBSCRIPTIONS_SQL = process.env.DATABASE_URL
       active INTEGER NOT NULL DEFAULT 1,
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
-      last_delivered_at INTEGER NULL
+      last_delivered_at INTEGER NULL,
+      cadence TEXT NULL,
+      timeframe TEXT NULL,
+      exchange TEXT NULL,
+      top_n INTEGER NULL
     );`;
 
 const CREATE_WEBHOOK_SUBSCRIPTIONS_ACTIVE_INDEX_SQL = `

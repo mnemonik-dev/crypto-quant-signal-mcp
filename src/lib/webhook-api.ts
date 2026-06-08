@@ -14,6 +14,17 @@ import express, { type Express, type Request, type Response, type RequestHandler
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { resolveLicense, checkQuotaByKey, getUpgradeHint } from './license.js';
 import { webhookEventTypes } from './feature-registry.js';
+import {
+  cadenceForTimeframe,
+  cadenceFasterThanTimeframe,
+  repeatsPerTimeframe,
+  isValidCadence,
+  isSupportedScanTimeframe,
+  SCAN_TIMEFRAMES,
+  VALID_CADENCES,
+  type Cadence,
+} from './scan-digest.js';
+import { SCAN_EXCHANGES } from './trade-call-scanner.js';
 import type { LicenseInfo, LicenseTier } from '../types.js';
 import {
   createSubscription,
@@ -136,6 +147,11 @@ function serializeSubscription(s: WebhookSubscription, opts: { includeSecret: bo
     created_at: s.created_at,
     last_delivered_at: s.last_delivered_at,
   };
+  // scan_digest params echo back only when set — signal-sub serialization stays byte-identical.
+  if (s.cadence != null) out.cadence = s.cadence;
+  if (s.timeframe != null) out.timeframe = s.timeframe;
+  if (s.exchange != null) out.exchange = s.exchange;
+  if (s.top_n != null) out.top_n = s.top_n;
   if (opts.includeSecret) out.secret = s.secret;
   return out;
 }
@@ -207,6 +223,52 @@ export function registerWebhookRoutes(app: Express): void {
         }
       }
 
+      // FEATURE-PARITY-CHANNELS-W1 CH2: scan_digest scheduled-digest params. Parsed +
+      // validated ONLY when 'scan_digest' is among the events; cadence defaults from the
+      // (singular) scan timeframe. The create-response carries the cadence/quota reminder
+      // (+ a stronger heads-up when the chosen cadence is faster than the timeframe).
+      let cadence: string | null = null;
+      let scanTimeframe: string | null = null;
+      let scanExchange: string | null = null;
+      let topN: number | null = null;
+      let scanDigestReminder: string | undefined;
+      if (events.includes('scan_digest')) {
+        const tfRaw = body.timeframe === undefined || body.timeframe === null ? '15m' : body.timeframe;
+        if (!isSupportedScanTimeframe(tfRaw)) {
+          return res.status(400).json({ ok: false, code: 'invalid_timeframe', error: `timeframe must be one of: ${SCAN_TIMEFRAMES.join(', ')}`, suggested_action: 'Omit it (default 15m) or send e.g. "timeframe":"1h".' });
+        }
+        scanTimeframe = tfRaw;
+
+        const exRaw = typeof body.exchange === 'string' ? body.exchange.toUpperCase() : 'BINANCE';
+        if (!(SCAN_EXCHANGES as readonly string[]).includes(exRaw)) {
+          return res.status(400).json({ ok: false, code: 'invalid_exchange', error: `exchange must be one of: ${SCAN_EXCHANGES.join(', ')}`, suggested_action: 'Omit it (default BINANCE) or send e.g. "exchange":"BYBIT".' });
+        }
+        scanExchange = exRaw;
+
+        if (body.top_n !== undefined && body.top_n !== null) {
+          const n = Number(body.top_n);
+          if (!Number.isInteger(n) || n < 1 || n > 100) {
+            return res.status(400).json({ ok: false, code: 'invalid_top_n', error: 'top_n must be an integer in [1,100]', suggested_action: 'Omit it (default 20) or send e.g. 25.' });
+          }
+          topN = n;
+        }
+
+        if (body.cadence !== undefined && body.cadence !== null) {
+          if (!isValidCadence(body.cadence)) {
+            return res.status(400).json({ ok: false, code: 'invalid_cadence', error: `cadence must be one of: ${VALID_CADENCES.join(', ')}`, suggested_action: 'Omit it (defaults from your timeframe) or send e.g. "1h".' });
+          }
+          cadence = body.cadence;
+        } else {
+          cadence = cadenceForTimeframe(scanTimeframe);
+        }
+
+        scanDigestReminder = `Digest cadence: ${cadence}. Cadence defaults to your timeframe — a ${scanTimeframe} scan refreshes every ${scanTimeframe}, so a faster digest repeats results and draws extra quota. Each delivery costs max(1, calls).`;
+        if (cadenceFasterThanTimeframe(cadence as Cadence, scanTimeframe)) {
+          const reps = repeatsPerTimeframe(cadence as Cadence, scanTimeframe);
+          scanDigestReminder += ` ⚠️ a ${cadence} digest on a ${scanTimeframe} scan repeats the same calls ~${reps}× and charges each time.`;
+        }
+      }
+
       const sub = await createSubscription({
         url,
         events,
@@ -215,6 +277,10 @@ export function registerWebhookRoutes(app: Express): void {
         minConfidence,
         tier: license.tier,
         ownerKey,
+        cadence,
+        timeframe: scanTimeframe,
+        exchange: scanExchange,
+        topN,
       });
 
       const quota = checkQuotaByKey(ownerKey, license.tier as LicenseTier);
@@ -224,6 +290,7 @@ export function registerWebhookRoutes(app: Express): void {
         subscription: serializeSubscription(sub, { includeSecret: true }),
         quota: { used: quota.used, total: quota.total, remaining: quota.remaining },
         note: 'Store `secret` now — it is shown only once. Each delivered event draws down your monthly call quota.',
+        ...(scanDigestReminder ? { scan_digest_reminder: scanDigestReminder } : {}),
         ...(upgradeHint ? { upgrade_hint: upgradeHint } : {}),
       });
     } catch (err) {
