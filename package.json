@@ -34,7 +34,9 @@
     "snapshot:capabilities": "tsc && node scripts/snapshot_capabilities.mjs",
     "snapshot:capabilities:live": "tsc && node scripts/snapshot_capabilities.mjs --live",
     "snapshot:capabilities:check": "tsc && node scripts/snapshot_capabilities.mjs --check",
-    "prepublishOnly": "npm run build && node scripts/snapshot_capabilities.mjs --live"
+    "registry:drift:check": "tsc && node scripts/check-feature-registry-drift.mjs --check",
+    "registry:drift:live": "node scripts/check-feature-registry-drift.mjs --live https://api.algovault.com",
+    "prepublishOnly": "npm run build && node scripts/snapshot_capabilities.mjs --live && node scripts/check-feature-registry-drift.mjs --check"
   },
   "keywords": [
     "mcp",

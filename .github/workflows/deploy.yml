@@ -50,6 +50,14 @@ jobs:
       - name: Landing-page sync guard (build_landing --check)
         run: node scripts/build_landing.mjs --check
 
+      # FEATURE-REGISTRY-SOT-W1 CH4: registry drift canary (STATIC parity). Fails the
+      # push BEFORE SSH-deploy if any channel's surface (server.tool registration set /
+      # x402 TOOL_PRICING derive / gated route set / capabilities projection) has fallen
+      # out of sync with the feature registry SoT (src/lib/feature-registry.ts). Network-
+      # free (imports the dist built above). The LIVE half runs as a weekly host cron.
+      - name: Feature-registry drift canary (check-feature-registry-drift --check)
+        run: node scripts/check-feature-registry-drift.mjs --check
+
       # GEO-W1 C4: JSON-LD structural integrity test. Network-free unit tests
       # validate the SHAPE of JSON-LD blocks across landing/*.html (Product /
       # Organization / WebSite / Service / SoftwareApplication on every page;
