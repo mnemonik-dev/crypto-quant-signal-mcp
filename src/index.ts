@@ -1116,6 +1116,22 @@ async function startHttp() {
             console.error('Stripe webhook: request_log attribution write failed:', logErr instanceof Error ? logErr.message : logErr);
             // Don't rethrow — the event-id is already claimed; Stripe won't retry.
           }
+          // SUBSCRIBER-ATTRIBUTION-SPINE-W1 (C2): auto-profile this conversion
+          // (channel · country · cold/warm · latency) into subscriber_profiles —
+          // the productized SUBSCRIBER-ATTRIBUTION-DIAGNOSIS-W1. Runs ONLY here
+          // (the isNew branch, after tryClaimEvent) so a webhook replay never
+          // re-profiles; the upsert is ALSO idempotent on customer_id. Fire-and-
+          // forget + fail-open: MUST NOT block/slow/fail the webhook ACK, and the
+          // entitlement grant rides a SEPARATE event (customer.subscription.created),
+          // so it is wholly unaffected.
+          try {
+            const { buildSubscriberProfile } = await import('./lib/subscriber-attribution.js');
+            void buildSubscriberProfile(event.data.object).catch((profErr) => {
+              console.error('Stripe webhook: subscriber profiler failed (fail-open):', profErr instanceof Error ? profErr.message : profErr);
+            });
+          } catch (dispatchErr) {
+            console.error('Stripe webhook: subscriber profiler dispatch failed (fail-open):', dispatchErr instanceof Error ? dispatchErr.message : dispatchErr);
+          }
           break;
         }
         default:

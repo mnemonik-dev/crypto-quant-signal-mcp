@@ -1,13 +1,19 @@
 /**
- * SUBSCRIBER-ATTRIBUTION-SPINE-W1 (C1) — attribution capture unit invariants.
+ * SUBSCRIBER-ATTRIBUTION-SPINE-W1 — attribution spine unit invariants.
  *
- * Locks the channel-derivation map (channel-agnostic by construction: direct /
- * tg_bot / mcp / api snap in by client_reference_id prefix) and the fail-open
- * contract: a capture error MUST NOT throw on the /signup request path (revenue
- * path is LAW for this wave).
+ * C1: channel-derivation map (channel-agnostic: direct / tg_bot / mcp / api by
+ *     client_reference_id prefix) + the fail-open capture contract (a capture
+ *     error MUST NOT throw on the /signup request path — revenue path is LAW).
+ * C2: the conversion-time profiler assembly (channel-resolution order, geo
+ *     source, cold-subscribe signal logic, latency) + idempotent upsert shape.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveChannel, recordSignupAttribution } from '../src/lib/subscriber-attribution.js';
+import {
+  deriveChannel,
+  recordSignupAttribution,
+  assembleProfile,
+  buildSubscriberProfile,
+} from '../src/lib/subscriber-attribution.js';
 
 describe('deriveChannel', () => {
   it('maps direct: prefix to direct', () => {
@@ -62,5 +68,112 @@ describe('recordSignupAttribution (fail-open)', () => {
     expect(calls[0].sql).toMatch(/ON CONFLICT \(client_reference_id\) DO NOTHING/i);
     expect(calls[0].params[0]).toBe('direct:1:abc'); // client_reference_id
     expect(calls[0].params[1]).toBe('direct');        // derived channel
+  });
+});
+
+describe('assembleProfile (C2 conversion-time profiler — pure)', () => {
+  const baseSession = {
+    id: 'cs_live_x',
+    customer: 'cus_X',
+    subscription: 'sub_X',
+    amount_total: 999,
+    currency: 'usd',
+    client_reference_id: 'direct:1000:abc',
+    customer_details: { email: 'a@b.com', name: 'A B', address: { country: 'US' } },
+    metadata: { tier: 'starter' },
+    created: 1000,
+  };
+
+  it('uses the joined signup_attribution channel and sets attribution_captured=true', () => {
+    const p = assembleProfile(baseSession, {
+      attribution: { channel: 'tg_bot', created_at: new Date(1000 * 1000).toISOString() },
+      convertedAtEpoch: 1046,
+    });
+    expect(p.channel).toBe('tg_bot');
+    expect(p.attributionCaptured).toBe(true);
+  });
+
+  it('falls back to deriveChannel when there is no attribution row (attribution_captured=false)', () => {
+    const p = assembleProfile(baseSession, { attribution: null, convertedAtEpoch: 1046 });
+    expect(p.channel).toBe('direct');
+    expect(p.attributionCaptured).toBe(false);
+  });
+
+  it('records country_source=card_issuing when a cardCountry is supplied, else billing_address', () => {
+    const card = assembleProfile(baseSession, { cardCountry: 'GB', convertedAtEpoch: 1046 });
+    expect(card.country).toBe('GB');
+    expect(card.countrySource).toBe('card_issuing');
+    const billing = assembleProfile(baseSession, { convertedAtEpoch: 1046 });
+    expect(billing.country).toBe('US');
+    expect(billing.countrySource).toBe('billing_address');
+  });
+
+  it('cold_subscribe = true when email present + no optin + no upgrade CTA; null when email missing', () => {
+    expect(assembleProfile(baseSession, { hasOptin: false, hasUpgradeCta: false, convertedAtEpoch: 1046 }).coldSubscribe).toBe(true);
+    expect(assembleProfile(baseSession, { hasOptin: true, hasUpgradeCta: false, convertedAtEpoch: 1046 }).coldSubscribe).toBe(false);
+    expect(assembleProfile(baseSession, { hasOptin: false, hasUpgradeCta: true, convertedAtEpoch: 1046 }).coldSubscribe).toBe(false);
+    const noEmail = assembleProfile(
+      { ...baseSession, customer_details: { address: { country: 'US' } } },
+      { hasOptin: false, hasUpgradeCta: false, convertedAtEpoch: 1046 },
+    );
+    expect(noEmail.coldSubscribe).toBeNull();
+  });
+
+  it('latency_seconds = converted − signup_at when present, else converted − session.created (clamped ≥0)', () => {
+    const withAttr = assembleProfile(baseSession, {
+      attribution: { channel: 'direct', created_at: new Date(1000 * 1000).toISOString() },
+      convertedAtEpoch: 1046,
+    });
+    expect(withAttr.latencySeconds).toBe(46);
+    const noAttr = assembleProfile(baseSession, { convertedAtEpoch: 1046 }); // session.created = 1000
+    expect(noAttr.latencySeconds).toBe(46);
+  });
+
+  it('maps amount_total cents to amount_usd and carries ids/tier', () => {
+    const p = assembleProfile(baseSession, { convertedAtEpoch: 1046 });
+    expect(p.amountUsd).toBe(9.99);
+    expect(p.customerId).toBe('cus_X');
+    expect(p.subscriptionId).toBe('sub_X');
+    expect(p.tier).toBe('starter');
+    expect(p.email).toBe('a@b.com');
+  });
+});
+
+describe('buildSubscriberProfile (C2 — idempotent upsert + fail-open)', () => {
+  const session = {
+    id: 'cs_live_x', customer: 'cus_X', subscription: 'sub_X',
+    amount_total: 999, currency: 'usd', client_reference_id: 'direct:1000:abc',
+    customer_details: { email: 'a@b.com', name: 'A B', address: { country: 'US' } },
+    metadata: { tier: 'starter' }, created: 1000,
+  };
+
+  it('upserts ON CONFLICT (customer_id) DO UPDATE exactly once', async () => {
+    const runs: Array<{ sql: string; params: unknown[] }> = [];
+    await buildSubscriberProfile(session, {
+      ensure: () => {},
+      query: async () => [],            // no attribution / optin / cta rows
+      run: (sql: string, ...params: unknown[]) => { runs.push({ sql, params }); },
+    });
+    expect(runs).toHaveLength(1);
+    expect(runs[0].sql).toMatch(/INSERT INTO subscriber_profiles/i);
+    expect(runs[0].sql).toMatch(/ON CONFLICT \(customer_id\) DO UPDATE/i);
+    expect(runs[0].params[0]).toBe('cus_X'); // customer_id PK
+  });
+
+  it('does NOT throw / does NOT write when the customer id is missing (fail-open)', async () => {
+    const runs: unknown[] = [];
+    await expect(buildSubscriberProfile(
+      { ...session, customer: null },
+      { ensure: () => {}, query: async () => [], run: (...a: unknown[]) => { runs.push(a); } },
+    )).resolves.toBeUndefined();
+    expect(runs).toHaveLength(0);
+  });
+
+  it('does NOT throw when a dependency throws (fail-open webhook path)', async () => {
+    await expect(buildSubscriberProfile(session, {
+      ensure: () => { throw new Error('schema boom'); },
+      query: async () => { throw new Error('query boom'); },
+      run: () => { throw new Error('upsert boom'); },
+    })).resolves.toBeUndefined();
   });
 });
