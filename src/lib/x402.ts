@@ -484,6 +484,35 @@ export function isPaymentSufficient(
   return paid >= Number(usdToAtomic(price));
 }
 
+/**
+ * OPS-MCP-DEFENSE-IN-DEPTH-W1 R1: read the buyer's SIGNED atomic amount directly
+ * from the payment payload — `payload.authorization.value` (EIP-3009
+ * transferWithAuthorization, the configured USDC/exact scheme), then
+ * `payload.permit2Authorization.value` (Permit2), then a defensive un-nested
+ * fallback. Mirrors `extractPaymentNonce`'s dual-shape read in
+ * x402-idempotency-store.ts (same payload family, same strict string-only
+ * acceptance). Returns `undefined` on absent/malformed → callers default-deny.
+ */
+export function extractSignedAuthorizationValue(paymentPayload: unknown): string | undefined {
+  if (!paymentPayload || typeof paymentPayload !== 'object') return undefined;
+  const p = paymentPayload as {
+    payload?: {
+      authorization?: { value?: unknown };
+      permit2Authorization?: { value?: unknown };
+    };
+    authorization?: { value?: unknown };
+  };
+  const candidates = [
+    p.payload?.authorization?.value,        // EIP-3009 (USDC transferWithAuthorization)
+    p.payload?.permit2Authorization?.value, // Permit2 flow
+    p.authorization?.value,                 // defensive: un-nested authorization
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 0) return c;
+  }
+  return undefined;
+}
+
 /** Read a matched requirement's binding fields (test seam + internal use). */
 function reqFields(req: unknown): {
   amount?: string; asset?: string; network?: string; payTo?: string;
@@ -556,6 +585,18 @@ export function paymentMatchesToolRoute(
     return false;
   }
 
+  // (3) OPS-MCP-DEFENSE-IN-DEPTH-W1 — signed-value floor: the amount in (2) comes
+  // from the SERVER's matched requirement, which by construction equals the route's
+  // own price; it is the facilitator's signature check that ties it to the buyer.
+  // Re-assert the same effective-price floor against what the buyer actually
+  // SIGNED (EIP-3009/Permit2 authorization value), so a requirement/signature
+  // divergence (SDK or facilitator drift) can never under-charge. A proof clears
+  // only when BOTH floors pass; missing/malformed signed value → default-deny.
+  const signedValue = extractSignedAuthorizationValue(settlement.paymentPayload);
+  if (!isPaymentSufficient(toolName, signedValue, timeframe)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -602,6 +643,14 @@ export function classifyToolRouteMismatch(
 
   // Identity matches but the amount underpays the effective price: insufficient.
   if (!isPaymentSufficient(toolName, got.amount, timeframe)) {
+    return 'insufficient';
+  }
+
+  // OPS-MCP-DEFENSE-IN-DEPTH-W1 — lockstep mirror of paymentMatchesToolRoute (3):
+  // the buyer's SIGNED value underpays the effective price (or is absent/malformed)
+  // → insufficient. Keeps `classify === 'ok'` iff `paymentMatchesToolRoute === true`.
+  const signedValue = extractSignedAuthorizationValue(settlement.paymentPayload);
+  if (!isPaymentSufficient(toolName, signedValue, timeframe)) {
     return 'insufficient';
   }
 

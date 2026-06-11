@@ -26,6 +26,14 @@ function req(amountUsd: number, over: Partial<Record<string, string>> = {}) {
   };
 }
 
+/** OPS-MCP-DEFENSE-IN-DEPTH-W1: EIP-3009 envelope carrying the buyer's SIGNED value.
+ * The signed-value floor default-denies the old `paymentPayload: {}` fixtures; each
+ * case signs the same amount as its matched requirement so it keeps testing its
+ * ORIGINAL logic (identity / requirement-amount), not the new gate. */
+function pp(amountUsd: number) {
+  return { payload: { authorization: { value: atomic(amountUsd), nonce: '0xNONCE' } } };
+}
+
 let x402: typeof import('../src/lib/x402.js');
 
 beforeAll(async () => {
@@ -65,13 +73,13 @@ afterAll(() => {
 
 describe('classifyToolRouteMismatch — lockstep with paymentMatchesToolRoute', () => {
   it('correct $0.02 proof on get_trade_signal (base tf) → ok (and matches=true)', () => {
-    const s = { paymentPayload: {}, requirements: req(0.02) };
+    const s = { paymentPayload: pp(0.02), requirements: req(0.02) };
     expect(x402.classifyToolRouteMismatch(s, 'get_trade_signal', '4h')).toBe('ok');
     expect(x402.paymentMatchesToolRoute(s, 'get_trade_signal', '4h')).toBe(true);
   });
 
   it('over-price $0.03 proof → ok (amount is a floor)', () => {
-    const s = { paymentPayload: {}, requirements: req(0.03) };
+    const s = { paymentPayload: pp(0.03), requirements: req(0.03) };
     expect(x402.classifyToolRouteMismatch(s, 'get_trade_signal', '4h')).toBe('ok');
   });
 
@@ -80,23 +88,23 @@ describe('classifyToolRouteMismatch — lockstep with paymentMatchesToolRoute', 
     // (same wallet/chain/token) — only the AMOUNT differs. So identity matches and the
     // mismatch is an underpay → `insufficient` (the cross-tool downgrade manifests as
     // an amount-floor failure here, which is exactly what blocks the 50% underpay).
-    const s = { paymentPayload: {}, requirements: req(0.01) };
+    const s = { paymentPayload: pp(0.01), requirements: req(0.01) };
     expect(x402.classifyToolRouteMismatch(s, 'get_trade_signal', '4h')).toBe('insufficient');
     expect(x402.paymentMatchesToolRoute(s, 'get_trade_signal', '4h')).toBe(false);
   });
 
   it('wrong asset / network / payTo → cross_tool (identity mismatch)', () => {
-    const wrongAsset = { paymentPayload: {}, requirements: req(0.02, { asset: '0x0000000000000000000000000000000000000000' }) };
-    const wrongNet = { paymentPayload: {}, requirements: req(0.02, { network: 'eip155:84532' }) };
-    const wrongPayTo = { paymentPayload: {}, requirements: req(0.02, { payTo: '0x000000000000000000000000000000000000dead' }) };
+    const wrongAsset = { paymentPayload: pp(0.02), requirements: req(0.02, { asset: '0x0000000000000000000000000000000000000000' }) };
+    const wrongNet = { paymentPayload: pp(0.02), requirements: req(0.02, { network: 'eip155:84532' }) };
+    const wrongPayTo = { paymentPayload: pp(0.02), requirements: req(0.02, { payTo: '0x000000000000000000000000000000000000dead' }) };
     expect(x402.classifyToolRouteMismatch(wrongAsset, 'get_trade_signal', '4h')).toBe('cross_tool');
     expect(x402.classifyToolRouteMismatch(wrongNet, 'get_trade_signal', '4h')).toBe('cross_tool');
     expect(x402.classifyToolRouteMismatch(wrongPayTo, 'get_trade_signal', '4h')).toBe('cross_tool');
   });
 
   it('premium 1m=$0.05: base $0.02 proof → insufficient; $0.05 proof → ok', () => {
-    const base = { paymentPayload: {}, requirements: req(0.02) };
-    const premium = { paymentPayload: {}, requirements: req(0.05) };
+    const base = { paymentPayload: pp(0.02), requirements: req(0.02) };
+    const premium = { paymentPayload: pp(0.05), requirements: req(0.05) };
     expect(x402.classifyToolRouteMismatch(base, 'get_trade_signal', '1m')).toBe('insufficient');
     expect(x402.classifyToolRouteMismatch(premium, 'get_trade_signal', '1m')).toBe('ok');
   });
@@ -106,11 +114,11 @@ describe('classifyToolRouteMismatch — lockstep with paymentMatchesToolRoute', 
     expect(x402.classifyToolRouteMismatch({ requirements: undefined }, 'get_trade_signal')).toBe('cross_tool');
     // FEATURE-REGISTRY-SOT-W1 CH3: get_trade_call is no longer "unknown" (the canonical name now
     // has a price key). Use a genuinely-unknown tool to exercise the default-deny path.
-    expect(x402.classifyToolRouteMismatch({ paymentPayload: {}, requirements: req(0.02) }, 'nonexistent_tool')).toBe('cross_tool');
+    expect(x402.classifyToolRouteMismatch({ paymentPayload: pp(0.02), requirements: req(0.02) }, 'nonexistent_tool')).toBe('cross_tool');
   });
 
   it('accepts a 1-element array requirement (SDK match shape)', () => {
-    const s = { paymentPayload: {}, requirements: [req(0.02)] };
+    const s = { paymentPayload: pp(0.02), requirements: [req(0.02)] };
     expect(x402.classifyToolRouteMismatch(s, 'get_trade_signal', '4h')).toBe('ok');
   });
 });

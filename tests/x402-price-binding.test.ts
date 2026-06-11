@@ -35,6 +35,14 @@ function req(amountUsd: number) {
   };
 }
 
+/** OPS-MCP-DEFENSE-IN-DEPTH-W1: EIP-3009 envelope carrying the buyer's SIGNED value.
+ * The signed-value floor default-denies the old `paymentPayload: {}` fixtures; each
+ * case signs the same amount as its matched requirement so it keeps testing its
+ * ORIGINAL logic (identity / requirement-amount), not the new gate. */
+function pp(amountUsd: number) {
+  return { payload: { authorization: { value: atomic(amountUsd), nonce: '0xNONCE' } } };
+}
+
 // We stub the facilitator + resource-server SDK so initX402 builds real per-tool
 // requirements deterministically (no network, no CDP). The stub's
 // buildPaymentRequirements returns the same {amount,asset,network,payTo,...} shape
@@ -141,7 +149,7 @@ describe('paymentMatchesToolRoute — X402-01 cross-tool downgrade rejection', (
   });
 
   it('a $0.01 scan_funding_arb proof is REJECTED on the $0.02 get_trade_signal route', () => {
-    const cheapSettlement = { paymentPayload: {}, requirements: req(0.01) };
+    const cheapSettlement = { paymentPayload: pp(0.01), requirements: req(0.01) };
     // The ATTACK: this is exactly what the flattened-pool match produced — a valid
     // $0.01 requirement — POSTed to the $0.02 route. Must be rejected now.
     expect(x402.paymentMatchesToolRoute(cheapSettlement, 'get_trade_signal', '4h')).toBe(false);
@@ -149,42 +157,42 @@ describe('paymentMatchesToolRoute — X402-01 cross-tool downgrade rejection', (
   });
 
   it('a $0.01 scan_funding_arb proof is ACCEPTED on its own scan_funding_arb route', () => {
-    const settlement = { paymentPayload: {}, requirements: req(0.01) };
+    const settlement = { paymentPayload: pp(0.01), requirements: req(0.01) };
     expect(x402.paymentMatchesToolRoute(settlement, 'scan_funding_arb')).toBe(true);
   });
 
   it('a correct $0.02 get_trade_signal proof is ACCEPTED on its own route (base tf)', () => {
-    const settlement = { paymentPayload: {}, requirements: req(0.02) };
+    const settlement = { paymentPayload: pp(0.02), requirements: req(0.02) };
     expect(x402.paymentMatchesToolRoute(settlement, 'get_trade_signal', '4h')).toBe(true);
   });
 
   it('over-payment is ACCEPTED (amount is a floor, not an exact match)', () => {
     // A $0.03 proof on the $0.02 route over-pays — harmless to us, must serve.
-    const settlement = { paymentPayload: {}, requirements: req(0.03) };
+    const settlement = { paymentPayload: pp(0.03), requirements: req(0.03) };
     expect(x402.paymentMatchesToolRoute(settlement, 'get_trade_signal', '4h')).toBe(true);
   });
 
   it('a $0.05 proof covers a premium 1m get_trade_signal call', () => {
-    const settlement = { paymentPayload: {}, requirements: req(0.05) };
+    const settlement = { paymentPayload: pp(0.05), requirements: req(0.05) };
     expect(x402.paymentMatchesToolRoute(settlement, 'get_trade_signal', '1m')).toBe(true);
   });
 
   it('X402-03: a $0.02 proof is REJECTED on a premium 1m get_trade_signal call', () => {
-    const settlement = { paymentPayload: {}, requirements: req(0.02) };
+    const settlement = { paymentPayload: pp(0.02), requirements: req(0.02) };
     expect(x402.paymentMatchesToolRoute(settlement, 'get_trade_signal', '1m')).toBe(false);
   });
 
   it('wrong network / asset / payTo are rejected even at the right amount', () => {
-    const wrongNet = { paymentPayload: {}, requirements: { ...req(0.02), network: 'eip155:84532' } };
-    const wrongAsset = { paymentPayload: {}, requirements: { ...req(0.02), asset: '0x0000000000000000000000000000000000000000' } };
-    const wrongPayTo = { paymentPayload: {}, requirements: { ...req(0.02), payTo: '0x000000000000000000000000000000000000dead' } };
+    const wrongNet = { paymentPayload: pp(0.02), requirements: { ...req(0.02), network: 'eip155:84532' } };
+    const wrongAsset = { paymentPayload: pp(0.02), requirements: { ...req(0.02), asset: '0x0000000000000000000000000000000000000000' } };
+    const wrongPayTo = { paymentPayload: pp(0.02), requirements: { ...req(0.02), payTo: '0x000000000000000000000000000000000000dead' } };
     expect(x402.paymentMatchesToolRoute(wrongNet, 'get_trade_signal', '4h')).toBe(false);
     expect(x402.paymentMatchesToolRoute(wrongAsset, 'get_trade_signal', '4h')).toBe(false);
     expect(x402.paymentMatchesToolRoute(wrongPayTo, 'get_trade_signal', '4h')).toBe(false);
   });
 
   it('accepts a 1-element array requirement (as the SDK match returns)', () => {
-    const settlement = { paymentPayload: {}, requirements: [req(0.02)] };
+    const settlement = { paymentPayload: pp(0.02), requirements: [req(0.02)] };
     expect(x402.paymentMatchesToolRoute(settlement, 'get_trade_signal', '4h')).toBe(true);
   });
 
@@ -193,6 +201,6 @@ describe('paymentMatchesToolRoute — X402-01 cross-tool downgrade rejection', (
     expect(x402.paymentMatchesToolRoute({ requirements: undefined }, 'get_trade_signal')).toBe(false);
     // FEATURE-REGISTRY-SOT-W1 CH3: get_trade_call is no longer "unknown" (the canonical name now
     // has a price key). Use a genuinely-unknown tool to exercise the default-deny path.
-    expect(x402.paymentMatchesToolRoute({ paymentPayload: {}, requirements: req(0.02) }, 'nonexistent_tool')).toBe(false);
+    expect(x402.paymentMatchesToolRoute({ paymentPayload: pp(0.02), requirements: req(0.02) }, 'nonexistent_tool')).toBe(false);
   });
 });

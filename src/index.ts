@@ -38,6 +38,7 @@ import { getEquityRegime } from './lib/equities/equity-tool-formatters.js';
 import { getEquityPerformance } from './lib/equities/equity-performance.js';
 import { getEquityPool } from './lib/equities/equity-store.js';
 import { initAnalytics, logRequest, hashIp, getUsageStats, logSkillInvocation } from './lib/analytics.js';
+import { clientIp } from './lib/client-ip.js';
 import { ensureProcessedStripeEventsSchema, tryClaimEvent } from './lib/stripe-events-store.js';
 import { upsertSignupEmail, markConfirmationSent, tryClaimSignupEmailEvent } from './lib/signup-emails-store.js';
 import { sendOptinConfirmationEmail } from './lib/email.js';
@@ -1328,8 +1329,10 @@ async function startHttp() {
       // (the requestContext ALS is only entered for /mcp, so derive the IP from
       // the proxy headers like the /mcp handler does).
       try {
-        const xff = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
-        const clientIp = xff || (req.headers['x-real-ip'] as string | undefined) || req.ip || '';
+        // OPS-MCP-DEFENSE-IN-DEPTH-W1 R2: derive from req.ip (trust proxy=1) via the
+        // shared clientIp helper — byte-identical to the prior raw-XFF leftmost parse
+        // under the deployed Caddy replace-mode topology, robust to a proxy reconfig.
+        const ip = clientIp(req);
         const { recordSignupAttribution } = await import('./lib/subscriber-attribution.js');
         recordSignupAttribution({
           clientReferenceId,
@@ -1341,7 +1344,7 @@ async function startHttp() {
             ? req.query.landing_path
             : (req.headers['referer'] as string | undefined) ?? null,
           tierRequested: plan,
-          ipHash: clientIp ? hashIp(clientIp) : null,
+          ipHash: ip ? hashIp(ip) : null,
           userAgent: (req.headers['user-agent'] as string | undefined) ?? null,
         });
       } catch (err) {
@@ -2289,12 +2292,12 @@ async function startHttp() {
           req.headers as Record<string, string | undefined>,
         );
 
-    // Hash client IP for privacy-safe analytics
-    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-      || (req.headers['x-real-ip'] as string)
-      || req.socket.remoteAddress
-      || 'unknown';
-    const ipHash = hashIp(clientIp);
+    // Hash client IP for privacy-safe analytics + the free-tier quota key.
+    // OPS-MCP-DEFENSE-IN-DEPTH-W1 R2: req.ip (trust proxy=1) via the shared clientIp
+    // helper — the raw leftmost-XFF parse was spoofable the moment a proxy hop
+    // APPENDS instead of replacing; req.ip resolves the nearest-trusted-hop value
+    // (byte-identical under the deployed Caddy replace-mode topology).
+    const ipHash = hashIp(clientIp(req) || 'unknown');
     // OPS-MCP-SESSION-RESILIENCE-W1: single-derivation correlation id. Stateless issues no
     // Mcp-Session-Id, so resolve ONE id (track-token ?? ipHash ?? uuid) used for the funnel +
     // skill-attribution emit AND the requestContext ALS store (read by getRequestSessionId()

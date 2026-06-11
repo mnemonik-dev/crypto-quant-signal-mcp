@@ -29,6 +29,7 @@ import Ajv, { type ValidateFunction } from 'ajv';
 import { encodePaymentRequiredHeader } from '@x402/core/http';
 import { resolveLicense, requestContext } from './license.js';
 import { hashIp, logRequest } from './analytics.js';
+import { clientIp } from './client-ip.js';
 import { generate402Response, settleX402Async, paymentMatchesToolRoute } from './x402.js';
 import { tryClaimPayment, extractPaymentNonce } from './x402-idempotency-store.js';
 import { BAZAAR_ROUTES, bazaarResourceUrl, bazaarRouteDescription } from './x402-bazaar.js';
@@ -171,12 +172,9 @@ export async function callCoreHandler(
 }
 
 function clientIpHash(req: Request): string {
-  const clientIp =
-    (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
-    (req.headers['x-real-ip'] as string | undefined) ||
-    req.socket.remoteAddress ||
-    'unknown';
-  return hashIp(clientIp);
+  // OPS-MCP-DEFENSE-IN-DEPTH-W1 R2: third in-class raw-XFF site (audit-cited) —
+  // same shared clientIp(req) derivation as the /mcp quota + attribution sites.
+  return hashIp(clientIp(req) || 'unknown');
 }
 
 /**

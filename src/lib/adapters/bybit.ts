@@ -141,7 +141,13 @@ export class BybitAdapter implements ExchangeAdapter {
       }),
     ]);
 
-    const ticker = tickerData.list[0];
+    const ticker = tickerData.list?.[0];
+    // OPS-MCP-DEFENSE-IN-DEPTH-W1 R3 — row-identity assert (List-endpoint
+    // single-entity-read rule; Bitget precedent bitget.ts:166): a symbol-filtered
+    // list can silently ignore its filter and return a wrong-but-plausible [0] row.
+    if (!ticker || ticker.symbol !== symbol) {
+      throw new Error(`BYBIT_TICKER_SYMBOL_MISMATCH: requested ${symbol}, got ${ticker?.symbol ?? 'none'} from /v5/market/tickers`);
+    }
     const oi = oiData.list[0];
 
     // R2: Bybit funding is per-8h period → annualized = raw × 1095 (8h periods/year)
@@ -202,7 +208,13 @@ export class BybitAdapter implements ExchangeAdapter {
         category: 'linear',
         symbol,
       });
-      return parseFloat(data.list[0].markPrice);
+      const ticker = data.list?.[0];
+      // OPS-MCP-DEFENSE-IN-DEPTH-W1 R3 — same row-identity assert; the throw is
+      // caught below → null (fail-soft preserved, wrong-symbol price can't leak).
+      if (!ticker || ticker.symbol !== symbol) {
+        throw new Error(`BYBIT_TICKER_SYMBOL_MISMATCH: requested ${symbol}, got ${ticker?.symbol ?? 'none'} from /v5/market/tickers`);
+      }
+      return parseFloat(ticker.markPrice);
     } catch {
       return null;
     }

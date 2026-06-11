@@ -145,8 +145,12 @@ export class GateAdapter implements ExchangeAdapter {
     // Single all-in-one ticker call bundles funding + mark + index + OI + 24h ticker
     const tickers = await gateGet<GateTicker[]>('/api/v4/futures/usdt/tickers', { contract });
     const t = tickers?.[0];
-    if (!t) {
-      throw new Error(`Gate: empty ticker payload for ${coin} (contract=${contract})`);
+    // OPS-MCP-DEFENSE-IN-DEPTH-W1 R3 — row-identity assert (List-endpoint
+    // single-entity-read rule; Bitget precedent). Gate's identity field is
+    // `contract` (per-venue field divergence), NOT `symbol`. Subsumes the prior
+    // empty-payload check (empty → `got none`).
+    if (!t || t.contract !== contract) {
+      throw new Error(`GATE_TICKER_CONTRACT_MISMATCH: requested ${contract}, got ${t?.contract ?? 'none'} from /api/v4/futures/usdt/tickers`);
     }
 
     // Gate funding is per-8h period (verified via Plan-Mode probe: funding_interval=28800s);
@@ -207,7 +211,11 @@ export class GateAdapter implements ExchangeAdapter {
       const contract = toGateSymbol(coin);
       const tickers = await gateGet<GateTicker[]>('/api/v4/futures/usdt/tickers', { contract });
       const t = tickers?.[0];
-      if (!t) return null;
+      // OPS-MCP-DEFENSE-IN-DEPTH-W1 R3 — same contract-identity assert; the throw
+      // is caught below → null (fail-soft preserved, wrong-contract price can't leak).
+      if (!t || t.contract !== contract) {
+        throw new Error(`GATE_TICKER_CONTRACT_MISMATCH: requested ${contract}, got ${t?.contract ?? 'none'} from /api/v4/futures/usdt/tickers`);
+      }
       return parseFloat(t.mark_price);
     } catch {
       return null;

@@ -206,9 +206,9 @@ describe('GateAdapter.getAssetContext', () => {
     expect(tickerCall?.url).toContain('contract=XAU_USDT');
   });
 
-  it('throws on empty ticker payload (not silent null)', async () => {
+  it('throws on empty ticker payload (not silent null) — OPS-MCP-DEFENSE-IN-DEPTH-W1: the contract-identity assert subsumes the old empty-check', async () => {
     setMock('/api/v4/futures/usdt/tickers', { status: 200, body: [] });
-    await expect(new GateAdapter().getAssetContext('UNKNOWN')).rejects.toThrow(/empty ticker payload/);
+    await expect(new GateAdapter().getAssetContext('UNKNOWN')).rejects.toThrow(/GATE_TICKER_CONTRACT_MISMATCH: requested UNKNOWN_USDT, got none/);
   });
 });
 
