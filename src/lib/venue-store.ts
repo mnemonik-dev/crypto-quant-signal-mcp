@@ -289,6 +289,29 @@ export async function stampSeedingStarted(exchangeId: string, when: Date = new D
 }
 
 /**
+ * OPS-SHADOW-WINDOW-RESET-AND-WR-DISPLAY-W1 — OVERWRITE `seeding_started_at`
+ * for a shadow venue, restarting its 15/30-day promotion window AND the
+ * sample/WR measurement floor (evaluate-venues derives clock, BUY+SELL count
+ * and PFE WR from the ONE `COALESCE(seeding_started_at, integrated_at)` floor).
+ * Quarantines bug-contaminated pre-fix signals behind the floor WITHOUT
+ * deleting or mutating any signal row (Data Integrity LAW). Unlike
+ * `stampSeedingStarted` there is deliberately NO `IS NULL` clause (a reset
+ * overwrites an existing stamp), but the `status = 'shadow'` guard stays —
+ * a promoted/retired venue can never be window-reset. Awaited dbQuery (not
+ * fire-and-forget dbRun) so the write persists before the operator script
+ * (reset-venue-window.ts) exits.
+ */
+export async function resetSeedingStarted(exchangeId: string, when: Date): Promise<void> {
+  await initVenuesTable();
+  await dbQuery(
+    `UPDATE venues
+     SET seeding_started_at = ?
+     WHERE exchange_id = ? AND status = 'shadow'`,
+    [when, exchangeId]
+  );
+}
+
+/**
  * Insert a NEW venue (typically called from C5 pilot-onboarding flow).
  * `assetCount` is the venue's listed-perp count probed from the venue's
  * exchangeInfo at integration time (NOT the COUNT(DISTINCT coin) seeded

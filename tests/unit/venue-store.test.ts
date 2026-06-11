@@ -26,6 +26,7 @@ import {
   recordEval,
   incrementExtension,
   stampSeedingStarted,
+  resetSeedingStarted,
   insertVenue,
   refreshAssetCount,
   _resetInitForTest,
@@ -274,5 +275,20 @@ describe('stampSeedingStarted (OPS-SHADOW-PIPELINE-W1/C3)', () => {
     expect(sql).toMatch(/seeding_started_at IS NULL/);   // idempotent: stamps once
     expect(sql).toMatch(/status = 'shadow'/);            // promoted venues never stamped
     expect(updateCall![1]).toEqual([when, 'WEEX']);
+  });
+});
+
+describe('resetSeedingStarted (OPS-SHADOW-WINDOW-RESET-AND-WR-DISPLAY-W1)', () => {
+  it('issues a shadow-only OVERWRITE UPDATE via awaited dbQuery (no IS-NULL clause)', async () => {
+    mockQuery.mockResolvedValue([]); // init seed + the UPDATE
+    const when = new Date('2026-06-11T02:00:00Z');
+    await resetSeedingStarted('BITMART', when);
+    const updateCall = mockQuery.mock.calls.find(c => /UPDATE venues/.test(String(c[0])) && /seeding_started_at/.test(String(c[0])));
+    expect(updateCall).toBeDefined();
+    const sql = String(updateCall![0]);
+    expect(sql).toMatch(/seeding_started_at = \?/);
+    expect(sql).not.toMatch(/seeding_started_at IS NULL/); // reset OVERWRITES an existing stamp
+    expect(sql).toMatch(/status = 'shadow'/);              // promoted/retired venues can never be reset
+    expect(updateCall![1]).toEqual([when, 'BITMART']);
   });
 });
