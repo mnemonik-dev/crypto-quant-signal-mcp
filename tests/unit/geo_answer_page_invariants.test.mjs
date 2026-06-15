@@ -30,6 +30,16 @@ const ANSWER_SLUGS = [
   'algovault-vs-raw-indicator-tools',
   'build-vs-buy-trading-model',
   'single-venue-vs-cross-venue-mcp',
+  // GEO-CONTENT-W2 — 8 niche/knowledge answer pages (coverage list; existsSync below
+  // gates which exist per chapter, so the full array is safe from C1 onward).
+  'crewai-crypto-trade-call-tools',
+  'langchain-crypto-trade-calls',
+  'llamaindex-quant-trading-stack',
+  'composite-cross-exchange-trade-calls',
+  'cross-venue-funding-rate-arbitrage',
+  'crypto-market-regime-detection-api',
+  'crypto-signal-providers-verifiable-track-record',
+  'crypto-trade-call-api-for-ai-agents',
 ];
 const PAGES = ANSWER_SLUGS.filter((s) => existsSync(path.join(LANDING, s + '.html')));
 
@@ -59,6 +69,15 @@ function prose(html, { stripTrSpans = false } = {}) {
 }
 
 const IDENTIFIERS = /crypto-quant-signal-mcp|get_trade_signal|signal-performance|signal_performance|verify-signal/g;
+
+// GEO-CONTENT-W2: two architect-approved query-echo exceptions — the buyer's literal
+// measured-query category phrase, NEVER AlgoVault's own output (still "calls" everywhere).
+// Slug-scoped + phrase-scoped: the global prose-"signal" check stays HARD on all other
+// pages, and any OTHER stray "signal" on these two still fails (only the exact phrase strips).
+const QUERY_ECHO_EXEMPT = {
+  'crypto-signal-providers-verifiable-track-record': /\bsignal providers?\b/gi,
+  'crypto-trade-call-api-for-ai-agents': /\bcrypto signal API\b/gi,
+};
 
 test('GEO-CONTENT-W1: at least one answer page present', () => {
   assert.ok(PAGES.length >= 1, 'no answer pages found under landing/');
@@ -99,8 +118,10 @@ for (const slug of PAGES) {
     assert.doesNotMatch(html, /SLOT:/, 'unfilled SLOT marker leaked from template');
   });
 
-  test(`${slug}: no prose "signal(s)" (identifiers exempt)`, () => {
-    const p = prose(read(slug)).replace(IDENTIFIERS, ' ');
+  test(`${slug}: no prose "signal(s)" (identifiers + approved query-echo exempt)`, () => {
+    let p = prose(read(slug)).replace(IDENTIFIERS, ' ');
+    const echo = QUERY_ECHO_EXEMPT[slug];
+    if (echo) p = p.replace(echo, ' ');
     const hits = p.match(/\bsignals?\b/gi) || [];
     assert.equal(hits.length, 0, `prose contains "signal(s)": ${hits.slice(0, 3).join(', ')}`);
   });
