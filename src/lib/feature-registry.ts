@@ -95,7 +95,10 @@ export const FEATURE_REGISTRY: FeatureSpec[] = [
   {
     name: 'scan_funding_arb',
     aliases: [],
-    channels: { mcp: true, httpX402: true, bot: false, webhook: false },
+    // BOT-FUNDING-SOT-W1 (2026-06-15): exposed on the TG bot (/funding) — the
+    // bot's command surface FOLLOWS this flag (capabilities → BOT_TOOL_SURFACE).
+    // webhook stays false (no scan_funding_arb webhookEvent defined).
+    channels: { mcp: true, httpX402: true, bot: true, webhook: false },
     quota: { unit: 'per-call', holdFree: false },
     x402: { basePriceUsd: 0.01 },
     descriptionRef: 'SCAN_FUNDING_ARB_DESCRIPTION',
