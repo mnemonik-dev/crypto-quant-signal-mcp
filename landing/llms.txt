@@ -1,18 +1,18 @@
 # AlgoVault Labs
 
-> The Brain Layer for AI Trading Agents. Composite trading verdict
-> (signal + confidence + regime + factors) for crypto perpetuals across
-> 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget). Every signal  # SNAPSHOT-LINE
+> The Brain Layer for AI Trading Agents. One composite trade call
+> (direction + confidence + regime + factors) for crypto perpetuals across
+> 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget). Every call  # SNAPSHOT-LINE
 > is Merkle-anchored on Base L2. MCP-native. Buyers are AI agents.
 
-Last updated: 2026-04-26
+Last updated: 2026-06-08
 Live source of truth: https://algovault.com/api/performance-public
 
 ## Key facts
 
-- 89.4% PFE Win Rate across 56,375+ tracked signals (live; verify at /track-record).
-- 16+ Merkle batches anchored on Base L2 (verify any signal at /verify).
-- 3 MCP tools: `get_trade_call`, `scan_funding_arb`, `get_market_regime`.
+- PFE (directional-accuracy) win rate published live across the full tracked-call history — current value at /track-record.
+- Every trade call Merkle-anchored on Base L2; daily batches published on-chain — verify any call at /verify.
+- MCP tools include `get_trade_call`, `scan_trade_calls`, `get_market_regime`, and `scan_funding_arb` (full set via `tools/list`).
 - 5 exchanges analysed: Hyperliquid, Binance, Bybit, OKX, Bitget.  # SNAPSHOT-LINE
 - 11 timeframes supported (1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d).  # SNAPSHOT-LINE
 - 4 pricing tiers: Free ($0), Starter ($9.99/mo), Pro ($49/mo), Enterprise ($299/mo). HOLD calls always free.
@@ -22,10 +22,10 @@ Live source of truth: https://algovault.com/api/performance-public
 
 - [Home](https://algovault.com): Marketing landing — hero, tools, use cases, pricing, FAQ.
 - [Docs](https://algovault.com/docs.html): API reference for the 3 MCP tools, 20 usage examples, FAQ.
-- [Track Record](https://algovault.com/track-record): Live PFE Win Rate by signal type / timeframe / asset.
+- [Track Record](https://algovault.com/track-record): Live PFE Win Rate by call type / timeframe / asset.
 - [Skills](https://algovault.com/skills): 20 ready-to-use Anthropic Agent Skills wrapping the AlgoVault MCP server.
 - [Integrations](https://algovault.com/integrations): Index of all Brain + Execution integration tutorials (one card per supported exchange).
-- [Verify a Call](https://algovault.com/verify): On-chain Merkle proof lookup for any signal.
+- [Verify a Call](https://algovault.com/verify): On-chain Merkle proof lookup for any call.
 
 ## Integrations (Brain + Execution pairings)
 
@@ -54,6 +54,16 @@ Live source of truth: https://algovault.com/api/performance-public
    ```
 2. Or call the MCP server directly: `https://api.algovault.com/mcp` (Streamable HTTP).
 3. Or pair AlgoVault with one of the 4 integration tutorials above for a complete brain + execution agent.
+
+## Profiles & listings (the AlgoVault Labs entity)
+
+Canonical schema.org Organization: `@id` `https://algovault.com/#organization` (full node on the homepage).
+
+- GitHub: https://github.com/AlgoVaultLabs
+- X: https://x.com/AlgoVaultLabs
+- npm: https://www.npmjs.com/package/crypto-quant-signal-mcp
+- Crunchbase: https://www.crunchbase.com/organization/algovault-labs
+- G2: https://www.g2.com/products/algovault
 
 ## License
 

@@ -13,13 +13,6 @@
     { "@type": "Offer", "price": "49", "priceCurrency": "USD", "name": "Pro", "description": "15,000 calls/month", "url": "https://api.algovault.com/signup?plan=pro" },
     { "@type": "Offer", "price": "299", "priceCurrency": "USD", "name": "Enterprise", "description": "100,000 calls/month, SLA, priority support", "url": "https://api.algovault.com/signup?plan=enterprise" }
   ],
-  "aggregateRating": {
-    "@type": "AggregateRating",
-    "ratingValue": "{{pfe_wr}}",
-    "bestRating": "100",
-    "worstRating": "0",
-    "ratingCount": "{{total_calls}}"
-  },
   "additionalProperty": [
     { "@type": "PropertyValue", "name": "PFE win rate", "value": "{{pfe_wr}}%" },
     { "@type": "PropertyValue", "name": "Verified trade calls", "value": "{{total_calls}}" },

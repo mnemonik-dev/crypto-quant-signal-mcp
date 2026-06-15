@@ -1,11 +1,11 @@
 # AlgoVault Labs — Full Context
 
-> The Brain Layer for AI Trading Agents. Composite trading verdict
-> (signal + confidence + regime + factors) for crypto perpetuals across
-> 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget). Every signal  # SNAPSHOT-LINE
+> The Brain Layer for AI Trading Agents. One composite trade call
+> (direction + confidence + regime + factors) for crypto perpetuals across
+> 5 exchanges (Hyperliquid, Binance, Bybit, OKX, Bitget). Every call  # SNAPSHOT-LINE
 > is Merkle-anchored on Base L2. MCP-native. Buyers are AI agents.
 
-last_updated: 2026-04-26T14:00:00Z
+last_updated: 2026-06-08T00:00:00Z
 live_source_of_truth: https://algovault.com/api/performance-public + https://algovault.com/api/merkle-batches
 
 ---
@@ -25,6 +25,18 @@ AlgoVault is an MCP-native API that returns **one composite trading verdict per 
 ```
 
 Every signal is **hashed on-chain (Base L2) before its outcome is known**. Daily Merkle batches anchor the day's signals to the public `MerkleRootRegistry` contract at `0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81`. Anyone can verify any past signal against the on-chain root via `algovault.com/verify`. This is the moat: verifiable accuracy, not a marketing claim.
+
+---
+
+## Profiles & listings (the AlgoVault Labs entity)
+
+Canonical schema.org Organization: `@id` `https://algovault.com/#organization` (full node on the homepage; referenced site-wide via `@id`).
+
+- GitHub: https://github.com/AlgoVaultLabs
+- X: https://x.com/AlgoVaultLabs
+- npm: https://www.npmjs.com/package/crypto-quant-signal-mcp
+- Crunchbase: https://www.crunchbase.com/organization/algovault-labs
+- G2: https://www.g2.com/products/algovault
 
 ---
 

@@ -12,12 +12,5 @@
     { "@type": "Offer", "price": "49", "priceCurrency": "USD", "name": "Pro", "description": "All crypto and TradFi assets, all 11 timeframes, 15K calls/month", "url": "https://api.algovault.com/signup?plan=pro" },
     { "@type": "Offer", "price": "299", "priceCurrency": "USD", "name": "Enterprise", "description": "Unlimited calls, SLA, priority support", "url": "https://api.algovault.com/signup?plan=enterprise" }
   ],
-  "author": { "@id": "https://algovault.com/#organization" },
-  "aggregateRating": {
-    "@type": "AggregateRating",
-    "ratingValue": "{{pfe_wr}}",
-    "bestRating": "100",
-    "worstRating": "0",
-    "ratingCount": "{{total_calls}}"
-  }
+  "author": { "@id": "https://algovault.com/#organization" }
 }

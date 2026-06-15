@@ -135,9 +135,12 @@ test('Product schema has populated numerical fields (no {{placeholder}} leakage)
   assert.ok(body, 'Product block not found on index.html');
   assert.doesNotMatch(body, /\{\{[^}]+\}\}/, 'Product block contains unresolved {{placeholders}}');
   const parsed = JSON.parse(body);
-  assert.ok(parsed.aggregateRating, 'Product.aggregateRating missing');
-  assert.match(String(parsed.aggregateRating.ratingValue), /^\d+(\.\d+)?$/, `ratingValue not numeric: ${parsed.aggregateRating.ratingValue}`);
-  assert.match(String(parsed.aggregateRating.ratingCount), /^\d+$/, `ratingCount not numeric: ${parsed.aggregateRating.ratingCount}`);
+  // OPS-JSONLD-AGGREGATERATING: the synthetic aggregateRating (PFE WR cast as a star
+  // rating) was removed per Google's structured-data policy — ratings must come from
+  // genuine user reviews. A real aggregateRating may return once G2 reviews accrue.
+  assert.ok(!parsed.aggregateRating, 'synthetic Product.aggregateRating must be absent (real reviews only)');
+  const pfe = (parsed.additionalProperty || []).find((p) => /PFE win rate/i.test(p.name));
+  assert.ok(pfe && /^\d+(\.\d+)?%$/.test(pfe.value), `Product PFE win rate not populated: ${pfe && pfe.value}`);
 });
 
 test('no LITERAL/TODO/DEBUG comment leakage in any landing/*.html', async () => {

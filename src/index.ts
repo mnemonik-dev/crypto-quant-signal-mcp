@@ -2954,7 +2954,7 @@ tailwind.config = {
   </div>
   <!-- Cross-Venue Intelligence Callout -->
   <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.15);border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#c9d1d9">
-    <strong style="color:#58a6ff">Cross-Venue Intelligence</strong> &mdash; Signals are generated per exchange using native order books, funding rates, and OI data. The only MCP server analyzing 5 derivatives venues simultaneously.
+    <strong style="color:#58a6ff">Cross-Venue Intelligence</strong> &mdash; Trade calls are generated per exchange using native order books, funding rates, and OI data. The only MCP server analyzing 5 derivatives venues simultaneously.
   </div>
   <!-- On-Chain Verification Badge -->
   <div class="onchain-badge" id="onchain-badge" style="display:none">
