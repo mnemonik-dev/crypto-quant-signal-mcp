@@ -41,7 +41,21 @@ export interface SourceCitation {
   rank: number;
 }
 
-const ALGOVAULT_DOMAIN_MARK = 'algovault';
+/**
+ * Exact ownership test for a citation hostname — `algovault.com` and any of
+ * its subdomains, NOT a bare "algovault" substring. The look-alikes
+ * `algovault.io`, `algovaults.com`, `algovaultai.com` (+ `newsletter.`) and
+ * `algovaultstrategies.com` all CONTAIN "algovault" but are NOT ours; the old
+ * `domain.includes('algovault')` substring mis-attributed their citations to
+ * AlgoVault, polluting the trusted-domain list + the momentum verdict
+ * (INVESTIGATE-LOOKALIKE-DOMAINS-W1). Exported so the GEO-AUTOPILOT look-alike
+ * watch derives ownership from this ONE predicate (single-derivation — the
+ * cite path and the attribution path cannot drift apart).
+ */
+export function isOwnHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, ''); // tolerate FQDN trailing dot
+  return h === 'algovault.com' || h.endsWith('.algovault.com');
+}
 
 /** Best-effort hostname from a URL; falls back to a lenient regex, else ''. */
 function domainOf(url: string): string {
@@ -90,7 +104,7 @@ export const SAFE_DEFAULTS: GeoMentions = {
 /** Deterministic: did the engine cite an algovault.com URL? Independent of the LLM judge. */
 function deriveCited(citations: Citation[]): { cited: boolean; cited_url: string | null } {
   for (const c of citations) {
-    if (c.url && domainOf(c.url).includes(ALGOVAULT_DOMAIN_MARK)) {
+    if (c.url && isOwnHost(domainOf(c.url))) {
       return { cited: true, cited_url: c.url };
     }
   }
@@ -193,7 +207,7 @@ export function mapSourceCitations(query: GeoQuery, citations: Citation[]): Sour
     const haystack = `${domain} ${c.url}`.toLowerCase();
     let attributed_to: SourceCitation['attributed_to'] = 'neutral';
     let competitor_name: string | null = null;
-    if (domain.includes(ALGOVAULT_DOMAIN_MARK)) {
+    if (isOwnHost(domain)) {
       attributed_to = 'algovault';
     } else {
       const hit = terms.find((t) => haystack.includes(t.toLowerCase()));

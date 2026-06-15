@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { LLMProvider, LLMCompletion, Citation } from '../../src/lib/llm-provider.js';
-import { extractMentions, mapSourceCitations } from '../../src/lib/geo-extractor.js';
+import { extractMentions, mapSourceCitations, isOwnHost } from '../../src/lib/geo-extractor.js';
 import type { GeoQuery, GeoQueryResult } from '../../src/lib/geo-orchestrator.js';
 
 const Q: GeoQuery = {
@@ -185,5 +185,70 @@ describe('geo-extractor: mapSourceCitations (source-citation map)', () => {
     const mapped = mapSourceCitations(Q, [{ url: '' }, { url: 'https://algovault.com' }] as Citation[]);
     expect(mapped).toHaveLength(1);
     expect(mapped[0].attributed_to).toBe('algovault');
+  });
+});
+
+describe('geo-extractor: look-alike domains are NOT attributed to AlgoVault (INVESTIGATE-LOOKALIKE-DOMAINS-W1)', () => {
+  // algovault.io / algovaults.com / algovaultai.com (+ newsletter.) / algovaultstrategies.com
+  // all CONTAIN the substring "algovault" but are NOT ours — a bare substring match
+  // mis-tagged their citations as trusted and inflated the weekly momentum verdict.
+  it('mapSourceCitations tags every look-alike neutral; only the real apex is algovault', () => {
+    const cites: Citation[] = [
+      { url: 'https://algovault.com/track-record' }, // ours
+      { url: 'https://algovaults.com/' }, // MT5 Gold-EA look-alike
+      { url: 'https://www.algovaultstrategies.com/' }, // TradingView-strategy look-alike
+      { url: 'https://newsletter.algovaultai.com/' }, // creator-newsletter look-alike
+      { url: 'https://algovault.io/' }, // digital-agency look-alike
+    ];
+    const by: Record<string, string> = {};
+    for (const m of mapSourceCitations(Q, cites)) by[m.source_domain] = m.attributed_to;
+    expect(by['algovault.com']).toBe('algovault');
+    expect(by['algovaults.com']).toBe('neutral');
+    expect(by['www.algovaultstrategies.com']).toBe('neutral');
+    expect(by['newsletter.algovaultai.com']).toBe('neutral');
+    expect(by['algovault.io']).toBe('neutral');
+  });
+
+  it('deriveCited (via extractMentions) does NOT set cited for a look-alike-only citation set', async () => {
+    const provider = new CannedProvider(() => {
+      throw new Error('LLM down');
+    });
+    const m = await extractMentions(provider, Q, RESULT, [
+      { url: 'https://algovaults.com/pricing' },
+      { url: 'https://www.algovaultstrategies.com/' },
+    ]);
+    expect(m.cited).toBe(false);
+    expect(m.cited_url).toBeNull();
+  });
+
+  it('still attributes the real apex + subdomains to AlgoVault (no over-correction)', async () => {
+    const provider = new CannedProvider(() => {
+      throw new Error('LLM down');
+    });
+    const m = await extractMentions(provider, Q, RESULT, [
+      { url: 'https://algovaults.com/x' }, // look-alike first
+      { url: 'https://docs.algovault.com/guide' }, // our subdomain
+    ]);
+    expect(m.cited).toBe(true);
+    expect(m.cited_url).toBe('https://docs.algovault.com/guide');
+  });
+});
+
+describe('geo-extractor: isOwnHost — exact ownership, not substring', () => {
+  it('accepts the apex and any algovault.com subdomain', () => {
+    expect(isOwnHost('algovault.com')).toBe(true);
+    expect(isOwnHost('www.algovault.com')).toBe(true);
+    expect(isOwnHost('docs.algovault.com')).toBe(true);
+    expect(isOwnHost('ALGOVAULT.COM')).toBe(true); // case-insensitive
+    expect(isOwnHost('algovault.com.')).toBe(true); // FQDN trailing dot
+  });
+  it('rejects look-alikes and prefix/suffix spoofs that merely contain "algovault"', () => {
+    expect(isOwnHost('algovault.io')).toBe(false);
+    expect(isOwnHost('algovaults.com')).toBe(false);
+    expect(isOwnHost('algovaultai.com')).toBe(false);
+    expect(isOwnHost('newsletter.algovaultai.com')).toBe(false);
+    expect(isOwnHost('www.algovaultstrategies.com')).toBe(false);
+    expect(isOwnHost('evil-algovault.com')).toBe(false); // prefix spoof
+    expect(isOwnHost('algovault.com.evil.example')).toBe(false); // suffix spoof
   });
 });
