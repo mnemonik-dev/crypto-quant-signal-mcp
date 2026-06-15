@@ -39,6 +39,14 @@ Answer-shaped guides for the most-asked AI-agent crypto-trading questions.
 - [AlgoVault vs raw-indicator tools](https://algovault.com/algovault-vs-raw-indicator-tools): one composite verdict versus eight raw indicators.
 - [Build vs buy a trading model](https://algovault.com/build-vs-buy-trading-model): train your own, or call a maintained, verifiable model.
 - [Single-venue MCP vs cross-venue composite](https://algovault.com/single-venue-vs-cross-venue-mcp): orchestrate single-venue MCPs, or call one composite.
+- [Trade-call tools for a CrewAI crypto agent](https://algovault.com/crewai-crypto-trade-call-tools): register get_trade_call as a CrewAI tool for one composite verdict.
+- [Crypto trade calls for a LangChain agent](https://algovault.com/langchain-crypto-trade-calls): bind get_trade_call and get_market_regime as LangChain tools.
+- [LlamaIndex quant trading research stack](https://algovault.com/llamaindex-quant-trading-stack): query verified calls instead of training your own model.
+- [Composite cross-exchange trade calls](https://algovault.com/composite-cross-exchange-trade-calls): one verdict across venues, not eight raw indicators.
+- [Cross-venue funding-rate arbitrage for agents](https://algovault.com/cross-venue-funding-rate-arbitrage): scan_funding_arb returns the top cross-venue spreads.
+- [Crypto market-regime detection API](https://algovault.com/crypto-market-regime-detection-api): get_market_regime returns the regime label an agent conditions on.
+- [Crypto signal providers with verifiable track records](https://algovault.com/crypto-signal-providers-verifiable-track-record): a record you check on-chain, not a screenshot.
+- [Crypto trade-call API for AI agents](https://algovault.com/crypto-trade-call-api-for-ai-agents): MCP-native, one composite verdict per call, HOLD-free metering.
 
 ## Integrations (Brain + Execution pairings)
 

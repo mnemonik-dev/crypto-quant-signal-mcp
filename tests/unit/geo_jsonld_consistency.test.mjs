@@ -52,6 +52,11 @@ const GEO_CONTENT_SLUGS = new Set([
   'build-crypto-trading-agent-python.html', 'claude-crypto-trading-stack.html',
   'trade-calls-for-python-backtesting.html', 'algovault-vs-raw-indicator-tools.html',
   'build-vs-buy-trading-model.html', 'single-venue-vs-cross-venue-mcp.html',
+  // GEO-CONTENT-W2
+  'crewai-crypto-trade-call-tools.html', 'langchain-crypto-trade-calls.html',
+  'llamaindex-quant-trading-stack.html', 'composite-cross-exchange-trade-calls.html',
+  'cross-venue-funding-rate-arbitrage.html', 'crypto-market-regime-detection-api.html',
+  'crypto-signal-providers-verifiable-track-record.html', 'crypto-trade-call-api-for-ai-agents.html',
 ]);
 const managedPages = (files) => files.filter((f) => !GEO_CONTENT_SLUGS.has(f));
 

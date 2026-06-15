@@ -88,6 +88,15 @@ const FILES_TO_SKIP = new Set([
   'algovault-vs-raw-indicator-tools.html',
   'build-vs-buy-trading-model.html',
   'single-venue-vs-cross-venue-mcp.html',
+  // GEO-CONTENT-W2 — 8 niche/knowledge answer pages (same treatment)
+  'crewai-crypto-trade-call-tools.html',
+  'langchain-crypto-trade-calls.html',
+  'llamaindex-quant-trading-stack.html',
+  'composite-cross-exchange-trade-calls.html',
+  'cross-venue-funding-rate-arbitrage.html',
+  'crypto-market-regime-detection-api.html',
+  'crypto-signal-providers-verifiable-track-record.html',
+  'crypto-trade-call-api-for-ai-agents.html',
 ]);
 
 async function fetchLiveData() {
