@@ -129,11 +129,13 @@ test('Q-W11+Q-W14: data-tr-field proxy spans for live-bound counters', async () 
   const html = await read('landing/index.html');
   // Q-W11 LiveTrackRecord 3 LIVE stats. Mr.1 fix-forward 2026-05-11: % moved INSIDE span
   // (was outside, causing double-% from setField formatted "90.2%" string).
-  assert.match(html, /data-tr-field="pfe_wr">90\.2%</, 'pfe_wr live-bound (LiveTrackRecord LIVE; % inside span)');
-  assert.match(html, /data-tr-field="call_count">80,059</, 'call_count live-bound (LiveTrackRecord LIVE)');
-  assert.match(html, /data-tr-field="merkle_batch_count">29</, 'merkle_batch_count live-bound (LiveTrackRecord LIVE)');
+  // Shape-based (CLAUDE.md: naturally-drifting values use shape regex, not frozen literals).
+  // Asserts the live-bound span + fallback SHAPE (% inside span for rates), not exact numbers.
+  assert.match(html, /data-tr-field="pfe_wr">[\d.]+%</, 'pfe_wr live-bound (LiveTrackRecord LIVE; % inside span)');
+  assert.match(html, /data-tr-field="call_count">[\d,]+</, 'call_count live-bound (LiveTrackRecord LIVE)');
+  assert.match(html, /data-tr-field="merkle_batch_count">\d+</, 'merkle_batch_count live-bound (LiveTrackRecord LIVE)');
   // Q-W14 SimplePricing tagline live-bind
-  assert.match(html, /data-tr-field="hold_rate">98\.8%</, 'hold_rate live-bound (SimplePricing tagline; % inside span per Mr.1 fix-forward 2026-05-11)');
+  assert.match(html, /data-tr-field="hold_rate">[\d.]+%</, 'hold_rate live-bound (SimplePricing tagline; % inside span)');
 });
 
 test('Q-W13: UseCases meta dates STRIPPED', async () => {

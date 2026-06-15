@@ -99,7 +99,9 @@ test('landing/verify.html: C2 W4 form preservation — verifySignal + #signal-id
 
 test('landing/verify.html: C2 W4 endpoint integration preserved — /api/verify-signal + URL-param auto-lookup', async () => {
   const html = await read('landing/verify.html');
-  assert.ok(html.includes("'/api/verify-signal?signalId='"), '/api/verify-signal fetch call missing');
+  // WEBHOOK-HARDENING-W1 C3 refactored the fetch to `'/api/verify-signal?' + qp`, where qp is
+  // `hash=…` (0x… webhook verify_url form) or `signalId=…`. Endpoint + param lookup preserved.
+  assert.ok(html.includes("'/api/verify-signal?'"), '/api/verify-signal fetch call missing');
   assert.ok(html.includes("params.get('signalId')") || html.includes('params.get(\'id\')'), 'URL-param auto-lookup handler missing');
   assert.ok(html.includes('fmtDate'), 'fmtDate helper missing');
   assert.ok(html.includes('truncHash'), 'truncHash helper missing');

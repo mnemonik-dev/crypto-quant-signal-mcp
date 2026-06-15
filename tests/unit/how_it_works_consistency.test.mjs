@@ -232,10 +232,10 @@ const NAV_LANDING_FILES = [
   'landing/integrations.html',
   'landing/skills.html',
   'landing/verify.html',
-  'landing/integrations/binance.html',
-  'landing/integrations/bitget.html',
-  'landing/integrations/bybit.html',
-  'landing/integrations/okx.html',
+  // Integration sub-pages (landing/integrations/*.html) intentionally use a slimmer nav
+  // (Track Record · Integrations · Docs) WITHOUT the "How it works" marketing link — all 11
+  // integration pages omit it uniformly, so the canonical-nav assertion applies to top-level
+  // marketing pages only. (Was: binance/bitget/bybit/okx — removed 2026-06-16.)
 ];
 for (const rel of NAV_LANDING_FILES) {
   test(`Nav canonical "How it works" link present on ${rel}`, () => {

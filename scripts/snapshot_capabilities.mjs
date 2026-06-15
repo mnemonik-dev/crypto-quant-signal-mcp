@@ -102,9 +102,14 @@ function rewriteCountersInString(s, valueMap, counter) {
     counter.replacedCount += 1;
     return `${valueMap.exchange_count}${suffix}`;
   });
-  next = next.replace(/\b(\d+)\+( assets?)\b/g, (_m, _d, suffix) => {
-    counter.replacedCount += 1;
-    return `${valueMap.asset_count_floored}+${suffix}`;
+  // FLOOR counter is monotonic-grow: never downgrade a published count already
+  // at/above the floor (e.g. live-sourced 740+ must NOT regress to the conservative
+  // fallback floor 710+). Only rewrite UP. (CLAUDE.md Data Integrity — FLOOR fires on
+  // SoT regression, it does not auto-reduce public counts.)
+  next = next.replace(/\b(\d+)\+( assets?)\b/g, (_m, d, suffix) => {
+    const kept = Math.max(Number(d), Number(valueMap.asset_count_floored));
+    if (kept !== Number(d)) counter.replacedCount += 1;
+    return `${kept}+${suffix}`;
   });
   next = next.replace(/\b(\d+)( timeframes?)\b/g, (_m, _d, suffix) => {
     counter.replacedCount += 1;
@@ -142,9 +147,11 @@ function rewriteTableCells(content, valueMap, counter) {
         return `${p1}${valueMap.exchange_count}`;
       });
     } else if (/\|\s*Assets?\s*\|/i.test(line)) {
-      next = next.replace(/(\|\s*All\s+)(\d+)\+(?=\s*\|)/g, (_m, p1) => {
-        counter.replacedCount += 1;
-        return `${p1}${valueMap.asset_count_floored}+`;
+      // Monotonic FLOOR: keep the higher of published vs floor (never downgrade).
+      next = next.replace(/(\|\s*All\s+)(\d+)\+(?=\s*\|)/g, (_m, p1, d) => {
+        const kept = Math.max(Number(d), Number(valueMap.asset_count_floored));
+        if (kept !== Number(d)) counter.replacedCount += 1;
+        return `${p1}${kept}+`;
       });
     } else if (/\|\s*Timeframes?\s*\|/i.test(line)) {
       next = next.replace(/(\|\s*All\s+)(\d+)(?=\s*\|)/g, (_m, p1) => {

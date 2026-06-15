@@ -52,8 +52,11 @@ test('/account: Q-W10-1 + Q-W10-8 — canonical Nav present (actual class string
   assert.ok(countOcc(src, '<nav class="fixed top-0 w-full z-50 border-b border-white/5"') >= 1,
     'canonical Nav opening tag missing or wrong class string');
   assert.ok(countOcc(src, 'AlgoVault Labs') >= 1, 'brand-mark "AlgoVault Labs" span missing');
-  assert.ok(src.includes('href="/track-record"'), 'Track Record link missing');
-  assert.ok(src.includes('href="/integrations"'), 'Integrations link missing');
+  // /account is served on api.algovault.com → cross-subdomain links are ABSOLUTE by design
+  // (a relative "/track-record" would resolve to api.algovault.com and 404). Assert the
+  // canonical absolute form the handler correctly emits.
+  assert.ok(src.includes('href="https://algovault.com/track-record"'), 'Track Record link missing');
+  assert.ok(src.includes('href="https://algovault.com/integrations"'), 'Integrations link missing');
   assert.ok(src.includes('href="https://api.algovault.com/account"'), 'Account link missing');
   assert.ok(src.includes('href="https://api.algovault.com/signup"'), 'Signup link missing');
 });
@@ -117,7 +120,7 @@ test('/account: canonical Footer (verbatim from live algovault.com desktop varia
   assert.ok(src.includes('Built by AlgoVault Labs'), 'Footer brand-mark missing');
   assert.ok(src.includes('href="https://github.com/AlgoVaultLabs"'), 'Footer GitHub link missing');
   assert.ok(src.includes('href="https://x.com/AlgoVaultLabs"'), 'Footer X / Twitter link missing');
-  assert.ok(src.includes('href="/privacy"'), 'Footer Privacy link missing');
+  assert.ok(src.includes('href="https://algovault.com/privacy"'), 'Footer Privacy link missing'); // absolute: /account is cross-subdomain (api.algovault.com)
 });
 
 // ── /account preservation-LAW ───────────────────────────────────────────────

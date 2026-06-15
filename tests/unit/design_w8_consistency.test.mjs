@@ -46,10 +46,10 @@ test('src/index.ts: W8 Q-W8-1 LATEST TRADE CALLS 8-col table from cachedData.rec
   assert.match(dash, /<th>Time<\/th>/, 'col 2: Time');
   assert.match(dash, /<th>Tier<\/th>/, 'col 3: Tier');
   assert.match(dash, /<th>Asset<\/th>/, 'col 4: Asset');
-  assert.match(dash, /<th>Call<\/th>/, 'col 5: Call');
-  assert.match(dash, /<th class="num">Confidence<\/th>/, 'col 6: Confidence');
-  assert.match(dash, /<th class="num">Timeframe<\/th>/, 'col 7: Timeframe');
-  assert.match(dash, /<th>Exchange<\/th>/, 'col 8: Exchange');
+  // DESIGN-W11-FF3 (2026-05-14) redesigned this to a 6-col even-distribution table
+  // (Call + Confidence columns removed). Headers now: ID·Time·Tier·Asset·Timeframe·Exchange.
+  assert.match(dash, /<th class="num">Timeframe<\/th>/, 'col 5: Timeframe');
+  assert.match(dash, /<th>Exchange<\/th>/, 'col 6: Exchange');
   // Hydration target
   assert.match(dash, /id="tr-recent-calls-tbody"/, 'tbody#tr-recent-calls-tbody');
   // Per-row deep-link to /verify?signalId=<id>
@@ -142,13 +142,13 @@ test('src/index.ts: W8 preservation-LAW — W3/W4/W6 deliverables intact', async
   for (const ex of ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']) {
     assert.ok(dash.includes(`id="exchange-stat-card-${ex}"`), `W4 exchange-stat-card-${ex} preserved`);
   }
-  // W4 C3 + W8-FIX (2026-05-11): 8 tf-bar-row entries (1m/3m/1d trimmed)
-  for (const tf of ['5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h']) {
-    assert.ok(dash.includes(`data-tf="${tf}"`), `W4 tf-bar-row data-tf="${tf}" preserved`);
+  // Current tf-bar set (3m re-added post-W8; 1m/1d remain trimmed). 9 rows: 3m–12h.
+  for (const tf of ['3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h']) {
+    assert.ok(dash.includes(`data-tf="${tf}"`), `tf-bar-row data-tf="${tf}" present`);
   }
   // Trimmed TFs MUST be absent from bar chart
-  for (const tf of ['1m', '3m', '1d']) {
-    assert.ok(!dash.includes(`data-tf="${tf}"`), `W8-FIX: tf-bar-row data-tf="${tf}" trimmed`);
+  for (const tf of ['1m', '1d']) {
+    assert.ok(!dash.includes(`data-tf="${tf}"`), `tf-bar-row data-tf="${tf}" trimmed`);
   }
   // W4 panel wrapper preserved
   assert.match(dash, /id="tr-recent-calls-panel"/, 'tr-recent-calls-panel wrapper preserved');
@@ -211,9 +211,9 @@ test('src/index.ts: W8-FIX Latest Trade Calls 8-col proportional widths', async 
   const dash = dashboardFn(ts);
   // Override global table max-width:800px for recent-table
   assert.match(dash, /\.recent-table \{[^}]*max-width:\s*none/, 'recent-table max-width: none override');
-  // Each column gets percentage width (proportional distribution)
-  assert.match(dash, /\.recent-table th:nth-child\(1\),[^{]+\{ width: 15%/, 'col 1 width: 15%');
-  assert.match(dash, /\.recent-table th:nth-child\(8\),[^{]+\{ width: 15%/, 'col 8 width: 15%');
+  // DESIGN-W11-FF3: 6-col even distribution (16.66% each); was 8-col @ 15%.
+  assert.match(dash, /\.recent-table th:nth-child\(1\),[^{]+\{ width: 16\.66%/, 'col 1 width: 16.66%');
+  assert.match(dash, /\.recent-table th:nth-child\(6\),[^{]+\{ width: 16\.66%/, 'col 6 width: 16.66%');
 });
 
 test('src/index.ts + algovault-design.css: W8-FIX card backgrounds unified to tier-stat-card reference', async () => {
