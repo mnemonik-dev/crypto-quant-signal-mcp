@@ -43,9 +43,21 @@ function findManagedBlock(html, name) {
   return m ? m[1] : null;
 }
 
+// GEO-CONTENT-W1: answer/comparison pages carry their OWN JSON-LD (Article/TechArticle +
+// FAQPage + Organization @id ref via the Article publisher) and are FILES_TO_SKIP'd from
+// generate_jsonld, so they do NOT carry the 5 managed marketing blocks. Their JSON-LD is
+// guarded by tests/unit/geo_answer_page_invariants.test.mjs instead — exempt them here.
+const GEO_CONTENT_SLUGS = new Set([
+  'best-mcp-servers-crypto-trading.html', 'ai-agents-crypto-trade-calls.html',
+  'build-crypto-trading-agent-python.html', 'claude-crypto-trading-stack.html',
+  'trade-calls-for-python-backtesting.html', 'algovault-vs-raw-indicator-tools.html',
+  'build-vs-buy-trading-model.html', 'single-venue-vs-cross-venue-mcp.html',
+]);
+const managedPages = (files) => files.filter((f) => !GEO_CONTENT_SLUGS.has(f));
+
 test('every landing/*.html contains Product + Organization + WebSite JSON-LD', async () => {
-  const files = await listLandingHtml();
-  assert.ok(files.length >= 5, `expected >= 5 landing/*.html files, got ${files.length}`);
+  const files = managedPages(await listLandingHtml());
+  assert.ok(files.length >= 5, `expected >= 5 managed landing/*.html files, got ${files.length}`);
   for (const f of files) {
     const html = await readHtml(f);
     for (const required of REQUIRED_EVERY_PAGE) {
@@ -57,7 +69,7 @@ test('every landing/*.html contains Product + Organization + WebSite JSON-LD', a
 });
 
 test('every page also has Service + SoftwareApplication blocks (5 total managed)', async () => {
-  const files = await listLandingHtml();
+  const files = managedPages(await listLandingHtml());
   for (const f of files) {
     const html = await readHtml(f);
     for (const name of ['Service', 'SoftwareApplication']) {
@@ -86,7 +98,7 @@ test('homepage index.html serves the FULL Organization node (@id + sameAs + name
 });
 
 test('every non-homepage landing page references Organization by @id only (single canonical node)', async () => {
-  const files = (await listLandingHtml()).filter(f => f !== 'index.html');
+  const files = managedPages(await listLandingHtml()).filter(f => f !== 'index.html');
   assert.ok(files.length >= 4, `expected several non-homepage pages, got ${files.length}`);
   for (const f of files) {
     const body = findManagedBlock(await readHtml(f), 'Organization');

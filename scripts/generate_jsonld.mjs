@@ -76,7 +76,18 @@ const TEMPLATES = [
 const MANAGED_NAMES = TEMPLATES.map(t => t.name);
 
 const FILES_TO_SKIP = new Set([
-  // (none currently — all landing/*.html get the 5-block scaffold)
+  // GEO-CONTENT-W1: answer/comparison pages carry their OWN inline JSON-LD
+  // (Article/TechArticle + FAQPage + Organization @id ref) and must NOT receive the
+  // 5 managed marketing blocks (Product/Service/SoftwareApplication/WebSite). Skipping
+  // them keeps their schema = exactly the allowed answer-page types (Build Rule 6).
+  'best-mcp-servers-crypto-trading.html',
+  'ai-agents-crypto-trade-calls.html',
+  'build-crypto-trading-agent-python.html',
+  'claude-crypto-trading-stack.html',
+  'trade-calls-for-python-backtesting.html',
+  'algovault-vs-raw-indicator-tools.html',
+  'build-vs-buy-trading-model.html',
+  'single-venue-vs-cross-venue-mcp.html',
 ]);
 
 async function fetchLiveData() {
