@@ -29,6 +29,7 @@ import {
 import { computeGapList } from '../lib/geo-gap-list.js';
 import { scoreWeek, renderDecisionBrief, loadObjective, type GapLike, type RankedDecision } from '../lib/geo-decide.js';
 import { buildEligibilityReport, type CitationRow } from '../lib/geo-eligibility.js';
+import { isOwnHost } from '../lib/geo-extractor.js';
 import { recordGeoDecision } from '../lib/geo-storage.js';
 
 const TIER_DISPLAY: Record<string, string> = {
@@ -305,7 +306,10 @@ async function fetchDigestData(): Promise<{
     momentumDeltas: {
       citationsThisWeek: num(dr.cit_this),
       citationsLastWeek: num(dr.cit_last),
-      newTrustedDomains: newDomainRows.map((r) => r.source_domain),
+      // Single-derivation with the look-alike watch: only genuinely-OWN hosts count as
+      // "trusted", never the (frozen pre-fix-polluted) attributed_to='algovault' column —
+      // so look-alikes flagged SUSPECT in the handoff can't also show as "trusted ✅" here.
+      newTrustedDomains: newDomainRows.map((r) => r.source_domain).filter(isOwnHost),
       sovThisWeek: num(dr.sov_this),
       sovLastWeek: num(dr.sov_last),
       mentionRateThisWeek: num(dr.mention_this),
