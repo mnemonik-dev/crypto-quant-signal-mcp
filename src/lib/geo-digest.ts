@@ -278,6 +278,14 @@ export interface GeoDigestData {
   indexPresence: IndexPresence;
   /** GEO-AUTOPILOT-W1 — the scored decision handoff; when set it REPLACES the ONE MOVE line. */
   decision?: DecisionHandoff | null;
+  /**
+   * GEO-AUTOPILOT-W1 fast-follow (2026-06-16) — eligibility is INDEX status, GSC-authoritative,
+   * NOT the presence probe. `eligibilityNotIndexed` = substrates genuinely not indexed (the ONLY
+   * 🔴 hard-banner trigger). `citationGapEngines` = engines indexed ✓ but un-retrieved (a soft
+   * authority-gap note, never a re-crawl alarm — indexed != cited).
+   */
+  eligibilityNotIndexed?: string[];
+  citationGapEngines?: string[];
 }
 
 /**
@@ -297,18 +305,26 @@ export function buildDigest(data: GeoDigestData): string[] {
   L.push('');
   L.push(`${m.emoji} *${m.headline}*`);
 
-  // R5 — index presence is a LEADING, fix-now signal, DISTINCT from the authority
-  // verdict above: a ✗ substrate means 0% there reads "not indexed", not "not
-  // authoritative". Surfaced as a 🔴 banner right under the header when blocked.
-  if (ip.blocked) {
+  // GEO-AUTOPILOT-W1 fast-follow (2026-06-16): eligibility = INDEX status, GSC-authoritative.
+  // The 🔴 hard banner fires ONLY on an authoritatively NOT-INDEXED substrate (objective.
+  // eligibility) — NOT on the LLM presence probe, which measures CITATION/retrieval and once
+  // lagged a parking-snapshot cache → false "gemini not indexed". An indexed-but-un-retrieved
+  // engine is a citation/authority gap, surfaced soft in WHAT MOVED below.
+  const notIndexed = data.eligibilityNotIndexed ?? [];
+  if (notIndexed.length > 0) {
     L.push('');
-    L.push(`🔴 *BLOCKED ELIGIBILITY* — not indexed on ${ip.missing.join(', ')}. Fix the re-crawl before chasing authority.`);
+    L.push(`🔴 *BLOCKED ELIGIBILITY* — not indexed on ${notIndexed.join(', ')}. Fix the re-crawl before chasing authority.`);
   }
 
   // WHAT MOVED — leading indicators first
   L.push('');
   L.push('*WHAT MOVED* (vs last week)');
-  L.push(`• Index presence: ${ip.line}`);
+  L.push(`• Cited by engine: ${ip.line}`);
+  // INDEXED != CITED — a ✗ above means "not yet cited" (authority gap), NOT "not indexed".
+  const citationGaps = (data.citationGapEngines ?? []).filter((e) => !notIndexed.includes(e));
+  if (citationGaps.length > 0) {
+    L.push(`  ⓘ ${citationGaps.join(', ')}: indexed ✓ but not yet citing us — authority/content gap, not a re-crawl.`);
+  }
   const citArrow =
     d.citationsThisWeek > d.citationsLastWeek
       ? `↑ from ${d.citationsLastWeek}`

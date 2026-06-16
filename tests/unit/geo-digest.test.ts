@@ -178,7 +178,7 @@ describe('buildDigest', () => {
     expect(out).toContain('Get AlgoVault a placement/answer on mcp.so');
     expect(out).toContain('Full numbers ↗ https://api.algovault.com/admin/geo-dashboard?key=<admin-key>');
     // R5 — index-presence line present; all ✓ → no blocked banner
-    expect(out).toContain('Index presence: chatgpt ✓ (Bing) · claude ✓ (Brave) · gemini ✓ (Google) · perplexity ✓');
+    expect(out).toContain('Cited by engine: chatgpt ✓ (Bing) · claude ✓ (Brave) · gemini ✓ (Google) · perplexity ✓');
     expect(out).not.toContain('BLOCKED ELIGIBILITY');
   });
 
@@ -208,25 +208,34 @@ describe('buildDigest', () => {
     expect(out).toContain('every query is OPEN');
     expect(out).toContain('No move queued');
     // R5 — index presence graceful pre-first-probe, no banner
-    expect(out).toContain('Index presence: no data yet — first probe Mon');
+    expect(out).toContain('Cited by engine: no data yet — first probe Mon');
     expect(out).not.toContain('BLOCKED ELIGIBILITY');
   });
 
-  it('R5: a ✗ substrate surfaces the leading 🔴 BLOCKED ELIGIBILITY banner', () => {
-    const blocked: GeoDigestData = {
+  it('R5 (fast-follow): an AUTHORITATIVE notIndexed substrate fires the 🔴 BLOCKED ELIGIBILITY banner', () => {
+    const blocked: GeoDigestData = { ...data, eligibilityNotIndexed: ['gemini'] };
+    const out = buildDigest(blocked).join('\n');
+    expect(out).toContain('🔴 *BLOCKED ELIGIBILITY* — not indexed on gemini.');
+    expect(out).toContain('🟢 *GAINING'); // distinct from the authority verdict
+  });
+
+  it('R5 (fast-follow): a presence MISS while INDEXED is a soft citation gap, NOT the red banner', () => {
+    // INDEXED != CITED — claude not retrieved this week but IS indexed (absent from
+    // eligibilityNotIndexed) → no re-crawl alarm, just the soft authority-gap note.
+    const citationGap: GeoDigestData = {
       ...data,
       indexPresence: computeIndexPresence([
         { model: 'gpt-4.1-mini', present: true },
-        { model: 'claude-haiku-4-5-20251001', present: false }, // not indexed in Brave
+        { model: 'claude-haiku-4-5-20251001', present: false },
         { model: 'gemini-2.5-flash', present: true },
         { model: 'sonar', present: true },
       ]),
+      citationGapEngines: ['claude'],
     };
-    const out = buildDigest(blocked).join('\n');
-    expect(out).toContain('🔴 *BLOCKED ELIGIBILITY* — not indexed on claude.');
-    expect(out).toContain('chatgpt ✓ (Bing) · claude ✗ (Brave) · gemini ✓ (Google) · perplexity ✓');
-    // distinct from authority: the momentum verdict is still its own line
-    expect(out).toContain('🟢 *GAINING');
+    const out = buildDigest(citationGap).join('\n');
+    expect(out).not.toContain('BLOCKED ELIGIBILITY'); // the core correction
+    expect(out).toContain('claude: indexed ✓ but not yet citing us');
+    expect(out).toContain('chatgpt ✓ (Bing) · claude ✗ (Brave)'); // retrieval line still shows ✗
   });
 
   // GEO-AUTOPILOT-W1 (C3) — the scored decision handoff replaces the naive ONE MOVE.

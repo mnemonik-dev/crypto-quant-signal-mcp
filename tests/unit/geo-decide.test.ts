@@ -5,8 +5,11 @@
  * (eligibility → third-party → owned-content) and renders the decision brief.
  *
  * Invariants under test:
- *   - PRIORITY GATE IS HARD: a blocked-eligibility engine ALWAYS outranks any
- *     owned-content move, regardless of raw score (the central AC).
+ *   - PRIORITY GATE IS HARD: a genuinely NOT-INDEXED engine (GSC-authoritative, from
+ *     objective.eligibility.indexed_substrates) ALWAYS outranks any owned move (central AC).
+ *   - INDEXED != CITED (fast-follow 2026-06-16): a presence-probe miss while INDEXED is a
+ *     citation/authority gap (→ third_party/owned), NOT an eligibility block — the
+ *     eligibility tier fires ONLY from `notIndexed`, never from the LLM presence probe.
  *   - within the top unlocked tier, score = lift × revenue_proximity ×
  *     automatability ÷ effort, ordered desc; branded(0.8) > niche(0.6).
  *   - chosen move carries its drafted action spec when the objective maps it.
@@ -48,9 +51,9 @@ const OPEN_HEAD_GAP = {
 };
 
 describe('scoreWeek — HARD priority gate', () => {
-  it('a blocked-eligibility engine ALWAYS outranks any owned-content move', () => {
+  it('a genuinely NOT-INDEXED engine (GSC-authoritative) ALWAYS outranks any owned-content move', () => {
     const input: ScoreInput = {
-      eligibility: { blocked: true, missing: ['gemini'] },
+      eligibility: { notIndexed: ['gemini'] }, // a REAL index block (substrate absent from the GSC SoT)
       // a max-lift open head query would be a high-scoring owned move on its own…
       gaps: [OPEN_HEAD_GAP],
     };
@@ -67,7 +70,7 @@ describe('scoreWeek — HARD priority gate', () => {
 
   it('with no engine blocked, third-party leads and owned-content is gated below', () => {
     const input: ScoreInput = {
-      eligibility: { blocked: false, missing: [] },
+      eligibility: { notIndexed: [] },
       gaps: [
         { query_id: 'best-mcp-trading', query_tier: 'head', sov: 0.1, top_competitor: 'altfins', top_competitor_domain: 'altfins.com' },
         OPEN_HEAD_GAP, // owned-content tempter, same tier/lift
@@ -84,19 +87,35 @@ describe('scoreWeek — HARD priority gate', () => {
 
   it('with no eligibility block and no competitor, owned-content is the tier', () => {
     const input: ScoreInput = {
-      eligibility: { blocked: false, missing: [] },
+      eligibility: { notIndexed: [] },
       gaps: [OPEN_HEAD_GAP],
     };
     const d = scoreWeek(input, OBJ);
     expect(d.priority_tier).toBe('owned_content');
     expect(d.chosen?.tier).toBe('owned_content');
   });
+
+  it('REGRESSION (indexed != cited): un-retrieved-but-INDEXED engine → NOT eligibility, routes to authority work', () => {
+    // The live state the fast-follow corrects: GSC confirms algovault.com is indexed on ALL
+    // substrates (gemini/Google included) → notIndexed=[]. The presence probe showing gemini
+    // 0% retrieval is a CITATION gap, NOT an index block — it must NOT surface "fix re-crawl".
+    const d = scoreWeek(
+      {
+        eligibility: { notIndexed: [] }, // GSC-authoritative: everything indexed
+        gaps: [{ query_id: 'best-mcp-trading', query_tier: 'head', sov: 0.1, top_competitor: 'altfins', top_competitor_domain: 'altfins.com' }],
+      },
+      OBJ,
+    );
+    expect(d.priority_tier).not.toBe('eligibility'); // the core correction
+    expect(d.chosen?.tier).toBe('third_party');
+    expect(d.all.eligibility.length).toBe(0);
+  });
 });
 
 describe('scoreWeek — within-tier scoring', () => {
   it('orders by revenue_proximity at equal lift: head > branded > niche', () => {
     const input: ScoreInput = {
-      eligibility: { blocked: false, missing: [] },
+      eligibility: { notIndexed: [] },
       gaps: [
         { query_id: 'cross-venue-funding', query_tier: 'niche', sov: 0.2, top_competitor: 'coinglass', top_competitor_domain: 'coinglass.com' },
         { query_id: 'composite-quant-signal', query_tier: 'branded', sov: 0.2, top_competitor: 'messari', top_competitor_domain: 'messari.io' },
@@ -112,12 +131,12 @@ describe('scoreWeek — within-tier scoring', () => {
   });
 
   it('chosen move carries its drafted action spec when the objective maps it', () => {
-    const d = scoreWeek({ eligibility: { blocked: true, missing: ['gemini'] }, gaps: [] }, OBJ);
+    const d = scoreWeek({ eligibility: { notIndexed: ['gemini'] }, gaps: [] }, OBJ);
     expect(d.chosen?.known_action_spec).toBe('Prompt/fix-gemini-google-index-presence-w1.md');
   });
 
   it('empty week → no candidate, no throw', () => {
-    const d = scoreWeek({ eligibility: { blocked: false, missing: [] }, gaps: [] }, OBJ);
+    const d = scoreWeek({ eligibility: { notIndexed: [] }, gaps: [] }, OBJ);
     expect(d.chosen).toBeNull();
     expect(d.ranked).toEqual([]);
   });
@@ -126,7 +145,7 @@ describe('scoreWeek — within-tier scoring', () => {
 describe('renderDecisionBrief', () => {
   it('renders a valid brief with the move, candidate-action line, gap table, and research scope', () => {
     const input: ScoreInput = {
-      eligibility: { blocked: true, missing: ['gemini'] },
+      eligibility: { notIndexed: ['gemini'] },
       gaps: [{ query_id: 'best-mcp-trading', query_tier: 'head', sov: 0.1, top_competitor: 'altfins', top_competitor_domain: 'altfins.com' }],
     };
     const d = scoreWeek(input, OBJ);
@@ -141,7 +160,7 @@ describe('renderDecisionBrief', () => {
   });
 
   it('empty week renders a no-candidate brief without throwing', () => {
-    const d = scoreWeek({ eligibility: { blocked: false, missing: [] }, gaps: [] }, OBJ);
+    const d = scoreWeek({ eligibility: { notIndexed: [] }, gaps: [] }, OBJ);
     const md = renderDecisionBrief(d, [], 'Mon 22 Jun');
     expect(md).toContain('# GEO decision brief');
     expect(md.toLowerCase()).toMatch(/no (candidate|move)/);

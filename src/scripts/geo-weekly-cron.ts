@@ -271,10 +271,18 @@ async function fetchDigestData(): Promise<{
     cites: num(r.cites),
   }));
   const eligibilityReport = buildEligibilityReport(indexPresence, citations);
-  const ranked = scoreWeek(
-    { eligibility: { blocked: indexPresence.blocked, missing: indexPresence.missing }, gaps },
-    objective,
-  );
+  // GSC-AUTHORITATIVE index status (objective.eligibility), NOT the LLM presence probe.
+  // notIndexed = engines whose substrate is absent from indexed_substrates (a REAL re-crawl
+  // block). The presence-probe misses are CITATION gaps (indexed ✓ but un-retrieved) — an
+  // authority/content problem routed to third_party/owned, never an eligibility block.
+  // (Corrected 2026-06-16: GSC confirms algovault.com indexed on all substrates; the
+  // "gemini not indexed" signal was a stale site:-cache of the old parking snapshot.)
+  const indexedSubstrates = objective.eligibility?.indexed_substrates ?? ['Bing', 'Brave', 'Google', 'own'];
+  const notIndexed = eligibilityReport.engines
+    .filter((e) => e.substrate && !indexedSubstrates.includes(e.substrate))
+    .map((e) => e.engine);
+  const citationGapEngines = indexPresence.missing; // indexed ✓ but un-retrieved → authority gap
+  const ranked = scoreWeek({ eligibility: { notIndexed }, gaps }, objective);
   const brief = renderDecisionBrief(ranked, gaps, dateLabel());
   let handoff: DecisionHandoff | null = null;
   if (ranked.chosen && ranked.priority_tier) {
@@ -314,6 +322,8 @@ async function fetchDigestData(): Promise<{
     contested,
     topGap: topGapRows[0] ?? null,
     indexPresence,
+    eligibilityNotIndexed: notIndexed,
+    citationGapEngines,
     decision: handoff,
   };
 

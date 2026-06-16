@@ -7,9 +7,12 @@
  * This module only reads the objective SoT (landing/Prompt/geo-objective.yaml) and
  * turns the week's probe signals into a priority-gated ranked decision + a brief.
  *
- * The HARD priority gate is the whole point: a blocked-eligibility engine (0 citations
- * regardless of content) ALWAYS outranks third-party, which outranks owned-content —
- * so the loop never auto-spams owned pages (r≈0.19) over fixing a blocked engine.
+ * The HARD priority gate is the whole point: a genuinely NOT-INDEXED engine (GSC-authoritative
+ * — indexing is the only true blocker) ALWAYS outranks third-party, which outranks owned-content.
+ * INDEXED != CITED: an engine that IS indexed but doesn't cite us is an AUTHORITY gap (third_party
+ * + owned), NOT an eligibility block — the LLM presence probe measures citation, never indexing
+ * (it lagged + cached a parking snapshot → false "gemini not indexed"; corrected GEO-AUTOPILOT-W1
+ * fast-follow 2026-06-16). Eligibility is GSC-authoritative via objective.eligibility.indexed_substrates.
  */
 import * as yaml from 'js-yaml';
 import * as fs from 'node:fs';
@@ -33,6 +36,13 @@ export interface Objective {
   action_types: Record<PriorityTier, ActionType>;
   /** "<tier>:<engine-or-query_id>" -> drafted action-spec path (Q3 fast-path). */
   known_action_specs?: Record<string, string>;
+  /**
+   * GSC-authoritative index status — the engine retrieval SUBSTRATES we are indexed on
+   * (Bing/Brave/Google/own). An engine whose substrate is NOT listed here is genuinely
+   * not indexed (a real eligibility block). Default (absent) = all substrates indexed.
+   * This is the ONLY index signal — the LLM presence probe (citation) never sets it.
+   */
+  eligibility?: { indexed_substrates: string[] };
 }
 
 /** One per-query gap signal — a projection of geo-gap-list GapBrief / geo_mentions agg. */
@@ -46,8 +56,14 @@ export interface GapLike {
 
 /** The scorer's input — every field is derivable from the existing weekly probe. */
 export interface ScoreInput {
-  /** from computeIndexPresence (geo-digest.ts): engine substrates that haven't indexed us. */
-  eligibility: { blocked: boolean; missing: string[] };
+  /**
+   * Eligibility = INDEX/CRAWL status, GSC-AUTHORITATIVE. `notIndexed` = engines whose
+   * substrate is genuinely NOT indexed (a real re-crawl blocker; the cron derives it from
+   * objective.eligibility.indexed_substrates). An INDEXED-but-uncited engine is a
+   * CITATION/authority gap (→ third_party/owned), never an eligibility block — so the LLM
+   * retrieval-presence probe NEVER feeds this field (it measures citation, not indexing).
+   */
+  eligibility: { notIndexed: string[] };
   gaps: GapLike[];
 }
 
@@ -121,14 +137,16 @@ function revenueProximity(obj: Objective, tier: string): number {
 export function scoreWeek(input: ScoreInput, obj: Objective): RankedDecision {
   const all: Record<PriorityTier, Candidate[]> = { eligibility: [], third_party: [], owned_content: [] };
 
-  // ── eligibility tier: one candidate per blocked engine (maximal priority + lift) ──
+  // ── eligibility tier: one candidate per GENUINELY NOT-INDEXED engine (GSC-authoritative,
+  // NOT the LLM presence probe). Indexing is the only true blocker; an indexed-but-uncited
+  // engine is authority work, handled by the third_party/owned tiers — never here. ──
   const atE = obj.action_types.eligibility;
-  for (const engine of input.eligibility.missing ?? []) {
+  for (const engine of input.eligibility.notIndexed ?? []) {
     const key = `eligibility:${engine}`;
     all.eligibility.push({
       tier: 'eligibility',
       key,
-      label: `${engine} can't retrieve algovault.com — fix the re-crawl before any authority work`,
+      label: `${engine}'s substrate has NOT indexed algovault.com (GSC-authoritative) — fix the re-crawl/indexing before any authority work`,
       engine,
       expected_lift: 1.0, // unblocking an engine enables ALL citations on it
       revenue_proximity: 1.0,

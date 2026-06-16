@@ -23,6 +23,15 @@ priority_gate:
   - third_party
   - owned_content
 
+# Eligibility = index/crawl status — GSC-AUTHORITATIVE, NOT the LLM retrieval-presence probe
+# (which lagged + cached the old parking snapshot, falsely flagging gemini "not indexed").
+# algovault.com is indexed on all four substrates (GSC Domain-property DNS verification).
+# INDEXED != CITED: an engine citing us 0% while we ARE indexed is a CITATION/AUTHORITY problem
+# (-> third_party + owned_content), NOT an eligibility block. To assert a REAL index regression,
+# REMOVE a substrate below (re-verify in GSC, never the site: proxy) -> the gate fires tier-1.
+eligibility:
+  indexed_substrates: [Bing, Brave, Google, own]   # all four indexed (GSC-authoritative truth)
+
 # Revenue-proximity weight per query tier (keyed to landing/Prompt/geo-queries.yaml
 # tiers: head / niche / branded). AUTOPILOT = expected-VALUE weight (volume x buyer-
 # qualification). Branded queries (composite / agent-API / verifiable-track-record)
