@@ -25,7 +25,13 @@ export const GAP_SOURCE_COLUMN_VALUE = 'geo-gap';
 /** Default weekly injection cap (overridable via GEO_GAP_MAX_PER_WEEK). */
 export const DEFAULT_GAP_MAX_PER_WEEK = 1;
 
-/** Intent-tier ranking weight — head (high-volume discovery) gaps rank highest. */
+/**
+ * Intent-tier ranking weight — head (high-volume discovery) gaps rank highest.
+ * This is the editorial-pipeline COVERAGE weight. It INTENTIONALLY diverges from
+ * the autopilot expected-VALUE weight in landing/Prompt/geo-objective.yaml
+ * (`revenue_proximity` = {head:1.0, branded:0.8, niche:0.6}, read by geo-decide.ts).
+ * Two different jobs, two weights — not drift (GEO-AUTOPILOT-W1, architect 2026-06-16).
+ */
 export const TIER_WEIGHT: Record<string, number> = { head: 1.0, niche: 0.6, branded: 0.4 };
 
 export interface GapBrief {

@@ -94,6 +94,26 @@ export function ensureGeoSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_geo_source_citations_domain ON geo_source_citations (source_domain, ran_at);
     CREATE INDEX IF NOT EXISTS idx_geo_source_citations_query  ON geo_source_citations (query_id, ran_at);
 
+    -- GEO-AUTOPILOT-W1 (C3) — append-only weekly DECIDE ledger. One row per weekly
+    -- run: the priority-gated scored decision + the rendered brief Cowork materializes
+    -- into Prompt/geo-decision-<date>.md (the cross-host Postgres boundary). status
+    -- flips proposed -> approved -> executed -> measured across the loop (TEXT + CHECK,
+    -- not a PG enum — avoids ALTER TYPE). gap_ref loosely links a geo_content_gaps row.
+    -- Created at boot here (single multi-statement dbExec) so the Monday cron's
+    -- fire-and-forget INSERT never races a lazy CREATE.
+    CREATE TABLE IF NOT EXISTS geo_decisions (
+      id                BIGSERIAL PRIMARY KEY,
+      run_id            UUID,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+      priority_tier     TEXT,
+      ranked_candidates JSONB,
+      rendered_brief    TEXT,
+      chosen_move       TEXT,
+      status            TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','approved','executed','measured')),
+      gap_ref           BIGINT
+    );
+    CREATE INDEX IF NOT EXISTS idx_geo_decisions_created_at ON geo_decisions (created_at DESC);
+
     CREATE OR REPLACE VIEW geo_weekly_summary AS
     SELECT
       date_trunc('week', ran_at AT TIME ZONE 'UTC') AS week_utc,
@@ -239,6 +259,41 @@ export async function recordSourceCitations(
   } catch (err) {
     console.error(
       `[geo-storage] source-citation insert failed (silent recovery) run_id=${meta.run_id} query_id=${meta.query_id}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
+ * GEO-AUTOPILOT-W1 (C3) — persist one weekly DECIDE row to the append-only
+ * geo_decisions ledger (status defaults to 'proposed'). Fire-and-forget; never
+ * throws to the cron (W1 pattern). The table is created at server boot via
+ * ensureGeoSchema, so this INSERT never races a lazy CREATE.
+ */
+export interface GeoDecisionRecord {
+  run_id: string | null;
+  priority_tier: string | null;
+  ranked_candidates: unknown; // serialized to JSONB
+  rendered_brief: string;
+  chosen_move: string | null;
+  gap_ref?: number | null;
+}
+
+export async function recordGeoDecision(rec: GeoDecisionRecord): Promise<void> {
+  try {
+    dbRun(
+      `INSERT INTO geo_decisions
+         (run_id, priority_tier, ranked_candidates, rendered_brief, chosen_move, gap_ref)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6)`,
+      rec.run_id,
+      rec.priority_tier,
+      JSON.stringify(rec.ranked_candidates ?? null),
+      rec.rendered_brief,
+      rec.chosen_move,
+      rec.gap_ref ?? null,
+    );
+  } catch (err) {
+    console.error(
+      `[geo-storage] geo_decisions insert failed (silent recovery): ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

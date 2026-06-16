@@ -1,0 +1,268 @@
+/**
+ * GEO-AUTOPILOT-W1 (C1) — the autopilot DECIDE scorer + decision-brief renderer.
+ *
+ * PURE: no DB, no Telegram, no LLM, no vault FS write. The in-container cron (C3)
+ * owns persistence to `geo_decisions` + the digest; Cowork materializes the vault
+ * `Prompt/geo-decision-<date>.md` FROM that table (the W2 Postgres-boundary pattern).
+ * This module only reads the objective SoT (landing/Prompt/geo-objective.yaml) and
+ * turns the week's probe signals into a priority-gated ranked decision + a brief.
+ *
+ * The HARD priority gate is the whole point: a blocked-eligibility engine (0 citations
+ * regardless of content) ALWAYS outranks third-party, which outranks owned-content —
+ * so the loop never auto-spams owned pages (r≈0.19) over fixing a blocked engine.
+ */
+import * as yaml from 'js-yaml';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+export type PriorityTier = 'eligibility' | 'third_party' | 'owned_content';
+
+export interface ActionType {
+  tier: number;
+  channel: string;
+  automatability: number;
+  effort: number;
+}
+
+export interface Objective {
+  version: number;
+  priority_gate: PriorityTier[];
+  /** weight per query tier (head/niche/branded) — autopilot expected-value weight. */
+  revenue_proximity: Record<string, number>;
+  score_formula: string;
+  action_types: Record<PriorityTier, ActionType>;
+  /** "<tier>:<engine-or-query_id>" -> drafted action-spec path (Q3 fast-path). */
+  known_action_specs?: Record<string, string>;
+}
+
+/** One per-query gap signal — a projection of geo-gap-list GapBrief / geo_mentions agg. */
+export interface GapLike {
+  query_id: string;
+  query_tier: string; // head | niche | branded
+  sov: number; // 0..1 share-of-voice
+  top_competitor: string | null;
+  top_competitor_domain: string | null;
+}
+
+/** The scorer's input — every field is derivable from the existing weekly probe. */
+export interface ScoreInput {
+  /** from computeIndexPresence (geo-digest.ts): engine substrates that haven't indexed us. */
+  eligibility: { blocked: boolean; missing: string[] };
+  gaps: GapLike[];
+}
+
+export interface Candidate {
+  tier: PriorityTier;
+  key: string;
+  label: string;
+  query_id?: string;
+  query_tier?: string;
+  engine?: string;
+  domain?: string;
+  expected_lift: number;
+  revenue_proximity: number;
+  automatability: number;
+  effort: number;
+  score: number;
+  known_action_spec?: string;
+}
+
+export interface RankedDecision {
+  /** the highest unlocked priority tier (null only on a fully empty week). */
+  priority_tier: PriorityTier | null;
+  /** candidates in the active tier, score desc — the gate output. */
+  ranked: Candidate[];
+  chosen: Candidate | null;
+  /** every candidate by tier (lower tiers are GATED behind the active one). */
+  all: Record<PriorityTier, Candidate[]>;
+}
+
+/** Stable reach order for blocked engines (ChatGPT/Bing widest → Perplexity). */
+const ENGINE_REACH = ['chatgpt', 'claude', 'gemini', 'perplexity'];
+
+const TIER_LABEL: Record<PriorityTier, string> = {
+  eligibility: 'ELIGIBILITY',
+  third_party: 'THIRD-PARTY',
+  owned_content: 'OWNED-CONTENT',
+};
+
+/**
+ * Resolve + parse the objective SoT. Default path mirrors geo-orchestrator's
+ * loadQueries: `landing/Prompt/geo-objective.yaml` (dist/lib → repo root → baked
+ * into the image at Dockerfile `COPY landing/Prompt/`).
+ */
+export function loadObjective(yamlPath?: string): Objective {
+  const resolved =
+    yamlPath ?? path.resolve(__dirname, '..', '..', 'landing', 'Prompt', 'geo-objective.yaml');
+  const obj = yaml.load(fs.readFileSync(resolved, 'utf-8')) as Objective;
+  if (!obj || !Array.isArray(obj.priority_gate) || !obj.revenue_proximity || !obj.action_types) {
+    throw new Error(
+      `geo-objective.yaml at ${resolved} missing priority_gate / revenue_proximity / action_types`,
+    );
+  }
+  return obj;
+}
+
+/** score within the unlocked tier — the documented form lives in geo-objective.yaml. */
+function scoreOf(expectedLift: number, revenueProx: number, at: ActionType): number {
+  return (expectedLift * revenueProx * at.automatability) / Math.max(at.effort, 0.01);
+}
+
+function revenueProximity(obj: Objective, tier: string): number {
+  return obj.revenue_proximity[tier] ?? obj.revenue_proximity.niche ?? 0.5;
+}
+
+/**
+ * Rank the week's candidate moves through the HARD priority gate. PURE: same input +
+ * objective ⇒ same decision. The active tier is the FIRST tier in `priority_gate`
+ * with ≥1 candidate; ONLY its candidates appear in `ranked` (the gate). Lower-tier
+ * candidates are retained in `all` for the brief but can never be `chosen`.
+ */
+export function scoreWeek(input: ScoreInput, obj: Objective): RankedDecision {
+  const all: Record<PriorityTier, Candidate[]> = { eligibility: [], third_party: [], owned_content: [] };
+
+  // ── eligibility tier: one candidate per blocked engine (maximal priority + lift) ──
+  const atE = obj.action_types.eligibility;
+  for (const engine of input.eligibility.missing ?? []) {
+    const key = `eligibility:${engine}`;
+    all.eligibility.push({
+      tier: 'eligibility',
+      key,
+      label: `${engine} can't retrieve algovault.com — fix the re-crawl before any authority work`,
+      engine,
+      expected_lift: 1.0, // unblocking an engine enables ALL citations on it
+      revenue_proximity: 1.0,
+      automatability: atE.automatability,
+      effort: atE.effort,
+      score: scoreOf(1.0, 1.0, atE),
+      known_action_spec: obj.known_action_specs?.[key],
+    });
+  }
+
+  // ── third-party + owned-content tiers, routed per gap by competitor presence ──
+  const atT = obj.action_types.third_party;
+  const atO = obj.action_types.owned_content;
+  for (const g of input.gaps ?? []) {
+    const lift = Math.max(0, 1 - g.sov);
+    const rp = revenueProximity(obj, g.query_tier);
+    if (g.top_competitor_domain) {
+      const key = `third_party:${g.query_id}`;
+      all.third_party.push({
+        tier: 'third_party',
+        key,
+        label: `${g.top_competitor ?? 'a competitor'} leads "${g.query_id}" (${g.query_tier}) via ${g.top_competitor_domain} — pursue a placement on that surface`,
+        query_id: g.query_id,
+        query_tier: g.query_tier,
+        domain: g.top_competitor_domain,
+        expected_lift: lift,
+        revenue_proximity: rp,
+        automatability: atT.automatability,
+        effort: atT.effort,
+        score: scoreOf(lift, rp, atT),
+        known_action_spec: obj.known_action_specs?.[key],
+      });
+    } else {
+      const key = `owned_content:${g.query_id}`;
+      all.owned_content.push({
+        tier: 'owned_content',
+        key,
+        label: `"${g.query_id}" (${g.query_tier}) is OPEN (SoV ${g.sov.toFixed(2)}) — publish/strengthen an owned answer page`,
+        query_id: g.query_id,
+        query_tier: g.query_tier,
+        expected_lift: lift,
+        revenue_proximity: rp,
+        automatability: atO.automatability,
+        effort: atO.effort,
+        score: scoreOf(lift, rp, atO),
+        known_action_spec: obj.known_action_specs?.[key],
+      });
+    }
+  }
+
+  all.eligibility.sort(
+    (a, b) => b.score - a.score || ENGINE_REACH.indexOf(a.engine!) - ENGINE_REACH.indexOf(b.engine!),
+  );
+  all.third_party.sort((a, b) => b.score - a.score);
+  all.owned_content.sort((a, b) => b.score - a.score);
+
+  // HARD gate: the active tier is the first in priority_gate order with candidates.
+  let priority_tier: PriorityTier | null = null;
+  for (const t of obj.priority_gate) {
+    if (all[t].length > 0) {
+      priority_tier = t;
+      break;
+    }
+  }
+  const ranked = priority_tier ? all[priority_tier] : [];
+  return { priority_tier, ranked, chosen: ranked[0] ?? null, all };
+}
+
+/**
+ * Render the weekly decision brief as a markdown STRING (NOT written to disk here —
+ * the cron persists it to geo_decisions; Cowork materializes the vault file). Leads
+ * with the gated priority tier, names the chosen move + any drafted spec, then the
+ * ranked candidates, the gated tiers, the per-query gap table, and the Cowork
+ * research scope.
+ */
+export function renderDecisionBrief(d: RankedDecision, gaps: GapLike[], dateLabel: string): string {
+  const L: string[] = [];
+  L.push(`# GEO decision brief — ${dateLabel}`);
+  L.push('');
+
+  if (!d.chosen || !d.priority_tier) {
+    L.push('_No candidate move this week — no blocked engine, no contested query, no open gap._');
+    L.push('');
+    L.push('## Research scope for Cowork');
+    L.push('- Nothing queued. Confirm the probe ran and review the dashboard for drift.');
+    return L.join('\n');
+  }
+
+  const tier = d.priority_tier;
+  L.push(`**Priority tier (gated):** ${TIER_LABEL[tier]} · **Move:** ${d.chosen.label}`);
+  if (d.chosen.known_action_spec) {
+    L.push(`candidate action: ${d.chosen.known_action_spec} (already drafted)`);
+  }
+  L.push('');
+
+  L.push(`## Ranked candidates — ${TIER_LABEL[tier]} (top unlocked tier)`);
+  L.push('| # | move | query | tier | lift | score |');
+  L.push('|---|---|---|---|---|---|');
+  d.ranked.forEach((c, i) => {
+    L.push(
+      `| ${i + 1} | ${c.engine ?? c.domain ?? '—'} | ${c.query_id ?? '—'} | ${c.query_tier ?? '—'} | ${c.expected_lift.toFixed(2)} | ${c.score.toFixed(2)} |`,
+    );
+  });
+  L.push('');
+
+  const gated = (['eligibility', 'third_party', 'owned_content'] as PriorityTier[])
+    .filter((t) => t !== tier && d.all[t].length > 0)
+    .map((t) => `${TIER_LABEL[t].toLowerCase()}: ${d.all[t].length}`);
+  if (gated.length) {
+    L.push(`## Gated behind ${TIER_LABEL[tier]}`);
+    L.push(`- ${gated.join(' · ')} (unlock after this tier clears — the gate is hard)`);
+    L.push('');
+  }
+
+  if (gaps.length) {
+    L.push('## Per-query gap table');
+    L.push('| query | tier | SoV | leader | domain |');
+    L.push('|---|---|---|---|---|');
+    for (const g of gaps) {
+      L.push(`| ${g.query_id} | ${g.query_tier} | ${g.sov.toFixed(2)} | ${g.top_competitor ?? '—'} | ${g.top_competitor_domain ?? 'OPEN'} |`);
+    }
+    L.push('');
+  }
+
+  L.push('## Research scope for Cowork');
+  if (tier === 'eligibility') {
+    L.push(`- Why is ${d.chosen.engine} not retrieving algovault.com? (index status, robots/sitemap, last crawl)`);
+    L.push('- Concrete re-crawl move + expected lift (unblocking enables ALL citations on that engine).');
+  } else if (tier === 'third_party') {
+    L.push(`- Why does ${d.chosen.domain} win "${d.chosen.query_id}"? (page structure, proof, authority)`);
+    L.push('- Concrete placement move + expected SoV lift + which sub-goal (A/B/C) it advances.');
+  } else {
+    L.push(`- What answer/comparison content would win "${d.chosen.query_id}"?`);
+    L.push('- Concrete owned-content move (Tier-1/2 Code spec) + expected lift + sub-goal.');
+  }
+  return L.join('\n');
+}

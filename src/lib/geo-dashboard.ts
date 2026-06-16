@@ -100,6 +100,17 @@ export interface GeoDashboardData {
   gaps?: GapBriefRow[];
   // R5 — per-engine index-presence (presence-tier; own section, never authority).
   presence?: Array<{ model: string; present: boolean | string | null }>;
+  // GEO-AUTOPILOT-W1 (C3) — the latest scored decision (geo_decisions); optional so
+  // W1/W2 fixtures stay valid. Cowork materializes Prompt/geo-decision-<date>.md from it.
+  latestDecision?: DecisionRow | null;
+}
+
+interface DecisionRow {
+  priority_tier: string | null;
+  chosen_move: string | null;
+  rendered_brief: string | null;
+  status: string;
+  created_at: string;
 }
 
 function n(v: string | number | null | undefined): number {
@@ -257,6 +268,15 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
     [],
   );
 
+  // GEO-AUTOPILOT-W1 (C3) — the latest scored decision (graceful if the table is
+  // brand-new / empty); the dashboard's action item + the Cowork ritual source.
+  const decisionRows = await dbQuery<DecisionRow>(
+    `SELECT priority_tier, chosen_move, rendered_brief, status,
+            to_char(created_at, 'YYYY-MM-DD HH24:MI') AS created_at
+       FROM geo_decisions ORDER BY created_at DESC LIMIT 1`,
+    [],
+  ).catch((): DecisionRow[] => []);
+
   return {
     weekly,
     perQuery,
@@ -268,6 +288,7 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
     tiered,
     gaps,
     presence,
+    latestDecision: decisionRows[0] ?? null,
   };
 }
 
@@ -432,6 +453,15 @@ export function renderGeoDashboardHtml(data: GeoDashboardData): string {
         .join('') +
       `</tbody></table>`;
 
+  // GEO-AUTOPILOT-W1 (C3) — the scored decision (the dashboard's action item; the
+  // Cowork Decide ritual reads the full brief from here).
+  const dec = data.latestDecision;
+  const decisionSection = !dec
+    ? '<p class="empty">No decision computed yet — first scored brief next Monday.</p>'
+    : `<div class="decision"><strong>🎯 ${htmlEscape((dec.priority_tier ?? 'none').toUpperCase())}</strong> · status <code>${htmlEscape(dec.status)}</code> · <span class="meta">${htmlEscape(dec.created_at)}</span>` +
+      `<p>${htmlEscape(dec.chosen_move ?? 'no move')}</p>` +
+      `<details><summary>Full brief — Cowork materializes <code>Prompt/geo-decision-&lt;date&gt;.md</code> from this</summary><pre>${htmlEscape(dec.rendered_brief ?? '')}</pre></details></div>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -449,6 +479,8 @@ export function renderGeoDashboardHtml(data: GeoDashboardData): string {
   .empty { color: #6b7280; font-style: italic; }
   .warn { color: #b45309; font-weight: 600; }
   .banner { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; padding: 0.75rem 1rem; border-radius: 6px; margin: 1rem 0; }
+  .decision { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 0.75rem 1rem; border-radius: 6px; margin: 1rem 0; }
+  .decision pre { white-space: pre-wrap; font-size: 0.8rem; background: #fff; padding: 0.5rem; border-radius: 4px; color: #1f2937; }
   .meta { color: #6b7280; font-size: 0.85rem; }
 </style>
 </head>
@@ -457,6 +489,9 @@ export function renderGeoDashboardHtml(data: GeoDashboardData): string {
 <p class="meta">Measures whether LLMs recommend AlgoVault when asked about crypto trading agents, signal APIs, and AI-native quant tooling. Probes fire every Monday 08:00 UTC across retrieval engines (Claude web_search + Perplexity Sonar), N≥3 samples/query, denoised at read time. ChatGPT-search (W3) + Gemini-grounding (W4) drop in as adapters.</p>
 
 ${wowBanner}
+
+<h2>🎯 This week's decision (open Cowork to act)</h2>
+${decisionSection}
 
 <h2>1. Weekly mention-rate trend (per model)</h2>
 ${weeklySection}

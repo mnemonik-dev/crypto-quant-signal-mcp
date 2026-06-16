@@ -1,0 +1,66 @@
+# GEO-AUTOPILOT-W1 (C1) — the autopilot objective-function SoT.
+#
+# Read at weekly-cron-fire time by dist/lib/geo-decide.js::loadObjective() (js-yaml,
+# the same idiom + path resolution as geo-queries.yaml). Tuning the loop = edit THIS
+# file (new weight / action-type / ladder reference), ZERO code change — the
+# compounding artifact. No hardcoded live numbers: the goal ladder is a REFERENCE to
+# GEO-goals-and-autopilot.md; live metrics come from /api/performance-public.
+version: 1
+
+# The GEO Goal Ladder — REFERENCE only (stage targets live in the doc, never copied
+# here, so the loop can't drift from the SoT).
+goal_ladder:
+  source: GEO-goals-and-autopilot.md
+  live_metrics_from: /api/performance-public
+  sub_goals: [llm_citation_sov, registry_agent_rank, third_party_proof]
+  stages: [exist_and_get_cited, challenger_sov, category_leader]
+
+# HARD priority gate (in order). The scorer ranks ONLY within the highest UNLOCKED
+# tier: a blocked engine (0 citations regardless of content) always outranks any
+# third-party or owned move. This is what prevents auto-spamming owned pages.
+priority_gate:
+  - eligibility
+  - third_party
+  - owned_content
+
+# Revenue-proximity weight per query tier (keyed to landing/Prompt/geo-queries.yaml
+# tiers: head / niche / branded). AUTOPILOT = expected-VALUE weight (volume x buyer-
+# qualification). Branded queries (composite / agent-API / verifiable-track-record)
+# are lower-volume but higher-qualified + moat-aligned -> lifted (architect-ratified).
+# Win-probability is NOT encoded here; it lives in expected_lift.
+#
+# INTENTIONALLY DIVERGES from src/lib/geo-gap-list.ts:29 TIER_WEIGHT
+# {head:1.0, niche:0.6, branded:0.4} (the editorial COVERAGE weight). Two different
+# weights by design: coverage-weight (gap-list) vs expected-value-weight (autopilot).
+# Cross-ref comment lives in both files. This is intent, not drift.
+revenue_proximity:
+  head: 1.0
+  branded: 0.8
+  niche: 0.6
+
+# score within the unlocked tier (implemented in geo-decide.ts::scoreWeek; keep this
+# string in sync with that function — it is the documented form of the computation).
+score_formula: "expected_lift * revenue_proximity * automatability / effort"
+
+# Action-type registry: tier order + execution channel + automatability/effort weights.
+action_types:
+  eligibility:
+    tier: 1
+    channel: deterministic_or_operator   # IndexNow / sitemap resubmit / Search Console re-crawl, else operator task
+    automatability: 0.9
+    effort: 0.3
+  third_party:
+    tier: 2
+    channel: draft_for_operator          # awesome-list PR / G2 / listicle / Reddit — DRAFT only, never auto-post (spam-flag)
+    automatability: 0.4
+    effort: 0.6
+  owned_content:
+    tier: 3
+    channel: cowork_authored_code_wave   # answer/comparison page or dev.to — Cowork-authored, /goal-gated
+    automatability: 0.7
+    effort: 1.0
+
+# Known drafted action specs (Q3 fast-path): when the chosen move matches a key, the
+# brief + digest name the already-drafted spec. Key = "<tier>:<engine-or-query_id>".
+known_action_specs:
+  "eligibility:gemini": Prompt/fix-gemini-google-index-presence-w1.md

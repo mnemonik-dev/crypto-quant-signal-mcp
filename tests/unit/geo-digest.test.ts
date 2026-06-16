@@ -228,6 +228,36 @@ describe('buildDigest', () => {
     // distinct from authority: the momentum verdict is still its own line
     expect(out).toContain('🟢 *GAINING');
   });
+
+  // GEO-AUTOPILOT-W1 (C3) — the scored decision handoff replaces the naive ONE MOVE.
+  it('renders the DECISION READY handoff when a decision is present (replaces ONE MOVE)', () => {
+    const withDecision: GeoDigestData = {
+      ...data,
+      decision: {
+        priorityTier: 'eligibility',
+        gateLabel: 'ELIGIBILITY (gate 1/3)',
+        move: "gemini can't retrieve algovault.com — fix the re-crawl before any authority work",
+        knownActionSpec: 'Prompt/fix-gemini-google-index-presence-w1.md',
+        candidateCount: 1,
+        briefName: 'geo-decision-2026-06-22',
+        suspects: ['algovault.io', 'algovaults.com'],
+      },
+    };
+    const out = buildDigest(withDecision).join('\n');
+    expect(out).toContain('🎯 *DECISION READY*');
+    expect(out).toContain('Priority: ELIGIBILITY (gate 1/3)');
+    expect(out).toContain('candidate action: Prompt/fix-gemini-google-index-presence-w1.md');
+    expect(out).toContain('geo-decision-2026-06-22');
+    expect(out).toContain('In Cowork:');
+    expect(out).toContain('algovault.io'); // look-alike watch line
+    expect(out).not.toContain("THIS WEEK'S ONE MOVE"); // replaced, not duplicated
+  });
+
+  it('falls back to the W4 ONE MOVE when no decision is set (additive / backward-compatible)', () => {
+    const out = buildDigest(data).join('\n'); // `data` carries no `decision`
+    expect(out).toContain("THIS WEEK'S ONE MOVE");
+    expect(out).not.toContain('DECISION READY');
+  });
 });
 
 describe('computeIndexPresence (R5)', () => {

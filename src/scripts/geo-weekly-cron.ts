@@ -20,10 +20,22 @@ import {
   shortEngine,
   computeIndexPresence,
   type GeoDigestData,
+  type DecisionHandoff,
   type AttributionGap,
   type EnginePlacement,
   type IndexPresenceRow,
 } from '../lib/geo-digest.js';
+// GEO-AUTOPILOT-W1 (C3) — DECIDE wiring: scorer + eligibility + decision ledger.
+import { computeGapList } from '../lib/geo-gap-list.js';
+import { scoreWeek, renderDecisionBrief, loadObjective, type GapLike, type RankedDecision } from '../lib/geo-decide.js';
+import { buildEligibilityReport, type CitationRow } from '../lib/geo-eligibility.js';
+import { recordGeoDecision } from '../lib/geo-storage.js';
+
+const TIER_DISPLAY: Record<string, string> = {
+  eligibility: 'ELIGIBILITY',
+  third_party: 'THIRD-PARTY',
+  owned_content: 'OWNED-CONTENT',
+};
 
 const DASHBOARD_URL = 'https://api.algovault.com/admin/geo-dashboard';
 
@@ -52,9 +64,15 @@ function dateLabel(): string {
 
 /**
  * Fetch every read-only aggregate the digest needs (no writes) and assemble a
- * GeoDigestData. Returns the data + the raw WoW rows (drive the preserved sendAlert).
+ * GeoDigestData. Returns the data + the raw WoW rows (drive the preserved sendAlert)
+ * + the full scored decision + rendered brief (the live path persists them).
  */
-async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowRow[] }> {
+async function fetchDigestData(): Promise<{
+  data: GeoDigestData;
+  wowAlerts: WowRow[];
+  ranked: RankedDecision;
+  brief: string;
+}> {
   const wowAlerts = await dbQuery<WowRow>(WOW_DROP_SQL, []);
 
   // WoW deltas (retrieval rows, this week vs last) in one pass.
@@ -224,6 +242,55 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
     .map((a) => `${shortEngine(a.model)} -${num(a.drop_pct).toFixed(0)}%`)
     .join(', ');
 
+  // ── GEO-AUTOPILOT-W1 (C3): the scored DECIDE handoff (read-only; replaces ONE MOVE) ──
+  // computeGapList + citations + index-presence → priority-gated scoreWeek → brief.
+  const objective = loadObjective();
+  const gapBriefs = await computeGapList(4);
+  const seenQ = new Set<string>();
+  const gaps: GapLike[] = [];
+  for (const b of gapBriefs) {
+    if (seenQ.has(b.query_id)) continue; // rank_score desc → first per query_id is its worst gap
+    seenQ.add(b.query_id);
+    gaps.push({
+      query_id: b.query_id,
+      query_tier: b.query_tier,
+      sov: b.sov,
+      top_competitor: b.top_competitor,
+      top_competitor_domain: b.top_competitor_domain,
+    });
+  }
+  const citeRows = await dbQuery<{ source_domain: string; attributed_to: string | null; cites: string | number }>(
+    `SELECT source_domain, attributed_to, count(*) AS cites
+       FROM geo_source_citations WHERE ran_at > now() - interval '4 weeks'
+      GROUP BY source_domain, attributed_to`,
+    [],
+  );
+  const citations: CitationRow[] = citeRows.map((r) => ({
+    source_domain: r.source_domain,
+    attributed_to: r.attributed_to,
+    cites: num(r.cites),
+  }));
+  const eligibilityReport = buildEligibilityReport(indexPresence, citations);
+  const ranked = scoreWeek(
+    { eligibility: { blocked: indexPresence.blocked, missing: indexPresence.missing }, gaps },
+    objective,
+  );
+  const brief = renderDecisionBrief(ranked, gaps, dateLabel());
+  let handoff: DecisionHandoff | null = null;
+  if (ranked.chosen && ranked.priority_tier) {
+    const tier = ranked.priority_tier;
+    const idx = objective.priority_gate.indexOf(tier) + 1;
+    handoff = {
+      priorityTier: tier,
+      gateLabel: `${TIER_DISPLAY[tier] ?? tier} (gate ${idx}/${objective.priority_gate.length})`,
+      move: ranked.chosen.label,
+      knownActionSpec: ranked.chosen.known_action_spec,
+      candidateCount: ranked.ranked.length,
+      briefName: `geo-decision-${new Date().toISOString().slice(0, 10)}`,
+      suspects: eligibilityReport.suspects.map((s) => s.domain),
+    };
+  }
+
   const data: GeoDigestData = {
     dateLabel: dateLabel(),
     dashboardUrl: DASHBOARD_URL,
@@ -247,9 +314,10 @@ async function fetchDigestData(): Promise<{ data: GeoDigestData; wowAlerts: WowR
     contested,
     topGap: topGapRows[0] ?? null,
     indexPresence,
+    decision: handoff,
   };
 
-  return { data, wowAlerts };
+  return { data, wowAlerts, ranked, brief };
 }
 
 async function main(): Promise<void> {
@@ -271,11 +339,22 @@ async function main(): Promise<void> {
     `[geo-cron] run ${runId} complete: engines=[${engineIds.join(',')}] rows=${resultCount} errors=${errorCount}`,
   );
 
-  const { data, wowAlerts } = await fetchDigestData();
+  const { data, wowAlerts, ranked, brief } = await fetchDigestData();
   const lines = buildDigest(data);
 
   await sendDigest(lines);
   console.log(`[geo-cron] digest sent · sections=${lines.length}`);
+
+  // GEO-AUTOPILOT-W1 (C3) — persist the weekly DECIDE row (status='proposed'); the
+  // dashboard renders it + Cowork materializes the brief from it. NO completion TG.
+  await recordGeoDecision({
+    run_id: runId,
+    priority_tier: ranked.priority_tier,
+    ranked_candidates: ranked.ranked,
+    rendered_brief: brief,
+    chosen_move: ranked.chosen?.label ?? null,
+  });
+  console.log(`[geo-cron] decision persisted · tier=${ranked.priority_tier ?? 'none'} · candidates=${ranked.ranked.length}`);
 
   // PRESERVED WoW operator-action alert (the only additional TG fire).
   if (wowAlerts.length > 0) {

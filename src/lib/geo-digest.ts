@@ -245,6 +245,26 @@ export interface TopGapBrief {
   top_competitor_domain: string | null;
 }
 
+/**
+ * GEO-AUTOPILOT-W1 (C3) — the scored decision handoff (one per cycle). Built by the
+ * cron from geo-decide's RankedDecision + geo-eligibility's look-alike suspects;
+ * REPLACES the naive W4 "ONE MOVE" line. The cron persists the full decision to
+ * `geo_decisions`; this is just the digest projection. Pure data — no Date / DB.
+ */
+export interface DecisionHandoff {
+  priorityTier: 'eligibility' | 'third_party' | 'owned_content';
+  /** e.g. "ELIGIBILITY (gate 1/3)". */
+  gateLabel: string;
+  move: string;
+  /** drafted action-spec path (Q3 fast-path), when the objective maps the move. */
+  knownActionSpec?: string;
+  candidateCount: number;
+  /** e.g. "geo-decision-2026-06-22" — Cowork materializes the vault file by this name. */
+  briefName: string;
+  /** look-alike domains cited but not ours (SUSPECT) — the digest watch line. */
+  suspects: string[];
+}
+
 export interface GeoDigestData {
   dateLabel: string; // e.g. "Mon 9 Jun" (cron-supplied; keeps this module Date-free)
   dashboardUrl: string;
@@ -256,6 +276,8 @@ export interface GeoDigestData {
   topGap: TopGapBrief | null;
   /** R5 — per-engine index-presence (presence-tier probe; excluded from all authority aggregates). */
   indexPresence: IndexPresence;
+  /** GEO-AUTOPILOT-W1 — the scored decision handoff; when set it REPLACES the ONE MOVE line. */
+  decision?: DecisionHandoff | null;
 }
 
 /**
@@ -330,15 +352,31 @@ export function buildDigest(data: GeoDigestData): string[] {
     }
   }
 
-  // ONE MOVE — the single queued brief
+  // DECISION (GEO-AUTOPILOT-W1) — the scored, priority-gated handoff replaces the
+  // naive W4 ONE MOVE when present; otherwise the ONE MOVE renders (additive,
+  // backward-compatible). ONE operator-action block; no execution/completion TG.
   L.push('');
-  L.push("*🎯 THIS WEEK'S ONE MOVE* (auto-queued · 12h to veto)");
-  if (!data.topGap) {
-    L.push('• No move queued this week (no gap computed yet).');
+  if (data.decision) {
+    const dec = data.decision;
+    L.push('🎯 *DECISION READY* — open Cowork to act');
+    L.push(`Priority: ${dec.gateLabel}  ·  Move: ${dec.move}`);
+    if (dec.knownActionSpec) L.push(`candidate action: ${dec.knownActionSpec} (already drafted)`);
+    L.push(
+      `Brief: ${dec.briefName} · ${dec.candidateCount} candidate${dec.candidateCount === 1 ? '' : 's'} scored through the priority gate`,
+    );
+    L.push('→ In Cowork: "write the GEO action from this week\'s brief" → research → approve → dispatch to Code');
+    if (dec.suspects.length) {
+      L.push(`⚠️ Look-alike watch: ${dec.suspects.join(', ')} cited but NOT ours (SUSPECT, not trusted).`);
+    }
   } else {
-    const g = data.topGap;
-    L.push(`${g.query_id}${g.query_tier ? ` (${g.query_tier})` : ''}: ${g.recommended_action ?? `low share-of-voice on ${g.query_id}`}`);
-    if (g.top_competitor_domain) L.push(`→ Get AlgoVault a placement/answer on ${g.top_competitor_domain}.`);
+    L.push("*🎯 THIS WEEK'S ONE MOVE* (auto-queued · 12h to veto)");
+    if (!data.topGap) {
+      L.push('• No move queued this week (no gap computed yet).');
+    } else {
+      const g = data.topGap;
+      L.push(`${g.query_id}${g.query_tier ? ` (${g.query_tier})` : ''}: ${g.recommended_action ?? `low share-of-voice on ${g.query_id}`}`);
+      if (g.top_competitor_domain) L.push(`→ Get AlgoVault a placement/answer on ${g.top_competitor_domain}.`);
+    }
   }
 
   L.push('');
