@@ -60,7 +60,7 @@ describe('signup-email opt-in path', () => {
     // Mock /api/performance-public so live-substitution has known values
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ pfeWinRate: 91.3, totalCalls: 115000 }),
+      json: async () => ({ overall: { pfeWinRate: 0.913, totalCalls: 115000 } }),
     }) as unknown as typeof fetch;
 
     const { sendOptinConfirmationEmail } = await import('../src/lib/email.js');
@@ -80,14 +80,17 @@ describe('signup-email opt-in path', () => {
     process.env.RESEND_FROM_EMAIL = 'noreply@algovault.com';
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ pfeWinRate: 91.3, totalCalls: 115000 }),
+      json: async () => ({ overall: { pfeWinRate: 0.913, totalCalls: 115000 } }),
     }) as unknown as typeof fetch;
 
     const { sendOptinConfirmationEmail } = await import('../src/lib/email.js');
     await sendOptinConfirmationEmail('alice@example.com');
     const args = mockSend.mock.calls[0][0];
 
-    // Live substitution lands the pre-formatted percentage and en-US thousands-separated count.
+    // Live substitution reads the NESTED `.overall.pfeWinRate` FRACTION (0.913),
+    // ×100 → "91.3", and the en-US thousands-separated `totalCalls` → "115,000".
+    // (Prior fixture mocked a top-level `pfeWinRate: 91.3` — the wrong endpoint
+    // shape that masked the production "90+" fallback bug; ACTIVATION-NUDGE-W1.)
     expect(args.text).toContain('91.3% PFE win rate');
     expect(args.text).toContain('115,000+ verified calls');
     expect(args.html).toContain('91.3% PFE win rate');

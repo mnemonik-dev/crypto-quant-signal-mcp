@@ -123,12 +123,22 @@ async function fetchPerformancePublicStats(): Promise<OptinSubstitutionStats> {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return fallback;
-    const data = (await res.json()) as { pfeWinRate?: number; totalCalls?: number };
-    const pfeWr = typeof data.pfeWinRate === 'number'
-      ? data.pfeWinRate.toFixed(1)
+    const data = (await res.json()) as {
+      overall?: { pfeWinRate?: number | null; totalCalls?: number | null };
+      totalCalls?: number | null;
+    };
+    // PFE WR is NESTED at `.overall.pfeWinRate` (a FRACTION, e.g. 0.9157) — there
+    // is no top-level `pfeWinRate` field. The prior `data.pfeWinRate.toFixed(1)`
+    // read was doubly wrong (absent path → undefined → fallback; and even if
+    // present, a fraction without ×100 would render "0.9"). Canonical read mirrors
+    // `track-record-snapshot.ts`: ×100, 1 dp → "91.6". (ACTIVATION-NUDGE-W1 flag.)
+    const wrFraction = data.overall?.pfeWinRate;
+    const pfeWr = typeof wrFraction === 'number' && Number.isFinite(wrFraction)
+      ? (wrFraction * 100).toFixed(1)
       : fallback.pfeWr;
-    const totalSignals = typeof data.totalCalls === 'number'
-      ? data.totalCalls.toLocaleString('en-US')
+    const calls = data.overall?.totalCalls ?? data.totalCalls;
+    const totalSignals = typeof calls === 'number' && Number.isFinite(calls)
+      ? Math.round(calls).toLocaleString('en-US')
       : fallback.totalSignals;
     return { pfeWr, totalSignals };
   } catch {

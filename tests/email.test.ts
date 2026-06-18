@@ -19,6 +19,7 @@ describe('email module', () => {
 
   afterEach(() => {
     process.env = { ...origEnv };
+    vi.unstubAllGlobals();
   });
 
   it('maskEmail produces a***@domain shape', async () => {
@@ -80,5 +81,37 @@ describe('email module', () => {
     const { sendWelcomeEmail } = await import('../src/lib/email.js');
     await sendWelcomeEmail({ to: 'alice@example.com', apiKey: 'av_live_xyz', tier: 'starter' });
     expect(mockSend.mock.calls[0][0].from).toBe('noreply@algovault.com');
+  });
+
+  // ACTIVATION-NUDGE-W1 flag: the opt-in stats read PFE WR from the NESTED
+  // `.overall.pfeWinRate` (a fraction, ×100) — the prior top-level `data.pfeWinRate`
+  // read was always undefined → silently rendered the "90+" fallback.
+  it('opt-in email renders LIVE stats from the nested .overall.pfeWinRate (×100), not the fallback', async () => {
+    process.env.RESEND_API_KEY = 'test_key';
+    // 0.9157 → "91.6": a value DISTINCT from the "90+" fallback so a wrong-path
+    // (top-level) read cannot pass by luck.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ overall: { pfeWinRate: 0.9157, totalCalls: 246331 }, totalCalls: 246331 }),
+    }));
+    const { sendOptinConfirmationEmail } = await import('../src/lib/email.js');
+    await sendOptinConfirmationEmail('alice@example.com');
+    expect(mockSend).toHaveBeenCalledOnce();
+    const args = mockSend.mock.calls[0][0];
+    for (const body of [args.text, args.html]) {
+      expect(body).toContain('91.6% PFE win rate');
+      expect(body).toContain('246,331+ verified calls');
+      expect(body).not.toContain('90+% PFE win rate'); // not the fallback
+      expect(body).not.toContain('0.9% PFE win rate');  // not the un-×100 bug
+    }
+  });
+
+  it('opt-in email fails open to the "90+" fallback when the stats fetch rejects', async () => {
+    process.env.RESEND_API_KEY = 'test_key';
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')));
+    const { sendOptinConfirmationEmail } = await import('../src/lib/email.js');
+    await sendOptinConfirmationEmail('bob@example.com');
+    expect(mockSend).toHaveBeenCalledOnce();
+    expect(mockSend.mock.calls[0][0].text).toContain('90+% PFE win rate across 100K++ verified calls');
   });
 });
