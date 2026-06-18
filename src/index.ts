@@ -48,6 +48,7 @@ import { getSkillsAnalytics } from './resources/skills-analytics.js';
 import { generateFunnelSnapshot } from './lib/funnel-snapshot.js';
 import { recordFunnelEvent } from './lib/performance-db.js';
 import { recordFirstNonHoldVerdict } from './lib/aha-event.js';
+import { getPqlCandidates } from './lib/pql.js';
 import {
   captureArgvTrackToken,
   resolveTrackTokenForRequest,
@@ -1545,10 +1546,14 @@ async function startHttp() {
           });
         }
         const snapshot = await generateFunnelSnapshot({ days });
+        // CONVERSION-MEASUREMENT-W1 C3: surface the scored PQL cohort additively
+        // (env-thresholded; fail-open → empty cohort, never 500s the endpoint).
+        const pql_cohort = await getPqlCandidates();
         res.setHeader('Cache-Control', 'no-store');
         res.json({
           window_label: windowRaw,
           ...snapshot,
+          pql_cohort,
         });
       } catch (err) {
         console.error(`[/api/admin/funnel-snapshot] internal error: ${err instanceof Error ? err.message : err}`);

@@ -3,7 +3,8 @@
   "wave": "ACTIVATION-FUNNEL-AUDIT-W1",
   "snapshot_date": "2026-05-28",
   "modifications": [
-    { "wave": "CONVERSION-MEASUREMENT-W1", "date": "2026-06-18", "change": "ADDITIVE: + funnel.first_non_hold_verdict (activation 'aha' quality signal — COUNT DISTINCT session_id of free sessions reaching their first BUY/SELL). NOT a CANONICAL_STAGE_ORDER stage; stage_retentions stays 13 transitions; no key removed (Data-Integrity additive-only)." }
+    { "wave": "CONVERSION-MEASUREMENT-W1", "date": "2026-06-18", "change": "ADDITIVE: + funnel.first_non_hold_verdict (activation 'aha' quality signal — COUNT DISTINCT session_id of free sessions reaching their first BUY/SELL). NOT a CANONICAL_STAGE_ORDER stage; stage_retentions stays 13 transitions; no key removed (Data-Integrity additive-only)." },
+    { "wave": "CONVERSION-MEASUREMENT-W1", "date": "2026-06-18", "change": "ADDITIVE: + pql_cohort (C3 scored PQL cohort; env-thresholded PQL_* with default-deny on NaN; fail-open → empty cohort, never 500s). candidate_ref is an 8-char ip_hash PREFIX only — the raw ip_hash is NEVER exposed (it stays a forbidden key)." }
   ],
   "shape_pinned_at_commit": "<post-deploy SHA filled by RELEASE-cadence step>",
   "auth": "Bearer token via Authorization header OR ?key= query param OR admin session cookie; matches existing isAdminAuthorized() pattern in src/index.ts:1109",
@@ -62,7 +63,22 @@
     "tier_cohort_sizes.pro",
     "tier_cohort_sizes.enterprise",
     "tier_cohort_sizes.x402",
-    "warnings"
+    "warnings",
+    "pql_cohort",
+    "pql_cohort.generated_at",
+    "pql_cohort.window_days",
+    "pql_cohort.thresholds",
+    "pql_cohort.thresholds.quota_pct",
+    "pql_cohort.thresholds.call_freq",
+    "pql_cohort.count",
+    "pql_cohort.candidates",
+    "pql_cohort.candidates[].candidate_ref",
+    "pql_cohort.candidates[].peak_quota_pct",
+    "pql_cohort.candidates[].recent_calls",
+    "pql_cohort.candidates[].total_calls",
+    "pql_cohort.candidates[].reached_aha",
+    "pql_cohort.candidates[].score",
+    "pql_cohort.candidates[].last_call_at"
   ],
 
   "forbidden_keys": [
