@@ -12,6 +12,12 @@ import { extractPaymentNonce, tryClaimPayment } from './x402-idempotency-store.j
 import { validateApiKey as stripeValidateApiKey } from './stripe.js';
 import { dbExec, dbRun, dbQuery, recordFunnelEvent } from './performance-db.js';
 import type { LicenseInfo, LicenseTier } from '../types.js';
+// ACTIVATION-NUDGE-W1 (2026-06-18): the soft-quota + 100%-limit upgrade copy is
+// now the architect-approved CTA copy with LIVE track-record values + the single
+// SOFT_THRESHOLD source (shared with tier-warning's quota_hit_soft band).
+import { SOFT_THRESHOLD } from './activation-thresholds.js';
+import { getTrackRecord } from './track-record-snapshot.js';
+import { buildSoftNudge, buildLimitMessage } from './nudge-copy.js';
 
 // v1.10.3 FREE-UNLOCK-W1: free tier now grants ALL coins + ALL timeframes —
 // the 100-calls/month cap is the primary upsell trigger; funding-arb top-5
@@ -601,12 +607,14 @@ export function getUpgradeHint(
     return `Showing top ${context.cappedResults} of ${context.totalResults} opportunities. Unlock all results with Starter at $9.99/mo → ${UPGRADE_URL}`;
   }
 
-  // Quota usage hint (80%+ used)
+  // Quota usage hint: free-tier soft nudge at/above SOFT_THRESHOLD (the single
+  // source shared with tier-warning's quota_hit_soft band — A1). Approved CTA
+  // copy + LIVE track-record values; `upgrade_from=soft`.
   if (context?.used && context?.total) {
     const pctUsed = context.used / context.total;
-    if (pctUsed >= 1.0) return undefined; // Handled by quota block
-    if (pctUsed >= 0.8) {
-      return `You've used ${context.used}/${context.total} free calls this month. Unlock 3,000 calls/mo with Starter at $9.99/mo → ${UPGRADE_URL}`;
+    if (pctUsed >= 1.0) return undefined; // Handled by the TIER_LIMIT_REACHED path
+    if (pctUsed >= SOFT_THRESHOLD) {
+      return buildSoftNudge({ used: context.used, total: context.total, ...getTrackRecord() });
     }
   }
 
@@ -614,7 +622,12 @@ export function getUpgradeHint(
 }
 
 export function getQuotaExhaustedMessage(used: number, total: number): string {
-  return `Free tier limit reached (${used}/${total} calls this month). Upgrade to Starter ($9.99/mo) for 3,000 calls/mo, or pay per call via x402. → ${UPGRADE_URL}`;
+  // ACTIVATION-NUDGE-W1: approved 100%-limit copy + LIVE track-record values via
+  // the shared builder (same string the TIER_LIMIT_REACHED envelope renders).
+  // `used` is unused in the copy (the message states the `total` cap) but kept
+  // in the signature for call-site compatibility + future use.
+  void used;
+  return buildLimitMessage({ total, ...getTrackRecord() });
 }
 
 /**

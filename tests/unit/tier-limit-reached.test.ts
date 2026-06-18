@@ -20,7 +20,7 @@ describe('TierLimitReachedError', () => {
     expect(err.code).toBe('TIER_LIMIT_REACHED');
   });
 
-  it('persists the structured fields', () => {
+  it('persists the structured fields (+ appends upgrade_from=limit when absent, A2)', () => {
     const err = new TierLimitReachedError({
       currentUsage: 105,
       monthlyLimit: 100,
@@ -31,11 +31,15 @@ describe('TierLimitReachedError', () => {
     expect(err.current_usage).toBe(105);
     expect(err.monthly_limit).toBe(100);
     expect(err.tier).toBe('free');
-    expect(err.suggested_upgrade_url).toBe('https://example.com/upgrade');
+    // ACTIVATION-NUDGE-W1: funnel-attribution param added to the structured field.
+    expect(err.suggested_upgrade_url).toBe('https://example.com/upgrade?upgrade_from=limit');
     expect(err.retry_after_days).toBe(12);
   });
 
-  it('builds a human-readable .message', () => {
+  it('builds the approved 100%-limit .message (no "unlimited" violation) + track record', () => {
+    // ACTIVATION-NUDGE-W1: message is the shared approved builder with LIVE
+    // track-record values (deterministic fallback in tests). The bare
+    // upgrade_from=limit URL is embedded in the human copy.
     const err = new TierLimitReachedError({
       currentUsage: 100,
       monthlyLimit: 100,
@@ -43,9 +47,11 @@ describe('TierLimitReachedError', () => {
       suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter',
       retryAfterDays: 5,
     });
-    expect(err.message).toMatch(/Free-tier monthly limit reached/i);
-    expect(err.message).toContain('100/100');
-    expect(err.message).toContain('https://api.algovault.com/signup');
+    expect(err.message).toContain("You've hit your 100 free calls this month");
+    expect(err.message).toContain('PFE win rate');
+    expect(err.message).toContain('algovault.com/track-record');
+    expect(err.message).toContain('signup?plan=starter&upgrade_from=limit');
+    expect(err.message).not.toContain('unlimited');
   });
 
   it('is instance-of Error AND TierLimitReachedError (prototype chain preserved across CJS transpile)', () => {

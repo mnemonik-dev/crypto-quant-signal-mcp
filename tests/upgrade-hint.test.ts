@@ -21,17 +21,23 @@ describe('getUpgradeHint', () => {
     expect(getUpgradeHint(free, { used: 79, total: 100 })).toBeUndefined();
   });
 
-  it('returns quota hint when free tier is at 80%+ usage', () => {
-    const hint = getUpgradeHint(free, { used: 80, total: 100 });
-    expect(hint).toContain('80/100');
-    expect(hint).toContain('Starter');
-    expect(hint).toContain('$9.99/mo');
-    expect(hint).toContain('signup?plan=starter');
+  it('returns the approved soft nudge when free tier is at 80%+ usage', () => {
+    // ACTIVATION-NUDGE-W1: approved CTA copy + LIVE track-record values (the
+    // deterministic fallback in tests, since no warmer runs) + upgrade_from=soft.
+    const hint = getUpgradeHint(free, { used: 80, total: 100 })!;
+    expect(hint).toContain("You've used 80 of your 100 free calls"); // factual used/total
+    expect(hint).toContain('PFE win rate');
+    expect(hint).toContain('algovault.com/track-record');           // trust→conversion lever
+    expect(hint).toContain('Starter, 3,000 calls/mo (30× the free tier)');
+    expect(hint).toContain('$9.99');
+    expect(hint).toContain('signup?plan=starter&upgrade_from=soft'); // primary funnel attribution
+    expect(hint).not.toContain('unlimited');                         // copy-rule: no "unlimited"
   });
 
-  it('returns quota hint at 95% usage', () => {
-    const hint = getUpgradeHint(free, { used: 95, total: 100 });
-    expect(hint).toContain('95/100');
+  it('renders the live per-request usage (factual, not the illustrative 80)', () => {
+    const hint = getUpgradeHint(free, { used: 95, total: 100 })!;
+    expect(hint).toContain("You've used 95 of your 100 free calls");
+    expect(hint).not.toContain('80 of your 100');
   });
 
   it('returns undefined at 100% usage (handled by quota block)', () => {
@@ -68,11 +74,15 @@ describe('getUpgradeHint', () => {
 });
 
 describe('getQuotaExhaustedMessage', () => {
-  it('includes usage count and upgrade URL', () => {
+  it('renders the approved 100%-limit copy (no "unlimited" violation) + track record', () => {
+    // ACTIVATION-NUDGE-W1: same shared builder the TIER_LIMIT_REACHED envelope
+    // renders; replaces the legacy "Free tier limit reached … unlimited" copy.
     const msg = getQuotaExhaustedMessage(100, 100);
-    expect(msg).toContain('100/100');
-    expect(msg).toContain('Starter');
-    expect(msg).toContain('x402');
-    expect(msg).toContain('signup?plan=starter');
+    expect(msg).toContain("You've hit your 100 free calls this month");
+    expect(msg).toContain('PFE win rate');
+    expect(msg).toContain('algovault.com/track-record');
+    expect(msg).toContain('Starter, 3,000 calls/mo');
+    expect(msg).toContain('signup?plan=starter&upgrade_from=limit');
+    expect(msg).not.toContain('unlimited');
   });
 });

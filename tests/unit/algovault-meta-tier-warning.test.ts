@@ -1,9 +1,11 @@
 /**
  * Unit test for src/lib/tier-warning.ts (ACTIVATION-PAYWALL-W1 / R2).
  *
- * Asserts the structured tier_warning semantics:
- *   - below soft threshold (0.75)     → no field emitted
- *   - 0.75 ≤ ratio < 0.90              → level: 'soft'
+ * Asserts the structured tier_warning semantics (SOFT retuned 0.75→0.80 in
+ * ACTIVATION-NUDGE-W1 / A1 so the soft band + quota_hit_soft align with the
+ * 80% upgrade_hint message):
+ *   - below soft threshold (0.80)     → no field emitted
+ *   - 0.80 ≤ ratio < 0.90              → level: 'soft'
  *   - 0.90 ≤ ratio < 1.00              → level: 'hard'
  *   - ratio ≥ 1.00                     → no field (TIER_LIMIT_REACHED path)
  *   - paid tier                        → no field
@@ -25,10 +27,10 @@ const BASE_META: AlgoVaultMeta = {
 };
 
 describe('withTierWarning', () => {
-  it('emits NO field below soft threshold (0.74 = 74/100)', () => {
+  it('emits NO field just below the retuned soft threshold (79/100 < 0.80)', () => {
     const out = withTierWarning(BASE_META, {
       tier: 'free',
-      currentUsage: 74,
+      currentUsage: 79,
       monthlyLimit: 100,
     });
     expect(out.tier_warning).toBeUndefined();
@@ -36,21 +38,30 @@ describe('withTierWarning', () => {
     expect(Object.keys(out).sort()).toEqual(Object.keys(BASE_META).sort());
   });
 
-  it('emits soft warning at exactly the soft threshold (75/100)', () => {
+  it('emits NO field at the OLD 0.75 boundary (75/100 — retuned away in A1)', () => {
     const out = withTierWarning(BASE_META, {
       tier: 'free',
       currentUsage: 75,
       monthlyLimit: 100,
     });
+    expect(out.tier_warning).toBeUndefined();
+  });
+
+  it('emits soft warning at exactly the retuned soft threshold (80/100)', () => {
+    const out = withTierWarning(BASE_META, {
+      tier: 'free',
+      currentUsage: 80,
+      monthlyLimit: 100,
+    });
     expect(out.tier_warning).toBeDefined();
     expect(out.tier_warning!.level).toBe('soft');
-    expect(out.tier_warning!.current_usage).toBe(75);
+    expect(out.tier_warning!.current_usage).toBe(80);
     expect(out.tier_warning!.monthly_limit).toBe(100);
     expect(out.tier_warning!.tier).toBe('free');
     expect(out.tier_warning!.suggested_upgrade_url).toContain('utm_source=mcp_tool');
   });
 
-  it('emits soft warning at 75-89% range', () => {
+  it('emits soft warning at 80-89% range', () => {
     const out = withTierWarning(BASE_META, {
       tier: 'free',
       currentUsage: 85,
@@ -191,8 +202,8 @@ describe('withTierWarning', () => {
 });
 
 describe('computeTierWarning (exposed for unit testing)', () => {
-  it('SOFT_THRESHOLD constant is 0.75', () => {
-    expect(SOFT_THRESHOLD).toBe(0.75);
+  it('SOFT_THRESHOLD constant is 0.80 (retuned from 0.75 in ACTIVATION-NUDGE-W1 / A1)', () => {
+    expect(SOFT_THRESHOLD).toBe(0.80);
   });
 
   it('HARD_THRESHOLD constant is 0.90', () => {

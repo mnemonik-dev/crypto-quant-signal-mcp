@@ -135,7 +135,10 @@ describe('runScanTradeCall — exhausted-tier entry block', () => {
     expect(isExhausted(r)).toBe(true);
     if (!isExhausted(r)) return;
     expect(r.error).toBe('quota_exhausted');
-    expect(r.message).toMatch(/Free tier limit reached/);
+    // ACTIVATION-NUDGE-W1: approved 100%-limit copy (was "Free tier limit reached").
+    expect(r.message).toContain("You've hit your");
+    expect(r.message).toContain('algovault.com/track-record');
+    expect(r.message).not.toContain('unlimited');
     expect(r.suggested_action).toBeTruthy();
     expect(calls.n).toBe(0); // scanner never ran
   });

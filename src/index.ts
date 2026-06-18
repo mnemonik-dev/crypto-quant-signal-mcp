@@ -48,6 +48,11 @@ import { getSkillsAnalytics } from './resources/skills-analytics.js';
 import { generateFunnelSnapshot } from './lib/funnel-snapshot.js';
 import { recordFunnelEvent } from './lib/performance-db.js';
 import { recordFirstNonHoldVerdict } from './lib/aha-event.js';
+// ACTIVATION-NUDGE-W1 (2026-06-18): the one-time aha upgrade_hint render reuses
+// C1's single first-non-HOLD detection; the warmer keeps the track-record SoT
+// fresh for all nudge copy (started once at server boot, below).
+import { buildAhaHint } from './lib/nudge-copy.js';
+import { getTrackRecord, startTrackRecordWarmer } from './lib/track-record-snapshot.js';
 import { getPqlCandidates } from './lib/pql.js';
 import {
   captureArgvTrackToken,
@@ -403,13 +408,23 @@ function createServer(): McpServer {
         // `first_non_hold_verdict` event_type ONLY; the deployed quota/CTA
         // captures and the /api/admin/funnel-snapshot endpoint are untouched.
         // Deduped per session (bounded LRU) + read-side DISTINCT; fail-open.
-        recordFirstNonHoldVerdict({
+        const isAha = recordFirstNonHoldVerdict({
           verdict,
           tier: license.tier,
           sessionId: getRequestSessionId(),
           tool: toolNameForAnalytics,
           asset: coin,
         });
+        // ACTIVATION-NUDGE-W1: celebrate-the-aha render. Reuse C1's SINGLE
+        // first-non-HOLD-per-session decision (the return value) — never
+        // re-derive it — to attach the one-time aha upgrade_hint. Free-only +
+        // idempotent are already enforced inside recordFirstNonHoldVerdict.
+        // Precedence aha > soft: overwrite any soft quota nudge the tool set
+        // (the 100% limit is a separate error envelope, not reached here).
+        if (isAha) {
+          const meta = (result as { _algovault?: { upgrade_hint?: string } })._algovault;
+          if (meta) meta.upgrade_hint = buildAhaHint(getTrackRecord());
+        }
         const sessionIdForCohort = getRequestSessionId() ?? null;
         if (sessionIdForCohort !== null) {
           upsertAgentSession({
@@ -2497,6 +2512,12 @@ async function startHttp() {
     console.log(`Health check: http://0.0.0.0:${port}/health`);
     // Warm tier caches in background (xyz symbols, OI rankings, liquid memes)
     warmTierCaches().catch(() => {});
+
+    // ACTIVATION-NUDGE-W1: start the track-record warmer (the live PFE-WR + call
+    // count source for the soft/aha/limit nudge copy). Started here so it only
+    // runs in the long-lived server process — never in a test or short-lived
+    // cron that merely imports the nudge builders.
+    startTrackRecordWarmer();
 
     // Auto-backfill: evaluate pending signals every 5 minutes
     console.log('[backfill] Auto-backfill enabled: every 5 minutes');

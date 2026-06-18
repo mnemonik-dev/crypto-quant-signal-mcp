@@ -16,9 +16,14 @@
 import type { AlgoVaultMeta, TierWarning, LicenseTier } from '../types.js';
 import { recordFunnelEvent } from './performance-db.js';
 import { getRequestSessionId } from './license.js';
+import { SOFT_THRESHOLD, HARD_THRESHOLD } from './activation-thresholds.js';
 
-export const SOFT_THRESHOLD = 0.75;
-export const HARD_THRESHOLD = 0.90;
+// ACTIVATION-NUDGE-W1 (2026-06-18): thresholds now live in the pure
+// `activation-thresholds` module (single source shared with license.ts
+// `getUpgradeHint`). Re-exported here for back-compat with existing importers
+// (tests + any tool referencing `tier-warning`'s constants). SOFT retuned
+// 0.75→0.80 in that module (A1); HARD unchanged at 0.90.
+export { SOFT_THRESHOLD, HARD_THRESHOLD };
 
 /**
  * Default upgrade-target URL with UTM attribution. Free-tier users who click

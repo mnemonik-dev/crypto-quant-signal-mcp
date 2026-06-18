@@ -13,6 +13,12 @@
  * The error-code namespace is open: add new classes here when a new failure
  * mode needs first-class client-side handling.
  */
+// ACTIVATION-NUDGE-W1 (2026-06-18): the 100% TIER_LIMIT_REACHED message renders
+// the approved CTA copy with LIVE track-record values (replacing the legacy
+// over-promising wording that violated the bounded-tier copy rule). Both imports
+// are pure / side-effect-free (getTrackRecord starts no timer); no import cycle.
+import { getTrackRecord } from './track-record-snapshot.js';
+import { buildLimitMessage } from './nudge-copy.js';
 
 /**
  * Thrown by an exchange adapter when the upstream API returns HTTP 429
@@ -100,11 +106,19 @@ export class TierLimitReachedError extends Error {
     suggestedUpgradeUrl: string;
     retryAfterDays: number;
   }) {
-    super(`Free-tier monthly limit reached (${args.currentUsage}/${args.monthlyLimit} calls). Upgrade for unlimited access: ${args.suggestedUpgradeUrl}`);
+    // ACTIVATION-NUDGE-W1: approved 100%-limit copy + LIVE track-record values
+    // via the shared builder (generator-level — all throw sites inherit the fix;
+    // replaces the legacy over-promising wording that broke the bounded-tier copy
+    // rule). The human MESSAGE carries the BARE upgrade_from=limit URL; the structured
+    // `suggested_upgrade_url` field keeps the caller's utm_* chain + adds
+    // upgrade_from=limit for funnel attribution (A2).
+    super(buildLimitMessage({ total: args.monthlyLimit, ...getTrackRecord() }));
     this.current_usage = args.currentUsage;
     this.monthly_limit = args.monthlyLimit;
     this.tier = args.tier;
-    this.suggested_upgrade_url = args.suggestedUpgradeUrl;
+    this.suggested_upgrade_url = args.suggestedUpgradeUrl.includes('upgrade_from=')
+      ? args.suggestedUpgradeUrl
+      : `${args.suggestedUpgradeUrl}${args.suggestedUpgradeUrl.includes('?') ? '&' : '?'}upgrade_from=limit`;
     this.retry_after_days = args.retryAfterDays;
     Object.setPrototypeOf(this, TierLimitReachedError.prototype);
   }

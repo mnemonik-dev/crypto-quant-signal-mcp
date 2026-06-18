@@ -103,3 +103,27 @@ describe('aha-event — shouldEmitFirstNonHold', () => {
     expect(shouldEmitFirstNonHold('y')).toBe(true);
   });
 });
+
+describe('aha-event — return value drives the aha render (ACTIVATION-NUDGE-W1 single source)', () => {
+  // The boolean return is the SINGLE first-non-HOLD-per-session decision the
+  // handler reuses to attach the one-time aha upgrade_hint (no re-derivation).
+  it('returns true exactly when the aha fires (first free non-HOLD), false on the dup', () => {
+    const rec = vi.fn();
+    expect(recordFirstNonHoldVerdict({ verdict: 'BUY', tier: 'free', sessionId: 'r1', tool: 'get_trade_call' }, rec)).toBe(true);
+    // second non-HOLD same session → event deduped AND render suppressed
+    expect(recordFirstNonHoldVerdict({ verdict: 'SELL', tier: 'free', sessionId: 'r1', tool: 'get_trade_signal' }, rec)).toBe(false);
+    expect(rec).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns false for HOLD, paid tier, and missing session (no aha render)', () => {
+    const rec = vi.fn();
+    expect(recordFirstNonHoldVerdict({ verdict: 'HOLD', tier: 'free', sessionId: 'r2', tool: 'get_trade_call' }, rec)).toBe(false);
+    expect(recordFirstNonHoldVerdict({ verdict: 'BUY', tier: 'starter', sessionId: 'r3', tool: 'get_trade_call' }, rec)).toBe(false);
+    expect(recordFirstNonHoldVerdict({ verdict: 'BUY', tier: 'free', sessionId: null, tool: 'get_trade_call' }, rec)).toBe(false);
+  });
+
+  it('returns false fail-open when the recorder throws (render never fires on a write fault)', () => {
+    const rec = vi.fn(() => { throw new Error('db down'); });
+    expect(recordFirstNonHoldVerdict({ verdict: 'BUY', tier: 'free', sessionId: 'r4', tool: 'get_trade_call' }, rec)).toBe(false);
+  });
+});

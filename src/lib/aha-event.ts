@@ -68,25 +68,35 @@ type FunnelEventRecorder = typeof recordFunnelEvent;
  * session id is present, AND it is the first non-HOLD for that session.
  * `recorder` is injectable for unit tests. Fail-open — any error is swallowed
  * so the trade-call response path is never affected.
+ *
+ * RETURNS `true` exactly when the aha fired (this call WAS the session's first
+ * non-HOLD and the event was recorded), else `false`. ACTIVATION-NUDGE-W1 reuses
+ * this SINGLE decision (architect-mandated single source) to drive the one-time
+ * aha `upgrade_hint` render in `makeTradeCallHandler` — so the analytics event
+ * and the user-facing message fire on the exact same call, never re-deriving
+ * "first non-HOLD per session" twice. Back-compat: callers that ignore the
+ * return value (the original `void` usage) are unaffected.
  */
 export function recordFirstNonHoldVerdict(
   input: FirstNonHoldInput,
   recorder: FunnelEventRecorder = recordFunnelEvent,
-): void {
+): boolean {
   try {
     const verdict = typeof input.verdict === 'string' ? input.verdict.toUpperCase() : '';
-    if (verdict !== 'BUY' && verdict !== 'SELL') return; // HOLD / error / null → not the aha
-    if ((input.tier ?? '') !== 'free') return;           // activation cohort = free only
+    if (verdict !== 'BUY' && verdict !== 'SELL') return false; // HOLD / error / null → not the aha
+    if ((input.tier ?? '') !== 'free') return false;           // activation cohort = free only
     const sessionId = input.sessionId;
-    if (!sessionId) return;                              // need a session to attribute + dedup
-    if (!shouldEmitFirstNonHold(sessionId)) return;      // first non-HOLD per session only
+    if (!sessionId) return false;                              // need a session to attribute + dedup
+    if (!shouldEmitFirstNonHold(sessionId)) return false;      // first non-HOLD per session only
     recorder({
       eventType: 'first_non_hold_verdict',
       sessionId,
       licenseTier: 'free',
       meta: { verdict, tool: input.tool, asset: input.asset ?? null },
     });
+    return true; // the aha just fired for this session
   } catch {
     // Fail-open per CLAUDE.md Automation-first recovery — never break the response.
+    return false;
   }
 }
