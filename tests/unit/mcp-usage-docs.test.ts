@@ -17,8 +17,11 @@ describe('MCP_USAGE_HTML — structural invariants', () => {
     expect(MCP_USAGE_HTML).toContain('id="connect-mcp"');
   });
 
-  it('opens with the right H2 heading', () => {
-    expect(MCP_USAGE_HTML).toMatch(/<h2[^>]*>[\s\S]*Connect Your MCP Client[\s\S]*<\/h2>/);
+  it('has the "Connect Your MCP Client" section heading', () => {
+    // The doc was restructured under a top-level "Integration" <h2> with
+    // three <h3> subsections (MCP Client / AI Agent / Exchange Kit); the
+    // MCP-client walkthrough heading is now an <h3> carrying id="connect-mcp".
+    expect(MCP_USAGE_HTML).toMatch(/<h[23][^>]*>[\s\S]*Connect Your MCP Client[\s\S]*<\/h[23]>/);
   });
 
   it.each([
@@ -49,9 +52,14 @@ describe('MCP_USAGE_HTML — structural invariants', () => {
     expect(MCP_USAGE_HTML).toMatch(/verified \d{4}-\d{2}-\d{2}/i);
   });
 
-  it('has 6 <details> blocks (one walkthrough per client surface)', () => {
+  it('has at least one <details> walkthrough per client surface (≥6)', () => {
+    // Shape-not-frozen-count (Build Rule 5): the doc grew from the original 6
+    // MCP-client walkthroughs to also cover AI-agent + exchange-kit surfaces
+    // (17 <details> at time of writing). The 6 enumerated client surfaces
+    // above remain the floor — assert ≥6 rather than an exact count that
+    // drifts every time a surface/walkthrough is added.
     const matches = MCP_USAGE_HTML.match(/<details[^>]*>/g) ?? [];
-    expect(matches.length).toBe(6);
+    expect(matches.length).toBeGreaterThanOrEqual(6);
   });
 
   it('the Plain-HTTP block points at the existing 3-step handshake guide (no broken raw-curl repeat)', () => {

@@ -65,13 +65,13 @@ describe('recentSignals shape', () => {
     }
   });
 
-  it('includes expected public fields (coin, call, confidence, timeframe, tier, exchange, created_at)', async () => {
+  it('includes expected public fields (id, coin, tier, timeframe, exchange, created_at)', async () => {
     const stats = await perfDb.getPerformanceStatsAsync();
     for (const s of stats.recentSignals) {
       expect(typeof s.coin).toBe('string');
-      // v1.10.0 (OUTPUT-SANITIZE-W1 C5): emitted field is `call` (was `signal` pre-1.10).
-      expect(typeof s.call).toBe('string');
-      expect(typeof s.confidence).toBe('number');
+      // PERFORMANCE-PUBLIC-SANITIZE-W1 (c27bba0, 2026-05-15): recentSignals[] public
+      // allow-list is {id, coin, tier, timeframe, exchange, created_at}; call/confidence
+      // were stripped from THIS projection (they live on /api/recent-calls).
       expect(typeof s.timeframe).toBe('string');
       expect(typeof s.tier).toBe('number');
       expect(typeof s.exchange).toBe('string');

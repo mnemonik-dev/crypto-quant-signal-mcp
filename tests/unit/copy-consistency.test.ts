@@ -44,7 +44,12 @@ function read(rel: string): string | null {
 
 describe('Copy consistency — free-tier unlock + 11-timeframe canonical claim', () => {
   describe('"11 timeframes" canonical claim is present in major surfaces', () => {
-    for (const f of ['landing/index.html', 'landing/llms-full.txt', 'README.md']) {
+    // README.md was intentionally forward-stabilized by GEO-REGISTRY-RANK-README-REFRESH-W1
+    // (e511b28, "forward-stabilize hero + Tools venue/timeframe counts") — the hardcoded
+    // "11 timeframes" count was removed per the forward-stability discipline (count-bound
+    // claims → live/qualitative). The canonical literal claim lives on the landing copy
+    // surfaces (per this guard's AC: "landing copy"), where it remains asserted exactly.
+    for (const f of ['landing/index.html', 'landing/llms-full.txt']) {
       it(`${f} contains "11 timeframes"`, () => {
         const txt = read(f);
         expect(txt).not.toBeNull();

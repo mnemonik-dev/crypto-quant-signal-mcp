@@ -67,8 +67,9 @@ const FIXTURE_BUNDLE = {
   ],
   examples: [],
   discussions: [],
+  pages: [], // BUNDLE-EXPAND-BLOG-W1 made `pages` a required KnowledgeBundle field
   _algovault: {
-    bundle_version: 1,
+    bundle_version: 2, // BUNDLE-EXPAND-BLOG-W1 bumped the schema 1 → 2
     generator: 'build-knowledge-json.mjs',
     repo: 'AlgoVaultLabs/crypto-quant-signal-mcp',
   },

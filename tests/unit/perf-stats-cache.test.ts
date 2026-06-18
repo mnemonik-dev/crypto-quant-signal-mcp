@@ -208,15 +208,19 @@ describe('OPTIMIZE-DASHBOARD-SIGNALS-LIMIT-W1: getPerformanceStats cache', () =>
     expect(recentCoins.has(fixtureCoinA)).toBe(true);
     expect(recentCoins.has(fixtureCoinB)).toBe(true);
 
-    // Recent signals shape — id, coin, call (alias for signal), confidence,
-    // timeframe, tier, created_at, exchange — all populated
+    // Recent signals public shape — PERFORMANCE-PUBLIC-SANITIZE-W1 (c27bba0,
+    // 2026-05-15) hardened recentSignals[] to the allow-list {id, coin, tier,
+    // timeframe, exchange, created_at}; call/confidence/outcome_* are stripped
+    // from THIS projection (call lives on /api/recent-calls). formatPublicRecentSignal
+    // is the single allow-list SoT.
     const sampleA = stats.recentSignals.find((s) => s.coin === fixtureCoinA);
     expect(sampleA).toBeDefined();
     expect(sampleA!.id).toBeGreaterThan(0);
-    expect(sampleA!.call).toBe('BUY');
-    expect(sampleA!.confidence).toBe(75);
+    expect(sampleA!.coin).toBe(fixtureCoinA);
     expect(sampleA!.timeframe).toBe('5m');
     expect(sampleA!.exchange).toBe('HL');
+    expect(typeof sampleA!.tier).toBe('number');
+    expect(typeof sampleA!.created_at).toBe('number');
 
     // Cleanup
     dbRun('DELETE FROM signals WHERE coin IN (?, ?)', fixtureCoinA, fixtureCoinB);

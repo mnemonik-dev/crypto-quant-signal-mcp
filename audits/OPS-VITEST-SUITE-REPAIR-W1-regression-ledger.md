@@ -35,25 +35,26 @@ All import `node:test`/`node:assert`; vitest reports **"No test suite found in f
 
 | # | File | Cases | Failure reason (first line) | Sub-class | Status |
 |---|---|---|---|---|---|
-| 14 | `tests/recent-signals-shape.test.ts` | 1 | `expected 'undefined' to be 'string'` — a public shape field is now undefined | shape-drift (root-cause: is field legitimately renamed/removed, or REAL shape regression?) | OPEN |
-| 15 | `tests/unit/chat-engine.test.ts` | 4 | `Error: KnowledgeBundle: missing required field 'pages'` | stale **fixture** (loader now requires `pages`) | OPEN |
-| 16 | `tests/unit/copy-consistency.test.ts` | 1 | README.md does not contain `'11 timeframes'` | stale public-copy canary (verify claim still true; shape-regex if phrasing drifted) | OPEN |
-| 17 | `tests/unit/knowledge-index.test.ts` | 4 | `Error: KnowledgeBundle: missing required field 'pages'` | stale **fixture** (same loader requirement) | OPEN |
-| 18 | `tests/unit/mcp-usage-docs.test.ts` | 2 | (a) H2 heading regex mismatch; (b) `expected 17 to be 6` `<details>` blocks | **frozen-count → shape-regex** (Build Rule 5) + heading update | OPEN |
-| 19 | `tests/unit/perf-stats-cache.test.ts` | 1 | `expected undefined to be 'BUY'` — cache column-projection drops `call` vs full-row SELECT | **REAL_BUG_SUSPECTED** — C2 root-cause; if the projection genuinely drops a public field → Build Rule 6 HALT (no `src/**` fix here) | OPEN |
-| 20 | `tests/unit/snapshot-capabilities.test.mjs` | 1 | `--check exits 0 when in-sync; expected 2 to be 0` (vitest `.mjs`) | snapshot-drift (deterministic) — regenerate/refresh capabilities snapshot or correct the in-sync expectation | OPEN |
+| 14 | `tests/recent-signals-shape.test.ts` | 1 | `expected 'undefined' to be 'string'` (s.call) | A-stale public-shape — PERFORMANCE-PUBLIC-SANITIZE-W1 (`c27bba0`) stripped call/confidence from the recentSignals[] allow-list; test asserted the pre-hardening shape. **NOT a regression.** | ✅ FIXED C2 |
+| 15 | `tests/unit/chat-engine.test.ts` | 4 | `pages` missing → then `bundle_version: expected 2, got 1` | A-stale **fixture** — BUNDLE-EXPAND-BLOG-W1 added required `pages` + bumped `_algovault.bundle_version` 1→2 | ✅ FIXED C2 (`pages: []` + `bundle_version: 2`) |
+| 16 | `tests/unit/copy-consistency.test.ts` | 1 | README.md lacks `'11 timeframes'` | A-stale public-copy — README forward-stabilized by GEO-REGISTRY-RANK-README-REFRESH-W1 (`e511b28`); literal claim lives on landing copy. **ALSO parallel-flaky** (file-level fail under load, passes isolated) → Class-B | ✅ stale-assertion FIXED C2 (dropped README from loop, landing surfaces kept exact); ⚠️ flakiness → C3 |
+| 17 | `tests/unit/knowledge-index.test.ts` | 4 | `pages` then `bundle_version` (as #15) | A-stale **fixture** (same BUNDLE-EXPAND-BLOG-W1 schema bump) | ✅ FIXED C2 (`pages: []` + `bundle_version: 2`) |
+| 18 | `tests/unit/mcp-usage-docs.test.ts` | 2 | H2 regex mismatch; `expected 17 to be 6` `<details>` | A-stale — doc restructured ("Connect Your MCP Client" now `<h3>` under an "Integration" `<h2>`; 17 details across 3 sections) | ✅ FIXED C2 (heading `<h2>`→`<h[23]>`; `toBe(6)`→`toBeGreaterThanOrEqual(6)` per Build Rule 5) |
+| 19 | `tests/unit/perf-stats-cache.test.ts` | 1 | `expected undefined to be 'BUY'` (sampleA.call) | **REAL_BUG CLEARED** → A-stale public-shape. `formatPublicRecentSignal` is a SECURITY-CRITICAL 6-key allow-list (`c27bba0`); `call`/`confidence` deliberately stripped (live on /api/recent-calls). Production correct-by-design; test stale. **No `src/**` change; no Build Rule 6 HALT.** | ✅ FIXED C2 |
+| 20 | `tests/unit/snapshot-capabilities.test.mjs` | 1 | `--check` exit 2 not 0 | NOT a stale assertion — env-dependent: `--check` reads `dist/lib/capabilities.js`; fails only on a STALE `dist` (missing `dist` fail-opens to 0). Genuinely in-sync once built. | ✅ GREEN w/ fresh dist; robustness `beforeAll` build → C3; gate builds first → C4 |
 
 ### Class `B-parallel-flaky` (2 this run; +1 flaky-passed) — **C3 isolation/sequencing**
 
 | # | File | baseline | current | Note | Status |
 |---|---|---|---|---|---|
-| 21 | `tests/integration/knowledge-flow.test.ts` | RED | RED (0 failed asserts; suite-level) | shared SQLite/test-state contention under parallel | OPEN |
-| 22 | `tests/unit/knowledge-bundle.test.ts` | RED | RED (0 failed asserts; suite-level) | same contention class | OPEN |
-| — | `tests/x402-http-routes.test.ts` | (passed) | **GREEN** (flaky-passed both runs) | system-map-documented flaky pair w/ knowledge-flow; in C3 stabilization scope though GREEN this run | WATCH |
+| 21 | `tests/integration/knowledge-flow.test.ts` | RED | RED (0 failed asserts; suite-level) | shared SQLite/test-state contention under parallel | OPEN → C3 |
+| 22 | `tests/unit/knowledge-bundle.test.ts` | RED | flaky (RED C1; GREEN C2 runs) | same contention class; nondeterministic | OPEN → C3 |
+| 16b | `tests/unit/copy-consistency.test.ts` | (discovered C2) | flaky (GREEN isolated; file-level RED under load, no message) | pure file-read test — flakiness is worker/parallel-load artifact, not shared mutable state; investigate in C3 | OPEN → C3 |
+| — | `tests/x402-http-routes.test.ts` | (passed) | **GREEN** (flaky-passed all runs) | system-map-documented flaky pair w/ knowledge-flow; in C3 stabilization scope though GREEN every run | WATCH |
 
 ## Hygiene delta (C4) — reconciled
 - `audits/GEO-AUTOPILOT-W1-endpoint-truth.md` — **TRACKED** (`24245ec`), NOT an untracked leftover → **KEEP** (Q3). 
 - Genuinely-untracked leftovers to remove in C4 (6): `audits/NPM-PUBLISH-v1.{19.0,19.1,20.0,20.1}-W1-endpoint-truth.md`, `audits/chatgpt-app-directory-submission-package.md`, `.claude/napkin.md`.
 
-## REAL_BUG watch (Build Rule 6)
-- **#19 perf-stats-cache** — `REAL_BUG_SUSPECTED`. C2 must root-cause whether the `getPerformanceStats` cache column-projection legitimately omits `call`. If a production-code (`src/**`) change is required to make the projection correct → STOP, do NOT fix here, append `WAVE1_CH2_HALT` + flag a separate dispatch.
+## REAL_BUG watch (Build Rule 6) — RESOLVED, zero real bugs
+- **#19 perf-stats-cache** — `REAL_BUG_SUSPECTED` **CLEARED at C2 (NOT a real bug).** Root cause: `formatPublicRecentSignal` (`src/lib/performance-db.ts:2304`) is a SECURITY-CRITICAL 6-key allow-list (`id, coin, tier, timeframe, exchange, created_at`) shipped by PERFORMANCE-PUBLIC-SANITIZE-W1 (`c27bba0`, 2026-05-15); `call`/`confidence` were deliberately stripped from `recentSignals[]` (they remain public on `/api/recent-calls` via `formatRecentCallRow`). Production is correct-by-design; the test asserted the pre-hardening shape. Fixed in the TEST only — no `src/**` change, no `WAVE1_CH2_HALT`. **Zero REAL_BUG rows remain across the 22-file set.**

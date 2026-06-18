@@ -52,7 +52,8 @@ const FIXTURE_BUNDLE = {
   })),
   examples: [],
   discussions: [],
-  _algovault: { bundle_version: 1, generator: 'build-knowledge-json.mjs', repo: 'AlgoVaultLabs/crypto-quant-signal-mcp' },
+  pages: [], // BUNDLE-EXPAND-BLOG-W1 made `pages` a required KnowledgeBundle field
+  _algovault: { bundle_version: 2, generator: 'build-knowledge-json.mjs', repo: 'AlgoVaultLabs/crypto-quant-signal-mcp' }, // BUNDLE-EXPAND-BLOG-W1 bumped schema 1 → 2
 };
 
 async function makeChatStack(): Promise<{
