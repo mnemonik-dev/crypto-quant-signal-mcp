@@ -68,9 +68,11 @@ describe('LANDING-CONVERSION-TRUST-W1 — trust band, verify link, free-start, C
 
   it('pricing buy buttons wired to /signup with landing_pricing attribution (was dead #anchors)', () => {
     for (const plan of ['starter', 'pro', 'enterprise']) {
-      expect(count(`href="/signup?plan=${plan}&amp;upgrade_from=landing_pricing"`)).toBe(2);
+      expect(count(`href="https://api.algovault.com/signup?plan=${plan}&amp;upgrade_from=landing_pricing"`)).toBe(2);
       expect(html).not.toContain(`href="#${plan}"`);
     }
+    // /signup is routed ONLY on api.algovault.com (algovault.com/signup 404s) — no relative /signup CTAs.
+    expect(html).not.toContain('href="/signup?plan=');
   });
 
   it('LAW: Brain-Layer hero + 4 Stripe card copy + x402 card are byte-unchanged (only hrefs wired)', () => {
