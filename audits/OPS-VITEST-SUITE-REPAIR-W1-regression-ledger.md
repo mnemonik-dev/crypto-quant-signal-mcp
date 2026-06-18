@@ -64,3 +64,10 @@ All import `node:test`/`node:assert`; vitest reports **"No test suite found in f
 
 ## REAL_BUG watch (Build Rule 6) — RESOLVED, zero real bugs
 - **#19 perf-stats-cache** — `REAL_BUG_SUSPECTED` **CLEARED at C2 (NOT a real bug).** Root cause: `formatPublicRecentSignal` (`src/lib/performance-db.ts:2304`) is a SECURITY-CRITICAL 6-key allow-list (`id, coin, tier, timeframe, exchange, created_at`) shipped by PERFORMANCE-PUBLIC-SANITIZE-W1 (`c27bba0`, 2026-05-15); `call`/`confidence` were deliberately stripped from `recentSignals[]` (they remain public on `/api/recent-calls` via `formatRecentCallRow`). Production is correct-by-design; the test asserted the pre-hardening shape. Fixed in the TEST only — no `src/**` change, no `WAVE1_CH2_HALT`. **Zero REAL_BUG rows remain across the 22-file set.**
+
+## Final state (C4) — generator fix + baseline
+
+- **Suite GREEN under both runners**, 0 src/** changes across the whole wave. 22 rotten files → 0: 13 runner-misglob (vitest exclude), 7 stale-assertion (C2), 2 deterministic "flaky" (C3). All defects were **stale tests / mis-globbed runners / empty-suite / corpus-grown ranking** — none were product bugs, and the system-map's "shared SQLite contention" did not reproduce.
+- **Committed baseline:** `audits/test-baseline-known-failures.txt` = GREEN (0 known-failing). 0 quarantines.
+- **Pre-push gate:** `scripts/check_test_baseline.sh` (vitest + node:test, diff vs baseline, fail-open, `ALGOVAULT_TEST_GATE=warn|block`) + `scripts/install_test_gate_hook.sh` (composable `.git/hooks/pre-push`). Gate-bite proven: dummy fail → exit 1; warn → exit 0; revert → exit 0.
+- **Hygiene:** 5 untracked leftovers removed (4× `NPM-PUBLISH-v1.*`, `chatgpt-app-directory-submission-package.md` — relocated to the vault first). `GEO-AUTOPILOT-W1-endpoint-truth.md` kept (tracked). **`.claude/napkin.md` KEPT** — inspection showed it is the napkin-skill's live curated runbook (2026-06-11, high-value), not "expired scratch" as the Q3 brief assumed → surfaced to the operator rather than deleted (deletion-safety discipline).

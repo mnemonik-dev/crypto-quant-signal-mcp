@@ -1,0 +1,14 @@
+# OPS-VITEST-SUITE-REPAIR-W1 — committed test-baseline (machine-readable).
+#
+# Consumed by scripts/check_test_baseline.sh. Each non-comment, non-blank line is
+# a test-FILE path (relative, normalized to start at `tests/`) that is KNOWN /
+# quarantined-failing and therefore allow-listed — the pre-push gate does NOT
+# treat it as a regression. The human narrative for each lives in
+# audits/OPS-VITEST-SUITE-REPAIR-W1-regression-ledger.md.
+#
+# CURRENT BASELINE: GREEN — zero known-failing files. The full vitest suite and
+# the node:test canaries both pass (verified C3: 207 passed | 1 skipped; node:test
+# 464/464). Any failing file is therefore a NEW regression and blocks the push.
+#
+# To quarantine a genuinely-intractable test in a future wave: `.skip` it, add a
+# ledger row explaining why + a tracked OPS-… follow-up, and add its path here.
