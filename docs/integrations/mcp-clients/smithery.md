@@ -14,6 +14,8 @@ Replace `<name>` with: `claude`, `cursor`, `cline`, or `claude-code`.
 
 Smithery writes the right MCP-server entry into your client's config file. If your client needs an API key, the CLI prompts for `AV_API_KEY` (or skip to use the free tier).
 
+[//]: # "ATTRIBUTION-SRC-COVERAGE-W1: no raw remote MCP connect URL on this page to ?src=-tag — Smithery CLI writes the client config; this channel attribution rides the Smithery registry-listing slug ?src=smithery. Connect-uncapturable via this page by design; see scripts/check-attribution-src-coverage.mjs."
+
 ## Example: install for Claude Desktop
 
 ```text

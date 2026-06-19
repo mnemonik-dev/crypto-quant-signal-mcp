@@ -161,7 +161,7 @@ tailwind.config = {
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Setup</h2>
 <p><strong>One-liner (recommended):</strong></p>
 <pre><code class="language-bash">claude mcp add --transport http --scope project algovault \
-  https://api.algovault.com/mcp \
+  https://api.algovault.com/mcp?src=docs \
   --header &quot;Authorization: Bearer $AV_API_KEY&quot; \
   --header &quot;X-AlgoVault-Track-Token:int-claude-code&quot;
 </code></pre>
@@ -171,7 +171,7 @@ tailwind.config = {
   &quot;mcpServers&quot;: {
     &quot;algovault&quot;: {
       &quot;type&quot;: &quot;http&quot;,
-      &quot;url&quot;: &quot;https://api.algovault.com/mcp&quot;,
+      &quot;url&quot;: &quot;https://api.algovault.com/mcp?src=docs&quot;,
       &quot;headers&quot;: {
         &quot;Authorization&quot;: &quot;Bearer ${AV_API_KEY}&quot;,
         &quot;X-AlgoVault-Track-Token&quot;: &quot;int-claude-code&quot;

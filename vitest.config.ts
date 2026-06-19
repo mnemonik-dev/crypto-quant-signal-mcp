@@ -31,6 +31,9 @@ export default defineConfig({
       // OPS-CADDY-ROUTE-PARITY-W1 — node:test apex-route-parity guard (canonical runner is
       // node:test; exclude from vitest so it doesn't false-fail "No test suite found").
       'tests/unit/caddy-route-parity.test.mjs',
+      // ATTRIBUTION-SRC-COVERAGE-W1 — node:test acquisition `?src=` coverage canary (same
+      // node:test ownership; exclude from vitest so it doesn't false-fail "No test suite found").
+      'tests/unit/attribution-src-coverage.test.mjs',
     ],
   },
 });

@@ -160,13 +160,13 @@ tailwind.config = {
 </blockquote></div>
 <div class="tier-stat-card" style="padding:24px;gap:0;margin-bottom:18px"><h2>Setup</h2>
 <p>Two paths. The UI path is easiest if you already use Claude Desktop daily.</p>
-<p><strong>Path 1 — UI (recommended).</strong> Open Claude Desktop → Settings → Connectors → <em>Add custom connector</em>. Name: <code>AlgoVault</code>. URL: <code>https://api.algovault.com/mcp</code>. Save and restart Claude Desktop. The free tier needs no header. Paid tier: add <code>Authorization: Bearer av_live_…</code> as a custom header.</p>
+<p><strong>Path 1 — UI (recommended).</strong> Open Claude Desktop → Settings → Connectors → <em>Add custom connector</em>. Name: <code>AlgoVault</code>. URL: <code>https://api.algovault.com/mcp?src=docs</code>. Save and restart Claude Desktop. The free tier needs no header. Paid tier: add <code>Authorization: Bearer av_live_…</code> as a custom header.</p>
 <p><strong>Path 2 — JSON config.</strong> Edit <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code>%APPDATA%\Claude\claude_desktop_config.json</code> (Windows):</p>
 <pre><code class="language-json">{
   &quot;mcpServers&quot;: {
     &quot;algovault&quot;: {
       &quot;command&quot;: &quot;npx&quot;,
-      &quot;args&quot;: [&quot;-y&quot;, &quot;mcp-remote&quot;, &quot;https://api.algovault.com/mcp&quot;,
+      &quot;args&quot;: [&quot;-y&quot;, &quot;mcp-remote&quot;, &quot;https://api.algovault.com/mcp?src=docs&quot;,
                &quot;--header&quot;, &quot;Authorization: Bearer ${AV_API_KEY}&quot;,
                &quot;--header&quot;, &quot;X-AlgoVault-Track-Token:int-claude-desktop&quot;]
     }

@@ -8,7 +8,7 @@ Add AlgoVault's MCP tools to Claude Desktop as a custom connector. ≤5 minutes;
 
 Two paths. The UI path is easiest if you already use Claude Desktop daily.
 
-**Path 1 — UI (recommended).** Open Claude Desktop &rarr; Settings &rarr; Connectors &rarr; *Add custom connector*. Name: `AlgoVault`. URL: `https://api.algovault.com/mcp`. Save and restart Claude Desktop. The free tier needs no header. Paid tier: add `Authorization: Bearer av_live_…` as a custom header.
+**Path 1 — UI (recommended).** Open Claude Desktop &rarr; Settings &rarr; Connectors &rarr; *Add custom connector*. Name: `AlgoVault`. URL: `https://api.algovault.com/mcp?src=docs`. Save and restart Claude Desktop. The free tier needs no header. Paid tier: add `Authorization: Bearer av_live_…` as a custom header.
 
 **Path 2 — JSON config.** Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -17,7 +17,7 @@ Two paths. The UI path is easiest if you already use Claude Desktop daily.
   "mcpServers": {
     "algovault": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp",
+      "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp?src=docs",
                "--header", "Authorization: Bearer ${AV_API_KEY}",
                "--header", "X-AlgoVault-Track-Token:int-claude-desktop"]
     }

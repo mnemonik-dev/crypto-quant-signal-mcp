@@ -13,7 +13,7 @@ Open the Cline panel in VSCode &rarr; MCP Servers &rarr; Remote Servers tab &rar
   "mcpServers": {
     "algovault": {
       "type": "streamableHttp",
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer ${env:AV_API_KEY}",
         "X-AlgoVault-Track-Token": "int-cline"
