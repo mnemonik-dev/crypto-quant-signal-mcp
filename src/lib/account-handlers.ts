@@ -156,6 +156,7 @@ ${accountArtboardOpen()}
         <div class="tabs" role="tablist">
           <button class="tab active" id="tab-key" type="button" onclick="switchTab('key')">I have my API key</button>
           <button class="tab" id="tab-email" type="button" onclick="switchTab('email')">Recover lost key</button>
+          <button class="tab" id="tab-referral" type="button" onclick="switchTab('referral')">Referrals</button>
         </div>
         <form class="panel" id="panel-key" action="/account/portal" method="post">
           <div class="hint">Paste your API key to open the Stripe Billing Portal — cancel, change plan, or update payment method.</div>
@@ -169,16 +170,22 @@ ${accountArtboardOpen()}
           <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required>
           <button type="submit">Email me my key</button>
         </form>
+        <form class="panel hidden" id="panel-referral" action="/account/referrals" method="post">
+          <div class="hint">Paste your API key (av_live_ or av_free_) to see your referral code, share link, signups, and earnings.</div>
+          <label for="ref_api_key">API Key</label>
+          <input type="password" id="ref_api_key" name="api_key" placeholder="av_live_... or av_free_..." autocomplete="off" required>
+          <button type="submit">View my referrals &rarr;</button>
+        </form>
         <div class="help-line">Need help? <a href="mailto:support@algovault.com">support@algovault.com</a></div>
       </div>
 ${accountArtboardClose()}
 ${ACCOUNT_FOOTER_HTML}
 <script>
 function switchTab(which){
-  document.getElementById('tab-key').classList.toggle('active', which==='key');
-  document.getElementById('tab-email').classList.toggle('active', which==='email');
-  document.getElementById('panel-key').classList.toggle('hidden', which!=='key');
-  document.getElementById('panel-email').classList.toggle('hidden', which!=='email');
+  ['key','email','referral'].forEach(function(t){
+    document.getElementById('tab-'+t).classList.toggle('active', which===t);
+    document.getElementById('panel-'+t).classList.toggle('hidden', which!==t);
+  });
 }
 </script>
 </body>
@@ -290,4 +297,51 @@ export async function accountRecoverKeyHandler(req: Request, res: Response): Pro
   }
   // Always render the same success page (no enumeration leak).
   res.send(getAccountRecoverySuccessHtml());
+}
+
+// REFERRAL-LIGHT-W1 (C4): paste-key → the caller's own referral dashboard. The
+// code is derived deterministically from the key (no Stripe call needed); stats +
+// bonus come from the frozen referral-store. Lazy imports match the file's style.
+export async function accountReferralsHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const apiKey = typeof req.body?.api_key === 'string' ? req.body.api_key.trim() : '';
+    if (!/^av_(live|free)_[a-f0-9]{24}$/.test(apiKey)) {
+      res.status(400).send(getAccountErrorPageHtml('Please paste a valid AlgoVault API key (av_live_… or av_free_…).'));
+      return;
+    }
+    const { ensureUserCode, referrerStats, getBonusRemaining } = await import('./referral-store.js');
+    const { renderReferralStatsPage } = await import('./referral-pages.js');
+    const { dbQuery } = await import('./performance-db.js');
+
+    const code = await ensureUserCode(apiKey);
+    const stats = await referrerStats(code);
+    const bonusRemaining = await getBonusRemaining(apiKey);
+
+    // clicks = referral_click funnel events for this code (fail-open → 0).
+    let clicks = 0;
+    try {
+      const rows = await dbQuery<{ c: number | string }>(
+        `SELECT COUNT(*) AS c FROM funnel_events WHERE event_type = 'referral_click' AND meta_json LIKE ?`,
+        [`%"code":"${code}"%`],
+      );
+      clicks = rows.length ? Number(rows[0].c) : 0;
+    } catch { /* fail-open — clicks default 0 */ }
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderReferralStatsPage({
+      code,
+      clicks,
+      signups: stats.signups,
+      conversions: stats.conversions,
+      bonusRemaining,
+      accruedUsdE2: stats.accrued_usd_e2,
+      creditedUsdE2: stats.credited_usd_e2,
+      usdcPendingUsdE2: stats.usdc_pending_usd_e2,
+      usdcPaidUsdE2: stats.usdc_paid_usd_e2,
+    }));
+  } catch (err) {
+    console.error('/account/referrals error:', err instanceof Error ? err.message : err);
+    res.status(500).send(getAccountErrorPageHtml('Could not load your referral stats. Please try again or contact support@algovault.com.'));
+  }
 }

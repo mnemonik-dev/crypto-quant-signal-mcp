@@ -41,7 +41,7 @@ import { initAnalytics, logRequest, hashIp, getUsageStats, logSkillInvocation } 
 import { clientIp } from './lib/client-ip.js';
 import { ensureProcessedStripeEventsSchema, tryClaimEvent } from './lib/stripe-events-store.js';
 import { upsertSignupEmail, markConfirmationSent, tryClaimSignupEmailEvent } from './lib/signup-emails-store.js';
-import { sendOptinConfirmationEmail } from './lib/email.js';
+import { sendOptinConfirmationEmail, sendReferredFreeKeyEmail } from './lib/email.js';
 import { EMAIL_RE } from './lib/stripe.js';
 import { getAnalyticsSummary } from './resources/analytics-summary.js';
 import { getSkillsAnalytics } from './resources/skills-analytics.js';
@@ -190,6 +190,7 @@ import {
   accountPageHandler,
   accountPortalHandler,
   accountRecoverKeyHandler,
+  accountReferralsHandler,
 } from './lib/account-handlers.js';
 import { getTopAssetsByOI } from './lib/oi-ranking.js';
 
@@ -1482,6 +1483,13 @@ async function startHttp() {
   app.get('/account', accountPageHandler);
   app.post('/account/portal', express.urlencoded({ extended: false }), accountPortalHandler);
   app.post('/account/recover-key', recoverKeyLimiter, express.urlencoded({ extended: false }), accountRecoverKeyHandler);
+  // REFERRAL-LIGHT-W1 (C4): referral dashboard (paste key) + public terms page.
+  app.post('/account/referrals', express.urlencoded({ extended: false }), accountReferralsHandler);
+  app.get('/referral-terms', async (_req, res) => {
+    const { renderReferralTermsPage } = await import('./lib/referral-pages.js');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderReferralTermsPage());
+  });
 
   // Admin analytics (only if ADMIN_API_KEY is set)
   let adminCleanupInterval: ReturnType<typeof setInterval> | undefined;
@@ -1710,6 +1718,91 @@ async function startHttp() {
         res.json({ bands, generatedAt: new Date().toISOString() });
       } catch (err) {
         res.status(500).json({ error: 'Failed to fetch confidence bands' });
+      }
+    });
+
+    // REFERRAL-LIGHT-W1 (C4): referral admin surfaces — same isAdminAuthorized gate
+    // (Bearer / ?key= / admin cookie) as the precedents.
+    app.get('/admin/referrals', async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).send('Unauthorized — add ?key=YOUR_ADMIN_KEY to the URL');
+      }
+      try {
+        const { topReferrers, listRecentLedger } = await import('./lib/referral-store.js');
+        const { renderAdminReferralsPage } = await import('./lib/referral-pages.js');
+        const { dbQuery } = await import('./lib/performance-db.js');
+        const top = await topReferrers(20);
+        const ledger = await listRecentLedger(50);
+        const codeRows = await dbQuery<{ c: number | string }>('SELECT COUNT(*) AS c FROM referral_codes', []);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(renderAdminReferralsPage({
+          codeCount: codeRows.length ? Number(codeRows[0].c) : 0,
+          topReferrers: top.map((t) => ({ code: t.code, signups: t.signups, conversions: t.conversions, accruedUsdE2: t.accrued_usd_e2 })),
+          recentLedger: ledger.map((l) => ({ id: l.id, code: l.code, commissionUsdE2: l.commission_usd_e2, status: l.status, createdAt: l.created_at })),
+        }));
+      } catch (err) {
+        console.error('[/admin/referrals] error:', err instanceof Error ? err.message : err);
+        res.status(500).send('Internal error rendering referrals admin');
+      }
+    });
+
+    app.get('/admin/referrals/payouts', async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).send('Unauthorized — add ?key=YOUR_ADMIN_KEY to the URL');
+      }
+      try {
+        const { pendingPayouts } = await import('./lib/referral-store.js');
+        const { renderAdminPayoutsPage } = await import('./lib/referral-pages.js');
+        const { REFERRAL_TERMS } = await import('./lib/referral-constants.js');
+        const pending = await pendingPayouts(REFERRAL_TERMS.USDC_MIN_PAYOUT_USD);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(renderAdminPayoutsPage({
+          pending: pending.map((p) => ({ code: p.code, ownerEmail: p.owner_email, pendingUsdE2: p.pending_usd_e2, rowCount: p.row_count, ledgerIds: p.ledger_ids })),
+        }));
+      } catch (err) {
+        console.error('[/admin/referrals/payouts] error:', err instanceof Error ? err.message : err);
+        res.status(500).send('Internal error rendering payouts');
+      }
+    });
+
+    app.post('/admin/referrals/payouts/:id/paid', express.json({ limit: '2kb' }), async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      try {
+        const id = parseInt(String(req.params.id), 10);
+        if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' });
+        const txRef = typeof req.body?.tx_ref === 'string' ? req.body.tx_ref.slice(0, 200) : null;
+        const { getLedgerById, markLedger } = await import('./lib/referral-store.js');
+        const row = await getLedgerById(id);
+        if (!row) return res.status(404).json({ error: 'ledger_row_not_found' });
+        if (row.status !== 'usdc_pending') return res.status(409).json({ error: 'not_pending', status: row.status });
+        markLedger(id, 'usdc_paid', txRef);
+        console.log(`[/admin/referrals] ledger ${id} marked usdc_paid (tx_ref=${txRef ? 'set' : 'none'})`);
+        return res.json({ ok: true, id, status: 'usdc_paid' });
+      } catch (err) {
+        console.error('[/admin/referrals/payouts/:id/paid] error:', err instanceof Error ? err.message : err);
+        return res.status(500).json({ error: 'internal_error' });
+      }
+    });
+
+    app.post('/admin/referrals/mint', express.json({ limit: '2kb' }), async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      try {
+        const code = typeof req.body?.code === 'string' ? req.body.code : '';
+        const ownerLabel = typeof req.body?.owner_label === 'string' ? req.body.owner_label.slice(0, 120) : '';
+        const ownerEmail = typeof req.body?.owner_email === 'string' ? req.body.owner_email.slice(0, 254) : null;
+        if (!code || !ownerLabel) return res.status(400).json({ error: 'code_and_owner_label_required' });
+        const { mintPartnerCode } = await import('./lib/referral-store.js');
+        const row = await mintPartnerCode({ code, owner_label: ownerLabel, owner_email: ownerEmail });
+        return res.json({ ok: true, code: row.code, kind: row.kind });
+      } catch (err) {
+        // mintPartnerCode throws on bad format / duplicate — surface as 400.
+        return res.status(400).json({ error: 'mint_failed', detail: err instanceof Error ? err.message : String(err) });
       }
     });
 
@@ -2226,7 +2319,14 @@ async function startHttp() {
       // retry hits within the same second, the claim returns false and we skip
       // re-sending (caller protection). Resend outage logs but does not 500.
       if (claim.claimed) {
-        sendOptinConfirmationEmail(email)
+        // REFERRAL-LIGHT-W1 (C4): a referred free signup gets the key-bearing variant
+        // (av_free_ key + bonus note); a plain opt-in gets the generic confirmation.
+        // Email-surface wiring (C4 owns Emails); the route's mint/grant logic is C3's
+        // and unchanged. Fire-and-forget; Resend outage logs but never 500s.
+        const sendConfirmation = referral.applied && referral.freeKey
+          ? sendReferredFreeKeyEmail(email, referral.freeKey, ref ?? null)
+          : sendOptinConfirmationEmail(email);
+        sendConfirmation
           .then(async (sent) => {
             if (sent?.id) {
               await markConfirmationSent(email);

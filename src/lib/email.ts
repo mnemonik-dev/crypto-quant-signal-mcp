@@ -9,8 +9,15 @@
  * and sends become no-ops with a console.warn (dev/staging without the key won't crash).
  */
 import { Resend } from 'resend';
+// REFERRAL-LIGHT-W1 (C4): welcome-email referral block + referred-free key variant.
+// Program numbers interpolate from REFERRAL_TERMS renderers (never hardcoded —
+// chapter gate). deriveUserCode is the pure code derivation (no DB).
+import { deriveUserCode } from './referral-store.js';
+import { commissionPct, commissionMonthsLabel, bonusCallsLabel, shareLink } from './referral-constants.js';
 
 const FROM_DEFAULT = 'noreply@algovault.com';
+const ACCOUNT_URL = 'https://api.algovault.com/account';
+const REFERRAL_TERMS_URL = 'https://api.algovault.com/referral-terms';
 
 let resend: Resend | null = null;
 let initWarned = false;
@@ -51,17 +58,22 @@ export async function sendWelcomeEmail({ to, apiKey, tier }: EmailArgs): Promise
 
   const tierTitle = tier.charAt(0).toUpperCase() + tier.slice(1);
   const subject = `Your AlgoVault ${tierTitle} API key`;
+  // REFERRAL-LIGHT-W1 (C4): the new subscriber's OWN referral code + share link.
+  const refCode = deriveUserCode(apiKey);
+  const referral = { code: refCode, link: shareLink(refCode), termsUrl: REFERRAL_TERMS_URL };
   const html = renderEmailHtml({
     heading: `Welcome to AlgoVault ${tierTitle}`,
     intro: `Your subscription is active. Below is your API key — save it somewhere safe.`,
     apiKey,
     tier: tierTitle,
+    referral,
   });
   const text = renderEmailText({
     heading: `Welcome to AlgoVault ${tierTitle}`,
     intro: `Your subscription is active. Below is your API key — save it somewhere safe.`,
     apiKey,
     tier: tierTitle,
+    referral,
   });
 
   await client.emails.send({
@@ -183,6 +195,53 @@ https://algovault.com
   return id ? { id } : null;
 }
 
+/**
+ * REFERRAL-LIGHT-W1 (C4): referred-free confirmation — delivers the minted
+ * `av_free_` key + the bonus note. Distinct from sendOptinConfirmationEmail (the
+ * generic opt-in). Fail-open (null when Resend unconfigured). Bonus count interpolated.
+ */
+export async function sendReferredFreeKeyEmail(to: string, freeKey: string, refCode?: string | null): Promise<{ id: string } | null> {
+  const client = getResendClient();
+  if (!client) return null;
+  const subject = 'Your AlgoVault free API key + bonus calls';
+  const bonus = bonusCallsLabel();
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${subject}</title></head>
+<body style="margin:0;padding:0;background:#f6f8fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1f2328">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f8fa;padding:32px 16px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border:1px solid #d0d7de;border-radius:12px;overflow:hidden">
+<tr><td style="padding:24px 28px;border-bottom:1px solid #d0d7de"><div style="font-size:18px;font-weight:700">AlgoVault Labs</div><div style="font-size:12px;color:#656d76;margin-top:2px">Free tier${refCode ? ` · referred by ${refCode}` : ''}</div></td></tr>
+<tr><td style="padding:28px">
+  <h1 style="font-size:22px;font-weight:700;margin:0 0 12px">Your free API key — with ${bonus} bonus calls</h1>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px">Welcome! Your AlgoVault free API key includes <strong>${bonus} bonus calls</strong> on top of the monthly free allowance.</p>
+  <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:8px;padding:16px;margin:0 0 20px">
+    <div style="font-size:11px;color:#656d76;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Your free API key</div>
+    <div style="font-family:ui-monospace,Menlo,monospace;font-size:14px;color:#0969da;word-break:break-all">${freeKey}</div>
+  </div>
+  <p style="font-size:13px;line-height:1.5;margin:0 0 12px">Add it as <code style="background:#f6f8fa;padding:1px 4px;border-radius:3px">Authorization: Bearer ${freeKey}</code> against <code style="background:#f6f8fa;padding:1px 4px;border-radius:3px">https://api.algovault.com/mcp</code>.</p>
+  <p style="font-size:13px;line-height:1.5;margin:0 0 12px">Manage your key + see your own referral stats at <a href="${ACCOUNT_URL}" style="color:#0969da;text-decoration:none">api.algovault.com/account</a>.</p>
+  <p style="font-size:13px;color:#656d76;margin:0">Questions? <a href="mailto:support@algovault.com" style="color:#0969da;text-decoration:none">support@algovault.com</a>.</p>
+</td></tr>
+<tr><td style="padding:18px 28px;background:#f6f8fa;border-top:1px solid #d0d7de;font-size:11px;color:#656d76">AlgoVault Labs — composable signal interpretation tools for AI agents.</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = `Your AlgoVault free API key — with ${bonus} bonus calls
+
+Welcome! Your AlgoVault free API key includes ${bonus} bonus calls on top of the monthly free allowance.
+
+Your free API key:
+${freeKey}
+
+Add it as: Authorization: Bearer ${freeKey}
+Against: https://api.algovault.com/mcp
+
+Manage your key + referral stats: ${ACCOUNT_URL}
+Questions? support@algovault.com
+
+— AlgoVault Labs`;
+  const sent = await client.emails.send({ from: getFromAddress(), to, replyTo: 'support@algovault.com', subject, html, text });
+  const id = (sent as { data?: { id?: string } | null }).data?.id;
+  return id ? { id } : null;
+}
+
 function renderOptinHtml({ pfeWr, totalSignals }: { pfeWr: string; totalSignals: string }): string {
   return `<!DOCTYPE html>
 <html>
@@ -217,9 +276,11 @@ interface RenderArgs {
   intro: string;
   apiKey: string;
   tier: string;
+  /** REFERRAL-LIGHT-W1 (C4): optional referral block (welcome email only). */
+  referral?: { code: string; link: string; termsUrl: string };
 }
 
-function renderEmailHtml({ heading, intro, apiKey, tier }: RenderArgs): string {
+function renderEmailHtml({ heading, intro, apiKey, tier, referral }: RenderArgs): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -241,6 +302,13 @@ function renderEmailHtml({ heading, intro, apiKey, tier }: RenderArgs): string {
           <div style="font-size:11px;color:#656d76;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Your API Key</div>
           <div style="font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace;font-size:14px;color:#0969da;word-break:break-all">${apiKey}</div>
         </div>
+        ${referral ? `<div style="background:#eafaf0;border:1px solid #2da44e;border-radius:8px;padding:16px;margin:0 0 24px">
+          <div style="font-size:14px;font-weight:700;color:#1a7f37;margin:0 0 6px">Refer, earn ${commissionPct()}.</div>
+          <p style="font-size:13px;line-height:1.5;color:#1f2328;margin:0 0 8px">Share your link — friends get ${bonusCallsLabel()} bonus calls, you earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()}.</p>
+          <div style="font-size:12px;color:#656d76">Your code: <strong style="font-family:ui-monospace,Menlo,monospace">${referral.code}</strong></div>
+          <a href="${referral.link}" style="color:#0969da;text-decoration:none;font-size:13px;word-break:break-all">${referral.link}</a>
+          <div style="font-size:11px;color:#656d76;margin-top:8px">Terms: <a href="${referral.termsUrl}" style="color:#0969da;text-decoration:none">${referral.termsUrl}</a></div>
+        </div>` : ''}
         <h2 style="font-size:14px;font-weight:600;margin:0 0 8px;color:#1f2328;text-transform:uppercase;letter-spacing:0.5px">Use it in Claude Desktop, Cursor, or Claude Code</h2>
         <p style="font-size:13px;line-height:1.5;color:#1f2328;margin:0 0 8px">Add this to your MCP-client config (e.g. <code style="background:#f6f8fa;padding:1px 4px;border-radius:3px;font-size:12px">claude_desktop_config.json</code>):</p>
         <pre style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:8px;padding:14px;font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace;font-size:12px;color:#1f2328;overflow-x:auto;margin:0 0 12px">{
@@ -266,7 +334,7 @@ function renderEmailHtml({ heading, intro, apiKey, tier }: RenderArgs): string {
 </html>`;
 }
 
-function renderEmailText({ heading, intro, apiKey, tier }: RenderArgs): string {
+function renderEmailText({ heading, intro, apiKey, tier, referral }: RenderArgs): string {
   return `${heading}
 ${'='.repeat(heading.length)}
 
@@ -277,7 +345,12 @@ Plan: ${tier}
 Your API Key:
 ${apiKey}
 
-Use it in Claude Desktop, Cursor, or Claude Code by adding this to your MCP-client config (e.g. claude_desktop_config.json):
+${referral ? `Refer, earn ${commissionPct()}. Share your link — friends get ${bonusCallsLabel()} bonus calls, you earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()}.
+Your code: ${referral.code}
+${referral.link}
+Terms: ${referral.termsUrl}
+
+` : ''}Use it in Claude Desktop, Cursor, or Claude Code by adding this to your MCP-client config (e.g. claude_desktop_config.json):
 
 {
   "mcpServers": {
