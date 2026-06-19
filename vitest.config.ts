@@ -28,6 +28,9 @@ export default defineConfig({
       'tests/unit/geo_jsonld_consistency.test.mjs',
       'tests/unit/how_it_works_consistency.test.mjs',
       'tests/unit/landing_faq_glossary_substrate.test.mjs',
+      // OPS-CADDY-ROUTE-PARITY-W1 — node:test apex-route-parity guard (canonical runner is
+      // node:test; exclude from vitest so it doesn't false-fail "No test suite found").
+      'tests/unit/caddy-route-parity.test.mjs',
     ],
   },
 });

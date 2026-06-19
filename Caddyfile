@@ -36,6 +36,15 @@ algovault.com {
     handle /api/merkle-batches {
         reverse_proxy localhost:3000
     }
+    # OPS-CADDY-ROUTE-PARITY-W1 (2026-06-18): track-record-proxy.js hydrates the ERC-8004
+    # agent-id badge via a RELATIVE fetch of /api/erc-8004-reputation; without this handle
+    # it fell through to the static file_server below and 404'd on algovault.com (the span
+    # silently used its static fallback). Allowlist update was missed when the endpoint
+    # shipped (ERC-8004-W1) — same class as /api/recent-calls above. Guarded going forward
+    # by tests/unit/caddy-route-parity.test.mjs.
+    handle /api/erc-8004-reputation {
+        reverse_proxy localhost:3000
+    }
     handle /api/verify-signal {
         reverse_proxy localhost:3000
     }
