@@ -83,4 +83,13 @@ describe('LANDING-CONVERSION-TRUST-W1 — trust band, verify link, free-start, C
     expect(count('>Start Free<')).toBe(2);
     expect(count('/docs.html#x402')).toBe(2); // x402 card href untouched
   });
+
+  it('every Signup link uses the absolute api.algovault.com host (algovault.com/signup 404s)', () => {
+    // /signup is api-canonical: the whole signup -> Stripe checkout -> /welcome flow runs on
+    // api.algovault.com (success_url is built from the request host; /welcome + /account are NOT
+    // in the apex Caddy allowlist). A relative /signup 404s on algovault.com.
+    expect(html).not.toContain('href="/signup"');  // footer was relative -> 404; now absolute
+    expect(html).not.toContain('href="/signup?');   // pricing CTAs are absolute too
+    expect(html).toContain('href="https://api.algovault.com/signup"');
+  });
 });

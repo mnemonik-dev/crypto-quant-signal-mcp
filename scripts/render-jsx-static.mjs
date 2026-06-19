@@ -215,7 +215,10 @@ function applyFooterUrls(html) {
   return html
     .replace(/href="#GitHub"/g, 'href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener"')
     .replace(/href="#X \/ Twitter"/g, 'href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener"')
-    .replace(/href="#Signup"/g, 'href="/signup"')
+    // Signup/checkout/welcome is api-canonical (the whole flow runs on api.algovault.com;
+    // /welcome + /account are not in the apex Caddy allowlist, and Stripe success_url is built
+    // from the request host) — so this link MUST be absolute or it 404s on algovault.com.
+    .replace(/href="#Signup"/g, 'href="https://api.algovault.com/signup"')
     .replace(/href="#Privacy"/g, 'href="/privacy"')
     .replace(/href="#npm"/g, 'href="https://www.npmjs.com/package/crypto-quant-signal-mcp" target="_blank" rel="noopener"')
     .replace(/href="#MCP Registry"/g, 'href="https://registry.modelcontextprotocol.io/v0/servers?search=algovault" target="_blank" rel="noopener"')

@@ -148,7 +148,11 @@ test('Q-W15: Footer placeholder hrefs → real URLs', async () => {
   const html = await read('landing/index.html');
   assert.match(html, /href="https:\/\/github\.com\/AlgoVaultLabs"/, 'GitHub real URL');
   assert.match(html, /href="https:\/\/x\.com\/AlgoVaultLabs"/, 'X / Twitter real URL');
-  assert.match(html, /href="\/signup"/, 'Signup real URL');
+  // LANDING-CONVERSION-TRUST-W1 follow-up (2026-06-18): the footer Signup link is now the
+  // ABSOLUTE api host. /signup is api-canonical (the whole signup→Stripe→/welcome flow runs on
+  // api.algovault.com; algovault.com/signup 404s — not in the apex Caddy allowlist, and /welcome
+  // isn't either). Was a relative /signup (404). Matches design_w10 /account footer assertion.
+  assert.match(html, /href="https:\/\/api\.algovault\.com\/signup"/, 'Signup real URL (api-canonical)');
   assert.match(html, /href="\/privacy"/, 'Privacy real URL');
   // No placeholder hrefs in footer
   assert.doesNotMatch(html, /href="#GitHub"/, 'no #GitHub placeholder');
