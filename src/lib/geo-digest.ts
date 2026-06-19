@@ -265,6 +265,28 @@ export interface DecisionHandoff {
   suspects: string[];
 }
 
+// ── OPS-WEEKLY-GROWTH-DIGEST-W1: acquisition by source (folded in) ─────────────
+
+/** One acquisition source's weekly stats (this week + last-week connects for WoW). */
+export interface BySourceRow {
+  source: string; // attribution slug (SoT: src/lib/attribution-sources.ts)
+  connects: number; // distinct sessions, this week
+  connectsLastWeek: number; // distinct sessions, prior week (for WoW)
+  firstCall: number; // of this-week connects, that made >=1 tool call
+  conversion: number; // of this-week connects, that reached a paid tier
+}
+
+/** Acquisition breakdown for the digest. `rows` is already capped (top 5 by connects). */
+export interface BySourceData {
+  rows: BySourceRow[];
+  totalConnectsThisWeek: number;
+  totalConnectsLastWeek: number;
+  /** biggest WoW connect mover (by absolute delta), or null. */
+  topMover: { source: string; from: number; to: number } | null;
+  /** A4: best connect→CONVERSION source this week (value, not volume), or null when no conversions. */
+  topConverter: { source: string; conversion: number; connects: number } | null;
+}
+
 export interface GeoDigestData {
   dateLabel: string; // e.g. "Mon 9 Jun" (cron-supplied; keeps this module Date-free)
   dashboardUrl: string;
@@ -286,6 +308,59 @@ export interface GeoDigestData {
    */
   eligibilityNotIndexed?: string[];
   citationGapEngines?: string[];
+  /**
+   * OPS-WEEKLY-GROWTH-DIGEST-W1 — acquisition by source (connection-layer
+   * `mcp_connect`, ATTRIBUTION-CONNECTION-SRC-W1). Folded into this digest (one
+   * Monday operator message). `undefined` = section omitted (back-compat for
+   * pre-W1 callers / tests); a provided value ALWAYS renders (incl. the empty
+   * "attribution collecting" state). WoW is DB-derived (no state file).
+   */
+  bySource?: BySourceData | null;
+}
+
+/**
+ * OPS-WEEKLY-GROWTH-DIGEST-W1 — pure ACQUISITION section builder. `undefined`/null
+ * → no section (back-compat). Empty (0 connects this week) → "attribution
+ * collecting". Else: top sources by connects with WoW ↑/↓ + first-call + paid,
+ * then the best CONVERTER (A4: value, not volume) + the biggest WoW mover.
+ */
+export function buildBySourceSection(b: BySourceData | null | undefined): string[] {
+  if (b === undefined || b === null) return [];
+  const L: string[] = ['', '*📈 ACQUISITION* (by source · vs last week)'];
+  if (b.totalConnectsThisWeek === 0) {
+    L.push(`• attribution collecting — ${b.totalConnectsThisWeek} connects captured this week so far`);
+    return L;
+  }
+  for (const r of b.rows) {
+    const arrow =
+      r.connectsLastWeek === 0
+        ? r.connects > 0
+          ? 'new'
+          : 'flat at 0'
+        : r.connects > r.connectsLastWeek
+          ? `↑ from ${r.connectsLastWeek}`
+          : r.connects < r.connectsLastWeek
+            ? `↓ from ${r.connectsLastWeek}`
+            : `flat at ${r.connectsLastWeek}`;
+    L.push(
+      `• ${r.source}: ${r.connects} connect${r.connects === 1 ? '' : 's'} (${arrow}) · ${r.firstCall} first-call · ${r.conversion} paid`,
+    );
+  }
+  if (b.topConverter) {
+    const tc = b.topConverter;
+    const rate = tc.connects > 0 ? Math.round((100 * tc.conversion) / tc.connects) : 0;
+    L.push(
+      `💰 Best converter: ${tc.source} — ${tc.conversion} paid from ${tc.connects} connect${tc.connects === 1 ? '' : 's'} (${rate}%)`,
+    );
+  } else {
+    L.push('💰 Best converter: no conversions captured yet this week');
+  }
+  if (b.topMover) {
+    const tm = b.topMover;
+    const delta = tm.from === 0 ? 'new this week' : `${tm.to > tm.from ? '+' : ''}${tm.to - tm.from} (${tm.from}→${tm.to})`;
+    L.push(`🚀 Biggest mover: ${tm.source} ${delta} connects`);
+  }
+  return L;
 }
 
 /**
@@ -341,6 +416,10 @@ export function buildDigest(data: GeoDigestData): string[] {
   } else {
     L.push(`• Named in answers: ${named.map((e) => `${Math.round(e.mention_rate_pct)}% on ${shortEngine(e.model)}`).join(', ')}`);
   }
+
+  // OPS-WEEKLY-GROWTH-DIGEST-W1: ACQUISITION by source (folded; renders only when
+  // data.bySource is provided — undefined keeps the pre-W1 GEO digest byte-stable).
+  for (const line of buildBySourceSection(data.bySource)) L.push(line);
 
   // DID LAST WEEK'S MOVE WORK? — the attribution loop
   L.push('');

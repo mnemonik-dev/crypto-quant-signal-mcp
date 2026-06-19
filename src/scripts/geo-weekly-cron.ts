@@ -24,6 +24,8 @@ import {
   type AttributionGap,
   type EnginePlacement,
   type IndexPresenceRow,
+  type BySourceData,
+  type BySourceRow,
 } from '../lib/geo-digest.js';
 // GEO-AUTOPILOT-W1 (C3) — DECIDE wiring: scorer + eligibility + decision ledger.
 import { computeGapList } from '../lib/geo-gap-list.js';
@@ -61,6 +63,79 @@ function dateLabel(): string {
     month: 'short',
     timeZone: 'UTC',
   });
+}
+
+// ── OPS-WEEKLY-GROWTH-DIGEST-W1: acquisition by source (folded) ────────────────
+// Reads the connection-layer `mcp_connect` funnel_events (ATTRIBUTION-CONNECTION-
+// SRC-W1) directly (in-container prod PG). WoW from two time-windows (no state
+// file — the DB is the SoT). first_call/conversion reuse the agent_sessions
+// definitions of the canonical funnel first_call/paid_upgrade stages
+// (single-derivation). meta_json is TEXT → `::jsonb` cast (mcp_connect meta is
+// always valid JSON; `meta_json IS NOT NULL` guards a malformed row from
+// erroring the weekly digest).
+const BY_SOURCE_WOW_SQL = `
+  SELECT
+    fe.meta_json::jsonb->>'source' AS source,
+    COUNT(DISTINCT fe.session_id) FILTER (WHERE fe.ts > now() - interval '1 week') AS connects_this,
+    COUNT(DISTINCT fe.session_id) FILTER (WHERE fe.ts <= now() - interval '1 week' AND fe.ts > now() - interval '2 weeks') AS connects_last,
+    COUNT(DISTINCT fe.session_id) FILTER (WHERE fe.ts > now() - interval '1 week' AND a.session_id IS NOT NULL) AS first_call_this,
+    COUNT(DISTINCT fe.session_id) FILTER (WHERE fe.ts > now() - interval '1 week' AND (a.tiers_seen LIKE '%starter%' OR a.tiers_seen LIKE '%pro%' OR a.tiers_seen LIKE '%enterprise%' OR a.tiers_seen LIKE '%x402%')) AS conversion_this
+  FROM funnel_events fe
+  LEFT JOIN agent_sessions a ON a.session_id = fe.session_id
+  WHERE fe.event_type = 'mcp_connect' AND fe.ts > now() - interval '2 weeks' AND fe.meta_json IS NOT NULL
+  GROUP BY 1
+  ORDER BY connects_this DESC`;
+
+/**
+ * Acquisition by source for the digest. Fail-soft: any error returns an empty
+ * (collecting) BySourceData so the GEO digest still sends.
+ */
+async function fetchBySource(): Promise<BySourceData> {
+  try {
+    const rows = await dbQuery<{
+      source: string | null;
+      connects_this: string | number;
+      connects_last: string | number;
+      first_call_this: string | number;
+      conversion_this: string | number;
+    }>(BY_SOURCE_WOW_SQL, []);
+    const all: BySourceRow[] = rows.map((r) => ({
+      source: r.source ?? 'unknown',
+      connects: num(r.connects_this),
+      connectsLastWeek: num(r.connects_last),
+      firstCall: num(r.first_call_this),
+      conversion: num(r.conversion_this),
+    }));
+    const totalConnectsThisWeek = all.reduce((s, r) => s + r.connects, 0);
+    const totalConnectsLastWeek = all.reduce((s, r) => s + r.connectsLastWeek, 0);
+    if (totalConnectsThisWeek === 0) {
+      return { rows: [], totalConnectsThisWeek, totalConnectsLastWeek, topMover: null, topConverter: null };
+    }
+    // top 5 by connects (this week), deterministic tiebreak.
+    const top = [...all].sort((a, b) => b.connects - a.connects || a.source.localeCompare(b.source)).slice(0, 5);
+    // A4: best CONVERTER (value, not volume) — most paid, tiebreak by conversion-rate.
+    const converters = all
+      .filter((r) => r.conversion > 0)
+      .sort(
+        (a, b) =>
+          b.conversion - a.conversion ||
+          b.conversion / Math.max(1, b.connects) - a.conversion / Math.max(1, a.connects),
+      );
+    const topConverter = converters.length
+      ? { source: converters[0].source, conversion: converters[0].conversion, connects: converters[0].connects }
+      : null;
+    // biggest WoW connect mover (absolute delta).
+    const movers = all
+      .filter((r) => r.connects !== r.connectsLastWeek)
+      .sort((a, b) => Math.abs(b.connects - b.connectsLastWeek) - Math.abs(a.connects - a.connectsLastWeek));
+    const topMover = movers.length
+      ? { source: movers[0].source, from: movers[0].connectsLastWeek, to: movers[0].connects }
+      : null;
+    return { rows: top, totalConnectsThisWeek, totalConnectsLastWeek, topMover, topConverter };
+  } catch (err) {
+    console.error('[geo-cron] by_source fetch failed (digest continues):', err instanceof Error ? err.message : err);
+    return { rows: [], totalConnectsThisWeek: 0, totalConnectsLastWeek: 0, topMover: null, topConverter: null };
+  }
 }
 
 /**
@@ -300,6 +375,8 @@ async function fetchDigestData(): Promise<{
     };
   }
 
+  const bySource = await fetchBySource();
+
   const data: GeoDigestData = {
     dateLabel: dateLabel(),
     dashboardUrl: DASHBOARD_URL,
@@ -329,6 +406,7 @@ async function fetchDigestData(): Promise<{
     eligibilityNotIndexed: notIndexed,
     citationGapEngines,
     decision: handoff,
+    bySource,
   };
 
   return { data, wowAlerts, ranked, brief };
@@ -336,14 +414,34 @@ async function fetchDigestData(): Promise<{
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
+  // OPS-WEEKLY-GROWTH-DIGEST-W1 — operator preview: build from existing DB state
+  // (NO LLM probe, NO geo_decisions write) and send ONE labelled preview to the
+  // operator chat via the SAME sendDigest path the live cron uses, so Mr.1 sees
+  // the real TG-rendered Monday message (incl. the folded ACQUISITION section)
+  // before the Mon 08:00 cron fires.
+  const previewSend = process.argv.includes('--preview-send');
 
-  if (dryRun) {
-    console.log('[geo-cron] DRY RUN — building digest from existing DB state; no LLM, no DB writes, no Telegram');
+  if (dryRun || previewSend) {
+    const mode = previewSend ? 'PREVIEW-SEND' : 'DRY RUN';
+    console.log(
+      `[geo-cron] ${mode} — building digest from existing DB state; no LLM probe, no DB writes` +
+        (previewSend ? '; sending ONE labelled preview to the operator chat' : ', no Telegram'),
+    );
     const { data, wowAlerts } = await fetchDigestData();
-    console.log('---DIGEST BODY---');
-    console.log(buildDigest(data).join('\n'));
-    console.log('---END---');
-    console.log(`[geo-cron] DRY RUN complete · wow_alerts=${wowAlerts.length}`);
+    const lines = buildDigest(data);
+    if (previewSend) {
+      const ok = await sendDigest([
+        '🧪 *PREVIEW — Growth digest (OPS-WEEKLY-GROWTH-DIGEST-W1)*',
+        '_dry-run preview; the live cron sends this every Mon 08:00 UTC_',
+        ...lines,
+      ]);
+      console.log(`[geo-cron] PREVIEW-SEND ${ok ? 'delivered to operator chat' : 'FAILED (telegram unconfigured?)'}`);
+    } else {
+      console.log('---DIGEST BODY---');
+      console.log(lines.join('\n'));
+      console.log('---END---');
+    }
+    console.log(`[geo-cron] ${mode} complete · wow_alerts=${wowAlerts.length}`);
     return;
   }
 

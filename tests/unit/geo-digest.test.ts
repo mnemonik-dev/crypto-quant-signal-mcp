@@ -13,10 +13,12 @@ import {
   computeAttribution,
   computeIndexPresence,
   buildDigest,
+  buildBySourceSection,
   type Verdict,
   type MomentumDeltas,
   type AttributionGap,
   type GeoDigestData,
+  type BySourceData,
 } from '../../src/lib/geo-digest.js';
 
 const VERDICT_EMOJI: Record<Verdict, string> = { gaining: '🟢', holding: '🟡', slipping: '🔴' };
@@ -301,5 +303,93 @@ describe('computeIndexPresence (R5)', () => {
     expect(ip.hasData).toBe(false);
     expect(ip.blocked).toBe(false);
     expect(ip.line).toBe('no data yet — first probe Mon');
+  });
+});
+
+// OPS-WEEKLY-GROWTH-DIGEST-W1 — the folded ACQUISITION (by_source) section.
+describe('buildBySourceSection (acquisition fold)', () => {
+  const populated: BySourceData = {
+    rows: [
+      { source: 'chatgpt', connects: 12, connectsLastWeek: 8, firstCall: 9, conversion: 1 },
+      { source: 'docs', connects: 5, connectsLastWeek: 7, firstCall: 3, conversion: 2 },
+      { source: 'unknown', connects: 4, connectsLastWeek: 0, firstCall: 1, conversion: 0 },
+    ],
+    totalConnectsThisWeek: 21,
+    totalConnectsLastWeek: 15,
+    // A4: best CONVERTER is `docs` (2 paid) even though `chatgpt` has the most CONNECTS — value, not volume.
+    topConverter: { source: 'docs', conversion: 2, connects: 5 },
+    topMover: { source: 'chatgpt', from: 8, to: 12 },
+  };
+
+  it('undefined / null → no section (back-compat for pre-W1 callers)', () => {
+    expect(buildBySourceSection(undefined)).toEqual([]);
+    expect(buildBySourceSection(null)).toEqual([]);
+  });
+
+  it('empty (0 connects this week) → "attribution collecting" line', () => {
+    const out = buildBySourceSection({
+      rows: [],
+      totalConnectsThisWeek: 0,
+      totalConnectsLastWeek: 0,
+      topMover: null,
+      topConverter: null,
+    }).join('\n');
+    expect(out).toContain('*📈 ACQUISITION*');
+    expect(out).toContain('attribution collecting — 0 connects captured this week so far');
+  });
+
+  it('populated: per-source connects with WoW arrows + first-call + paid', () => {
+    const out = buildBySourceSection(populated).join('\n');
+    expect(out).toContain('chatgpt: 12 connects (↑ from 8) · 9 first-call · 1 paid');
+    expect(out).toContain('docs: 5 connects (↓ from 7) · 3 first-call · 2 paid');
+    expect(out).toContain('unknown: 4 connects (new) · 1 first-call · 0 paid');
+  });
+
+  it('A4: highlights the best CONVERTER (value), not the highest connect-volume source', () => {
+    const out = buildBySourceSection(populated).join('\n');
+    // docs converts (2 paid from 5 → 40%), chatgpt has more connects but fewer paid.
+    expect(out).toContain('💰 Best converter: docs — 2 paid from 5 connects (40%)');
+    expect(out).not.toContain('Best converter: chatgpt');
+  });
+
+  it('flags the biggest WoW connect mover', () => {
+    const out = buildBySourceSection(populated).join('\n');
+    expect(out).toContain('🚀 Biggest mover: chatgpt +4 (8→12) connects');
+  });
+
+  it('no conversions this week → explicit "no conversions" line', () => {
+    const out = buildBySourceSection({
+      rows: [{ source: 'chatgpt', connects: 3, connectsLastWeek: 0, firstCall: 1, conversion: 0 }],
+      totalConnectsThisWeek: 3,
+      totalConnectsLastWeek: 0,
+      topMover: { source: 'chatgpt', from: 0, to: 3 },
+      topConverter: null,
+    }).join('\n');
+    expect(out).toContain('💰 Best converter: no conversions captured yet this week');
+    expect(out).toContain('🚀 Biggest mover: chatgpt new this week connects');
+  });
+
+  it('buildDigest folds the section in when bySource is set, and stays byte-stable when omitted', () => {
+    const base: GeoDigestData = {
+      dateLabel: 'Mon 9 Jun',
+      dashboardUrl: 'https://api.algovault.com/admin/geo-dashboard',
+      momentumDeltas: baseDeltas(),
+      perEngineMention: [],
+      attributionGaps: [],
+      contested: [],
+      topGap: null,
+      indexPresence: computeIndexPresence([]),
+    };
+    const without = buildDigest(base).join('\n');
+    expect(without).not.toContain('ACQUISITION');
+
+    const withSrc = buildDigest({ ...base, bySource: populated }).join('\n');
+    expect(withSrc).toContain('*📈 ACQUISITION* (by source · vs last week)');
+    expect(withSrc).toContain('chatgpt: 12 connects (↑ from 8)');
+    // folded BETWEEN "WHAT MOVED" and "DID LAST WEEK'S MOVE WORK"
+    expect(withSrc.indexOf('WHAT MOVED')).toBeLessThan(withSrc.indexOf('ACQUISITION'));
+    expect(withSrc.indexOf('ACQUISITION')).toBeLessThan(withSrc.indexOf("DID LAST WEEK'S MOVE WORK"));
+    // GEO sections still intact (fold is additive)
+    expect(withSrc).toContain("THIS WEEK'S ONE MOVE");
   });
 });
