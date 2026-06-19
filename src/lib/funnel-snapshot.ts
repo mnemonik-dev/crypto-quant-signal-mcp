@@ -138,6 +138,22 @@ export interface FunnelSnapshot {
     enterprise: number;
     x402: number;
   };
+  /**
+   * ATTRIBUTION-CONNECTION-SRC-W1: per-acquisition-source breakdown from the
+   * connection-layer `mcp_connect` capture (`?src=` deterministic + UA
+   * heuristic). connects → first_call → conversion, all keyed on the shared
+   * session_id. Additive + NON-stage (absent from CANONICAL_STAGE_ORDER → the
+   * 14-stage funnel + its 13 stage_retentions stay byte-stable). `deterministic`
+   * = of `connects`, how many carried an explicit `?src=` tag (vs UA-heuristic /
+   * unknown). Sorted by connects desc. `null` on query failure (fail-open).
+   */
+  by_source: Array<{
+    source: string; // attribution slug (SoT: src/lib/attribution-sources.ts)
+    connects: number; // distinct sessions that connected
+    deterministic: number; // of connects, captured via ?src= (vs heuristic/unknown)
+    first_call: number; // of connects, that made >=1 tool call (agent_sessions)
+    conversion: number; // of connects, that reached a paid tier (agent_sessions)
+  }> | null;
   warnings: string[]; // non-fatal notes, e.g. "agent_sessions empty — fell back to request_log"
 }
 
@@ -277,6 +293,101 @@ async function getMcpToolsListSessionCount(
     [windowFromIso, windowToIso],
   );
   return safeInt(rows[0]?.c) ?? 0;
+}
+
+/**
+ * ATTRIBUTION-CONNECTION-SRC-W1: per-acquisition-source breakdown for `by_source`.
+ *
+ * Portable (no backend-specific JSON SQL): fetch the deduped `mcp_connect` rows
+ * + their `meta_json` (parsed in JS) and the in-window `agent_sessions`
+ * (session_id + tiers_seen), then aggregate. `first_call` / `conversion` reuse
+ * the EXACT same tables + tier-LIKE definition the canonical `first_call` +
+ * `paid_upgrade` stages use (single-derivation rule) — never a fabricated join.
+ * Connect rows are deduped by session_id (first source wins). Bounded: connects
+ * are ~1/session (in-memory LRU at capture) and agent_sessions is window-scoped.
+ * Fail-open: returns null + pushes a warning on error.
+ */
+async function getBySourceBreakdown(
+  windowFromIso: string,
+  windowToIso: string,
+  windowFromMs: number,
+  windowToMs: number,
+  warnings: string[],
+): Promise<FunnelSnapshot['by_source']> {
+  try {
+    const connectRows = await dbQuery<{ session_id: string | null; meta_json: string | null }>(
+      `SELECT session_id, meta_json
+         FROM funnel_events
+        WHERE event_type = 'mcp_connect'
+          AND ts >= ? AND ts <= ?`,
+      [windowFromIso, windowToIso],
+    );
+    if (connectRows.length === 0) return [];
+
+    // Tool-call + paid session sets (same definitions as first_call / paid_upgrade).
+    const firstCallSet = new Set<string>();
+    const paidSet = new Set<string>();
+    try {
+      const sessRows = await dbQuery<{ session_id: string | null; tiers_seen: string | null }>(
+        `SELECT session_id, tiers_seen
+           FROM agent_sessions
+          WHERE first_seen >= ? AND first_seen <= ?`,
+        [windowFromMs, windowToMs],
+      );
+      for (const r of sessRows) {
+        if (!r.session_id) continue;
+        firstCallSet.add(r.session_id);
+        const t = (r.tiers_seen ?? '').toLowerCase();
+        if (
+          t.includes('starter') ||
+          t.includes('pro') ||
+          t.includes('enterprise') ||
+          t.includes('x402')
+        ) {
+          paidSet.add(r.session_id);
+        }
+      }
+    } catch (err) {
+      warnings.push(
+        `by_source agent_sessions join failed (first_call/conversion may read 0): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const seen = new Set<string>(); // dedupe connect rows by session_id
+    const agg = new Map<
+      string,
+      { connects: number; deterministic: number; first_call: number; conversion: number }
+    >();
+    for (const row of connectRows) {
+      const sid = row.session_id;
+      if (!sid || seen.has(sid)) continue;
+      seen.add(sid);
+      let source = 'unknown';
+      let confidence = 'unknown';
+      try {
+        const m = row.meta_json ? (JSON.parse(row.meta_json) as Record<string, unknown>) : {};
+        if (typeof m.source === 'string' && m.source.length > 0) source = m.source;
+        if (typeof m.source_confidence === 'string') confidence = m.source_confidence;
+      } catch {
+        /* malformed meta → unknown/unknown */
+      }
+      const a = agg.get(source) ?? { connects: 0, deterministic: 0, first_call: 0, conversion: 0 };
+      a.connects += 1;
+      if (confidence === 'deterministic') a.deterministic += 1;
+      if (firstCallSet.has(sid)) a.first_call += 1;
+      if (paidSet.has(sid)) a.conversion += 1;
+      agg.set(source, a);
+    }
+
+    return [...agg.entries()]
+      .map(([source, a]) => ({ source, ...a }))
+      .sort((x, y) => y.connects - x.connects || x.source.localeCompare(y.source));
+  } catch (err) {
+    warnings.push(
+      `by_source breakdown query failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
 }
 
 /**
@@ -795,6 +906,15 @@ export async function generateFunnelSnapshot(
     );
   }
 
+  // ATTRIBUTION-CONNECTION-SRC-W1: per-source breakdown (additive, non-stage).
+  const bySource = await getBySourceBreakdown(
+    windowFromIso,
+    windowToIso,
+    windowFromMs,
+    windowToMs,
+    warnings,
+  );
+
   return {
     generated_at: new Date().toISOString(),
     window: { from: windowFromIso, to: windowToIso },
@@ -837,6 +957,7 @@ export async function generateFunnelSnapshot(
     tool_call_distribution: toolCallDistribution,
     hold_rate_get_trade_signal: holdRateGetTradeSignal,
     tier_cohort_sizes: tierCohortSizes,
+    by_source: bySource,
     warnings,
   };
 }

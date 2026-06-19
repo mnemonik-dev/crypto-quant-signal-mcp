@@ -60,6 +60,7 @@ import {
   resolveTrackTokenForRequest,
   shouldEmitForRequest,
 } from './lib/track-token.js';
+import { resolveSource, shouldEmitConnect } from './lib/attribution-sources.js';
 import {
   isStripeConfigured,
   constructWebhookEvent,
@@ -2410,6 +2411,34 @@ async function startHttp() {
           } catch { /* best-effort; never blocks request */ }
         }
       }
+    }
+
+    // ATTRIBUTION-CONNECTION-SRC-W1: cache-safe per-channel source capture at the
+    // CONNECTION layer — NEVER the tools-list (that is the whole point: `?src=` is
+    // set once per listing + version-invariant, so attribution never forces the
+    // cached-tools/list refresh). Read the deterministic `?src=` query with a UA
+    // heuristic fallback; resolve {source, source_confidence}; emit ONE deduped
+    // `mcp_connect` funnel_event per session (the SHARED resolveSessionCorrelationId
+    // id — same as the funnel / skill / track-token emits; do not invent a key).
+    // Fire-and-forget; never blocks, never touches the JSON-RPC envelope or tool
+    // registration. Internal-tier (bot loopback) excluded — mirrors the skill /
+    // track-token write-side gate. NOTE: local-stdio (`npx`) makes no call here, so
+    // the `npm` channel is intentionally connect-uncapturable (see attribution-sources.ts).
+    if (req.method === 'POST' && sessionId && license.tier !== 'internal' && shouldEmitConnect(sessionId)) {
+      try {
+        const { source, source_confidence } = resolveSource({
+          srcParam: req.query?.src,
+          userAgent: req.headers['user-agent'],
+          origin: req.headers['origin'],
+          referer: req.headers['referer'],
+        });
+        recordFunnelEvent({
+          eventType: 'mcp_connect',
+          sessionId,
+          licenseTier: license.tier,
+          meta: { source, source_confidence },
+        });
+      } catch { /* best-effort; never blocks request */ }
     }
 
     // Run the entire request handling inside AsyncLocalStorage context

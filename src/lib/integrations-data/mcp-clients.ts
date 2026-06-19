@@ -42,14 +42,14 @@ const MCP_CLIENTS: SurfaceModule = {
         'Settings &rarr; Connectors &rarr; <em>Add custom connector</em>, or edit <code class="text-xs bg-navy-800 px-1 rounded">claude_desktop_config.json</code>',
       whatYouGet:
         'Native Streamable-HTTP MCP. AlgoVault tools (<code class="text-xs">get_trade_call</code>, <code class="text-xs">scan_funding_arb</code>, <code class="text-xs">get_market_regime</code>) callable in any chat.',
-      walkthroughHtml: `      <p><strong>Easiest path (UI):</strong> Open Claude Desktop &rarr; <em>Settings</em> &rarr; <em>Connectors</em> &rarr; <em>Add custom connector</em>. Name it <code class="text-xs bg-navy-800 px-1 rounded">AlgoVault</code>. URL: <code class="text-xs bg-navy-800 px-1 rounded">https://api.algovault.com/mcp</code>. Add <code class="text-xs bg-navy-800 px-1 rounded">Authorization: Bearer av_live_&hellip;</code> as a custom header (paid tier). Save and restart Claude Desktop.</p>
+      walkthroughHtml: `      <p><strong>Easiest path (UI):</strong> Open Claude Desktop &rarr; <em>Settings</em> &rarr; <em>Connectors</em> &rarr; <em>Add custom connector</em>. Name it <code class="text-xs bg-navy-800 px-1 rounded">AlgoVault</code>. URL: <code class="text-xs bg-navy-800 px-1 rounded">https://api.algovault.com/mcp?src=docs</code>. Add <code class="text-xs bg-navy-800 px-1 rounded">Authorization: Bearer av_live_&hellip;</code> as a custom header (paid tier). Save and restart Claude Desktop.</p>
       <p><strong>JSON path:</strong> Edit <code class="text-xs bg-navy-800 px-1 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code class="text-xs bg-navy-800 px-1 rounded">%APPDATA%\\Claude\\claude_desktop_config.json</code> (Windows):</p>
       <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
         <pre><code class="text-xs text-gray-300">{
   "mcpServers": {
     "algovault": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp",
+      "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp?src=docs",
                "--header", "Authorization: Bearer \${AV_API_KEY}",
                "--header", "X-AlgoVault-Track-Token:chan-docs"]
     }
@@ -74,7 +74,7 @@ const MCP_CLIENTS: SurfaceModule = {
         <pre><code class="text-xs text-gray-300">{
   "mcpServers": {
     "algovault": {
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer \${env:AV_API_KEY}",
         "X-AlgoVault-Track-Token": "chan-docs"
@@ -100,7 +100,7 @@ const MCP_CLIENTS: SurfaceModule = {
   "mcpServers": {
     "algovault": {
       "type": "streamableHttp",
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer \${env:AV_API_KEY}",
         "X-AlgoVault-Track-Token": "chan-docs"
@@ -125,7 +125,7 @@ const MCP_CLIENTS: SurfaceModule = {
         'Per-project MCP. Useful for backtest / strategy-dev repos. Team-shared via <code class="text-xs">.mcp.json</code>.',
       walkthroughHtml: `      <p><strong>One-liner (recommended):</strong></p>
       <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
-        <pre><code class="text-xs text-gray-300">claude mcp add --transport http --scope project algovault https://api.algovault.com/mcp \\
+        <pre><code class="text-xs text-gray-300">claude mcp add --transport http --scope project algovault https://api.algovault.com/mcp?src=docs \\
   --header "Authorization: Bearer \$AV_API_KEY" \\
   --header "X-AlgoVault-Track-Token:chan-docs"</code></pre>
       </div>
@@ -135,7 +135,7 @@ const MCP_CLIENTS: SurfaceModule = {
   "mcpServers": {
     "algovault": {
       "type": "http",
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer \${AV_API_KEY}",
         "X-AlgoVault-Track-Token": "chan-docs"

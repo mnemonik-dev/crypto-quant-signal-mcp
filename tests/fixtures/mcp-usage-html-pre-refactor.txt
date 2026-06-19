@@ -54,14 +54,14 @@
   <details class="bg-navy-700 border border-white/5 rounded-xl mb-3">
     <summary class="px-5 py-3 text-white text-sm font-medium cursor-pointer">Claude Desktop &mdash; setup walkthrough</summary>
     <div class="px-5 pb-5 pt-2 text-sm text-gray-300 space-y-3">
-      <p><strong>Easiest path (UI):</strong> Open Claude Desktop &rarr; <em>Settings</em> &rarr; <em>Connectors</em> &rarr; <em>Add custom connector</em>. Name it <code class="text-xs bg-navy-800 px-1 rounded">AlgoVault</code>. URL: <code class="text-xs bg-navy-800 px-1 rounded">https://api.algovault.com/mcp</code>. Add <code class="text-xs bg-navy-800 px-1 rounded">Authorization: Bearer av_live_&hellip;</code> as a custom header (paid tier). Save and restart Claude Desktop.</p>
+      <p><strong>Easiest path (UI):</strong> Open Claude Desktop &rarr; <em>Settings</em> &rarr; <em>Connectors</em> &rarr; <em>Add custom connector</em>. Name it <code class="text-xs bg-navy-800 px-1 rounded">AlgoVault</code>. URL: <code class="text-xs bg-navy-800 px-1 rounded">https://api.algovault.com/mcp?src=docs</code>. Add <code class="text-xs bg-navy-800 px-1 rounded">Authorization: Bearer av_live_&hellip;</code> as a custom header (paid tier). Save and restart Claude Desktop.</p>
       <p><strong>JSON path:</strong> Edit <code class="text-xs bg-navy-800 px-1 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code class="text-xs bg-navy-800 px-1 rounded">%APPDATA%\Claude\claude_desktop_config.json</code> (Windows):</p>
       <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
         <pre><code class="text-xs text-gray-300">{
   "mcpServers": {
     "algovault": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp",
+      "args": ["-y", "mcp-remote", "https://api.algovault.com/mcp?src=docs",
                "--header", "Authorization: Bearer ${AV_API_KEY}",
                "--header", "X-AlgoVault-Track-Token:chan-docs"]
     }
@@ -81,7 +81,7 @@
         <pre><code class="text-xs text-gray-300">{
   "mcpServers": {
     "algovault": {
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer ${env:AV_API_KEY}",
         "X-AlgoVault-Track-Token": "chan-docs"
@@ -103,7 +103,7 @@
   "mcpServers": {
     "algovault": {
       "type": "streamableHttp",
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer ${env:AV_API_KEY}",
         "X-AlgoVault-Track-Token": "chan-docs"
@@ -123,7 +123,7 @@
     <div class="px-5 pb-5 pt-2 text-sm text-gray-300 space-y-3">
       <p><strong>One-liner (recommended):</strong></p>
       <div class="code-block bg-navy-800 border border-white/5 rounded-lg p-4">
-        <pre><code class="text-xs text-gray-300">claude mcp add --transport http --scope project algovault https://api.algovault.com/mcp \
+        <pre><code class="text-xs text-gray-300">claude mcp add --transport http --scope project algovault https://api.algovault.com/mcp?src=docs \
   --header "Authorization: Bearer $AV_API_KEY" \
   --header "X-AlgoVault-Track-Token:chan-docs"</code></pre>
       </div>
@@ -133,7 +133,7 @@
   "mcpServers": {
     "algovault": {
       "type": "http",
-      "url": "https://api.algovault.com/mcp",
+      "url": "https://api.algovault.com/mcp?src=docs",
       "headers": {
         "Authorization": "Bearer ${AV_API_KEY}",
         "X-AlgoVault-Track-Token": "chan-docs"
