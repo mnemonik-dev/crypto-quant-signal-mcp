@@ -54,6 +54,8 @@ import { recordFirstNonHoldVerdict } from './lib/aha-event.js';
 // fresh for all nudge copy (started once at server boot, below).
 import { buildAhaHint } from './lib/nudge-copy.js';
 import { getTrackRecord, startTrackRecordWarmer } from './lib/track-record-snapshot.js';
+import { renderReceiptText, renderScanReceiptText } from './lib/receipts.js';
+import { startReceiptTrackRecordWarmer } from './lib/receipts-track-record.js';
 import { getPqlCandidates } from './lib/pql.js';
 import {
   captureArgvTrackToken,
@@ -437,7 +439,19 @@ function createServer(): McpServer {
             ipHash: getRequestIpHash() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+        // P0 VERDICT-WITH-RECEIPTS-W1: content[0] stays the JSON envelope (now with
+        // the additive `_receipts` sibling) so any consumer parsing content[0] is
+        // unaffected; content[1] carries the human-readable receipt, projected from
+        // the SAME `_receipts` (single-derivation). Equity-engine results have no
+        // `_receipts` → no human receipt (perp-only scope).
+        const content: { type: 'text'; text: string }[] = [
+          { type: 'text' as const, text: JSON.stringify(result, null, 2) },
+        ];
+        const rcpt = result as { _receipts?: Parameters<typeof renderReceiptText>[0]; reasoning?: string };
+        if (rcpt._receipts) {
+          content.push({ type: 'text' as const, text: renderReceiptText(rcpt._receipts, rcpt.reasoning ?? '') });
+        }
+        return { content };
       } catch (err: unknown) {
         return toolErrorContent(err);
       }
@@ -644,7 +658,17 @@ function createServer(): McpServer {
             ipHash: getRequestIpHash() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+        // P0 VERDICT-WITH-RECEIPTS-W1: content[0] is the JSON envelope (with the
+        // shared `_receipts` block); content[1] is the proof footer so a scan
+        // screenshot carries the proof beside the per-row verdicts. Omitted on the
+        // quota-exhausted envelope (no `_receipts`) and when the source is down.
+        const content: { type: 'text'; text: string }[] = [
+          { type: 'text' as const, text: JSON.stringify(result, null, 2) },
+        ];
+        const scanRcpt = result as { _receipts?: Parameters<typeof renderScanReceiptText>[0] };
+        const footer = scanRcpt._receipts ? renderScanReceiptText(scanRcpt._receipts) : '';
+        if (footer) content.push({ type: 'text' as const, text: footer });
+        return { content };
       } catch (err: unknown) {
         return toolErrorContent(err);
       }
@@ -2793,6 +2817,12 @@ async function startHttp() {
     // runs in the long-lived server process — never in a test or short-lived
     // cron that merely imports the nudge builders.
     startTrackRecordWarmer();
+
+    // P0 VERDICT-WITH-RECEIPTS-W1: start the in-process receipt track-record warmer
+    // (live PFE-WR + evaluated-count + window behind the per-call `_receipts` proof
+    // line). Sourced from the in-process performance stats (NOT an HTTP self-call);
+    // long-lived process only, mirroring the nudge warmer above.
+    startReceiptTrackRecordWarmer();
 
     // Auto-backfill: evaluate pending signals every 5 minutes
     console.log('[backfill] Auto-backfill enabled: every 5 minutes');

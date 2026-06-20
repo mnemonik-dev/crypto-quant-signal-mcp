@@ -1,3 +1,7 @@
+// P0 VERDICT-WITH-RECEIPTS-W1: the additive, allow-listed inline-proof block.
+// Type-only import (erased at compile) — no runtime cycle with lib/receipts.ts.
+import type { Receipts } from './lib/receipts.js';
+
 // ── Hyperliquid API Types ──
 
 export interface HLCandle {
@@ -299,6 +303,14 @@ export interface TradeCallResult {
    */
   also_see?: LeaderboardCell[];
   _algovault: AlgoVaultMeta;
+  /**
+   * P0 VERDICT-WITH-RECEIPTS-W1: inline-proof block — verdict + live conviction +
+   * top factors + LIVE track record + verify link + disclaimer. Additive sibling
+   * of `_algovault`; projected once via `formatReceipts()` (single-derivation).
+   * OMITTED on internal grid-refresh results (those are trimmed to leaderboard
+   * cells). The human-readable projection rides the tool TEXT output, not here.
+   */
+  _receipts?: Receipts;
 }
 
 /**

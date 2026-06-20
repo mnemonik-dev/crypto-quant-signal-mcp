@@ -15,6 +15,8 @@ import { getVenueStatus } from '../lib/venue-shadow.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import { getClosestTradeable, getTryNext } from '../lib/cross-asset-grid.js';
 import { trimToLeaderboardCell } from '../lib/leaderboard-cell.js';
+import { formatReceipts } from '../lib/receipts.js';
+import { getReceiptTrackRecord } from '../lib/receipts-track-record.js';
 import type { TradeCallResult, SignalVerdict, EmaCrossDirection, RegimeType, LicenseInfo, ExchangeId } from '../types.js';
 import {
   bucketTrendPersistence, bucketFundingState, bucketBreakoutPending,
@@ -513,6 +515,15 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
     timeframe,
     _algovault: meta,
   };
+
+  // P0 VERDICT-WITH-RECEIPTS-W1: attach the inline-proof block. Single-derivation —
+  // `formatReceipts` projects from the verdict JUST computed (never re-derives the
+  // call) and reads the cached in-process track record (omitted fail-open when the
+  // source is momentarily unavailable). Skipped for internal grid-refresh cells,
+  // which are trimmed to leaderboard cells downstream and never user-facing.
+  if (!input.internal) {
+    result._receipts = formatReceipts(result, { trackRecord: getReceiptTrackRecord() });
+  }
 
   // v1.9.0 L2 + L4: HOLD rescue + next-calls hints.
   // Both features read from the same lazy, TTL-cached cross-asset grid. The

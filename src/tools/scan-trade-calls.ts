@@ -25,6 +25,8 @@ import {
   type ScanCallItem,
 } from '../lib/trade-call-scanner.js';
 import { checkQuota, trackCall, getQuotaExhaustedMessage, getRequestSessionId } from '../lib/license.js';
+import { formatScanReceipts, type ScanReceipts } from '../lib/receipts.js';
+import { getReceiptTrackRecord } from '../lib/receipts-track-record.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import {
   SCAN_TRADE_CALLS_DESCRIPTION,
@@ -67,6 +69,14 @@ export interface ScanAlgovaultMeta {
 
 export interface ScanTradeCallsResponse extends ScanTradeCallsResult {
   _algovault: ScanAlgovaultMeta;
+  /**
+   * P0 VERDICT-WITH-RECEIPTS-W1: envelope-shared inline proof. Each `calls[]` row
+   * already carries its own verdict (`call`) + conviction (`confidence`) + regime;
+   * the track record + verify link + disclaimer are shared ONCE here (the
+   * lower-token shape — a row + this envelope stands alone in a screenshot).
+   * `track_record` is OMITTED fail-open when the source is unavailable.
+   */
+  _receipts: ScanReceipts;
 }
 
 export interface ScanQuotaExhaustedResponse {
@@ -119,6 +129,8 @@ export async function runScanTradeCall(
       signal_performance: TRACK_RECORD_POINTER,
       session_id: getRequestSessionId() ?? null,
     },
+    // Envelope-shared inline proof (live, cached, in-process; fail-open).
+    _receipts: formatScanReceipts(getReceiptTrackRecord()),
   };
 }
 
