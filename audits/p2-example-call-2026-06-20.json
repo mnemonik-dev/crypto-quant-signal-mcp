@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "wave": "P2-LANDING-VERDICT-CARD-W1",
+    "purpose": "The REAL captured trade-call snapshot baked (STATIC) into the landing verdict card. Framed DEMONSTRATIVE-FROM-REAL-EVENT per Design.md positioning-frame-ratification -> ships with an explicit \"Example output\" label; never implies a live tradable signal. verdict/conviction/regime/factors/Why are STATIC from this capture; the Proof-line PFE WR + N are LIVE-bound via data-tr-field (pfe_wr/call_count), never from this snapshot. The capture timestamp is NOT rendered on the card face (Q-P2-3: timestamps age) — it lives here only.",
+    "captured_at": "2026-06-20T14:05Z",
+    "source_tool": "get_trade_call",
+    "endpoint": "https://api.algovault.com/mcp",
+    "ratification": "Q-P2-3 OVERRIDE: bake a real BUY/SELL with conviction >= 60% (the track-record qualifying threshold), consistent with the >=60%-qualifying proof line + adjacent track-record section.",
+    "selection_rationale": "Quiet market at capture time: a 5-venue x 4-timeframe scan (minConfidence=60) surfaced no STABLE >=60% call on 1h/4h/1d and only a transient 15m AXS spike that flipped to HOLD on direct capture. A tight scan->immediate-direct-capture loop caught AXS on the 1h (stabler candle) at exactly the >=60 qualifying line. Recognizable crypto perp (Axie Infinity), clean multi-factor BUY, no closed-market caveat. Rejected CL (TradFi-aliased, 'underlying market closed - synthetic pricing - provisional')."
+  },
+  "example_call": {
+    "coin": "AXS",
+    "timeframe": "1h",
+    "exchange": "BINANCE",
+    "exchange_label": "Binance",
+    "verdict": "BUY",
+    "conviction_pct": 60,
+    "regime": "TRENDING_UP",
+    "regime_humanized": "Trending up",
+    "factors": [
+      { "factor": "trend_persistence", "direction": "neutral", "value": "HIGH" },
+      { "factor": "funding_state", "direction": "bullish", "value": "ELEVATED" },
+      { "factor": "oi_change_pct", "direction": "bullish", "value": "+18.1%" }
+    ],
+    "reasoning": "Trending regime, upward bias. Funding pressure elevated; one-sided crowd forming. Volatility neither expanding nor compressed. Trend persistence elevated; momentum structure. Moderate conviction from blended signals.",
+    "human_lines": {
+      "verdict_line": "BUY · 60% conviction — Trending up",
+      "why_line": "Why: Trending regime, upward bias. Funding pressure elevated; one-sided crowd forming. Volatility neither expanding nor compressed. Trend persistence elevated; momentum structure. Moderate conviction from blended signals.",
+      "proof_line": "Proof: 91.6% PFE win rate · 255K calls · Merkle-anchored on Base · Verify → https://algovault.com/track-record"
+    },
+    "verification_uri": "https://algovault.com/track-record",
+    "disclaimer": "Informational analytics, not investment advice. Past performance does not guarantee future results."
+  },
+  "verbatim_reasoning_signals_note": "The verbatim reasoning ends 'Moderate conviction from blended signals.' — 'signals' here is the engine's generic technical-analysis term (the blended indicator signals behind the verdict), NOT the product noun. Reproduced VERBATIM per Q-P2-2 'no placeholder'. It does NOT trip the copy-consistency FORBIDDEN_PHRASES canary (which only forbids tier-gating phrases + the old 'performance://signal-stats' URI, not the generic word). All AUTHORED prose (kicker/H2/dek/label/CTA/tooltip/JSON-LD) stays calls-only.",
+  "live_bound_note": {
+    "static_on_card": ["coin", "timeframe", "exchange", "verdict", "conviction_pct", "regime", "factors", "reasoning"],
+    "live_bound_on_card": {
+      "pfe_win_rate": "data-tr-field=\"pfe_wr\" (hydrated by track-record-proxy.js -> e.g. '91.6%', % INSIDE span)",
+      "n_calls": "data-tr-field=\"call_count\" (hydrated -> e.g. '255,455')"
+    },
+    "snapshot_fallback": "The data-tr-field span fallback literal must match the build-time snapshot per snapshot-landing-data.mjs discipline (pfe_wr/call_count are existing snapshot-managed fields)."
+  }
+}

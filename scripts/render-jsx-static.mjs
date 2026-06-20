@@ -2062,7 +2062,7 @@ async function main() {
         src,
         path.join(VAULT_DESIGN, 'v1-landing-rest.jsx'),
         [
-          'AlgoVaultLandingRest', 'TryIn30', 'TradFiCallout', 'ThreeTools', 'UseCases',
+          'AlgoVaultLandingRest', 'TryIn30', 'TradFiCallout', 'ThreeTools', 'UseCases', 'LiveVerdict',
           'LiveTrackRecord', 'TamperProof', 'TrustBand', 'SimplePricing', 'ForDevelopers', 'FAQ', 'LandingFooter',
           'LRBlock', 'LREyebrow', 'LRH2', 'LRLead', 'Pill', 'Check', 'Bullet', 'FAQItem',
         ]
@@ -2071,6 +2071,9 @@ async function main() {
       const try30 = preserveQuickstartAnchor(renderToString(React.createElement(exports.TryIn30, { mobile })));
       const tt = renderToString(React.createElement(exports.ThreeTools, { mobile }));
       const uc = injectUseCasesLogos(stripUseCasesDate(renderToString(React.createElement(exports.UseCases, { mobile }))));
+      // P2-LANDING-VERDICT-CARD-W1: styled verdict-with-receipts example card. Uses
+      // data-tr-field directly in JSX (TrustBand pattern) → no post-render injector.
+      const lv = renderToString(React.createElement(exports.LiveVerdict, { mobile }));
       const ltr = injectLiveDataLiveTrack(renderToString(React.createElement(exports.LiveTrackRecord, { mobile })));
       const tp = renderToString(React.createElement(exports.TamperProof, { mobile }));
       // LANDING-CONVERSION-TRUST-W1: additive trust band between TamperProof and pricing.
@@ -2086,7 +2089,7 @@ async function main() {
       const fq = renderToString(React.createElement(exports.FAQ, { mobile })) + FAQ_ACCORDION_JS;
       const ft = applyFooterUrls(renderToString(React.createElement(exports.LandingFooter, { mobile })));
       // Final pass: wrap "5 exchanges" / "11 timeframes" prose literals with proxy spans (copy-consistency canary).
-      html = wrapCounterLiteralsInProse(try30 + tt + uc + ltr + tp + tb + sp + fd + fq + ft);
+      html = wrapCounterLiteralsInProse(try30 + tt + uc + lv + ltr + tp + tb + sp + fd + fq + ft);
     } else if (target === 'hero') {
       // DESIGN-W7 hero render — V1Hero from v1-minimal.jsx with `count=32, diagram='flow'`
       // (matches canonical AlgoVault Landing.html bootstrap line 59).
