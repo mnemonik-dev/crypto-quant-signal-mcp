@@ -15,6 +15,7 @@ vi.hoisted(() => {
   process.env.HOME = dir;
   process.env.USERPROFILE = dir;
   delete process.env.DATABASE_URL;
+  delete process.env.CDP_WALLET_SECRET; // keep getPayoutSender on the Stub path
 });
 
 import {
@@ -155,7 +156,7 @@ describe('executeApproveAllBatch', () => {
 
   it('the Stub sender (C2 default) sends nothing — reports not-configured', async () => {
     await seed('PAYERA', ADDR_A, [6000]);
-    expect(getPayoutSender().kind).toBe('stub');
+    expect((await getPayoutSender()).kind).toBe('stub');
     const r = await executeApproveAllBatch(new StubPayoutSender());
     expect(r.senderKind).toBe('stub');
     expect(r.paid).toEqual([]);

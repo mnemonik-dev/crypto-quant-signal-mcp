@@ -10,6 +10,7 @@
 import { REFERRAL_TERMS, formatUsdE2, payoutScheduleLabel } from './referral-constants.js';
 import { pendingPayouts, getLedgerById, markLedger, type PendingPayout } from './referral-store.js';
 import { maskEmail, sendPayoutPaidEmail } from './email.js';
+import { cdpPayoutConfigured } from './payout-config.js';
 
 const ADMIN_PAYOUTS_URL = 'https://api.algovault.com/admin/referrals/payouts';
 
@@ -83,10 +84,16 @@ export class StubPayoutSender implements PayoutSender {
 }
 
 /**
- * Factory — returns the real CDP server-wallet sender when configured, else the Stub.
- * C2 always returns the Stub; C3 adds the CDP creds check + CdpPayoutSender here.
+ * Factory — returns the real CDP server-wallet sender when all three CDP creds are
+ * present (incl. the signing CDP_WALLET_SECRET), else the Stub. The CDP SDK is
+ * lazy-imported ONLY when configured, so the Stub / cron / detection paths never load
+ * the heavy SDK. Async because of that lazy import.
  */
-export function getPayoutSender(): PayoutSender {
+export async function getPayoutSender(): Promise<PayoutSender> {
+  if (cdpPayoutConfigured()) {
+    const { CdpPayoutSender } = await import('./cdp-payout.js');
+    return new CdpPayoutSender();
+  }
   return new StubPayoutSender();
 }
 

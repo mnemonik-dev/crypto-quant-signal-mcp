@@ -1890,7 +1890,9 @@ async function startHttp() {
         const { renderAdminPayoutsPage } = await import('./lib/referral-pages.js');
         const { REFERRAL_TERMS } = await import('./lib/referral-constants.js');
         const { executeApproveAllBatch, getPayoutSender } = await import('./lib/referral-payout.js');
-        const result = await executeApproveAllBatch(getPayoutSender());
+        const { batchCapE2 } = await import('./lib/payout-config.js');
+        const sender = await getPayoutSender();
+        const result = await executeApproveAllBatch(sender, { maxBatchUsdE2: batchCapE2() });
         console.log(`[/admin/referrals/payouts/approve-all] sender=${result.senderKind} paid=${result.paid.length} total=${result.totalPaidUsdE2}e2 skippedNoAddr=${result.skippedNoAddress.length} failed=${result.failed.length}`);
         const pending = await pendingPayouts(REFERRAL_TERMS.USDC_MIN_PAYOUT_USD);
         res.setHeader('Cache-Control', 'no-store');
