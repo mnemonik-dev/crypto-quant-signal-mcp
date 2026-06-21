@@ -11,10 +11,13 @@
  *   - Q-W11-6: pragmatic preservation of pre-existing inline styles
  *   - Q-W11-7: mobile Nav via Tailwind hidden sm:flex (no /track-record-specific mobile CSS)
  *
- * Preservation-LAW: 22× tier-stat-card / 24× exchange-stat-card refs / 4× tf-bar-chart /
- * 3× verify-any-call-card / 44× data-tr-field unique keys / 7× setInterval / 0× JSON-LD
- * all byte-identical post-edit. R-1 inline-fix: JSON-LD baseline = 0 (not 1 as spec
- * Map Anchor premised; W8-FIX did not add JSON-LD to /track-record).
+ * Preservation-LAW (post-P1-TRACK-RECORD-LEADERBOARD-W1): chrome (Nav / Footer /
+ * artboard / H1 / brand-block) + 3x verify-any-call-card + 7x setInterval remain
+ * byte-stable. SUPERSEDED by P1: the 3 fixed per-segment grids (tier-stat-card /
+ * exchange-stat-card / tf-bar-chart) + their 35 static per-segment data-tr-field
+ * spans are replaced by ONE unified leaderboard (#leaderboard-section) rendered
+ * live from the same payload; JSON-LD baseline 0 -> 1 (R4 Dataset). See
+ * audits/P1-TRACK-RECORD-LEADERBOARD-W1-endpoint-truth.md.
  *
  * Comment-stripping per comment-vs-rendered-DOM-aware-canary (5-sighting canonical
  * CLAUDE.md rule): forbidden-phrase scan strips /* ... *​/ and // ... and <!-- --> before grep.
@@ -138,22 +141,19 @@ test('/track-record: body styles replaced with canonical var(--bg) pattern (Q-W1
 
 // ── Preservation-LAW HARD ────────────────────────────────────────────────────
 
-test('/track-record preservation: 22× tier-stat-card byte-identical', async () => {
+// SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1: the 3 fixed per-segment grids
+// (tier-stat-card / exchange-stat-card / tf-bar-chart) are REPLACED by ONE unified
+// leaderboard rendered client-side from the same /api/performance-public payload.
+// The rendered grids are gone; any residual tier-stat-card / exchange-stat-card
+// strings are CSS-comment provenance only.
+test('/track-record: 3 fixed per-segment grids replaced by the unified leaderboard (P1)', async () => {
   const src = await read('src/index.ts');
-  const n = countOcc(src, 'tier-stat-card');
-  assert.ok(n >= 22, `Expected ≥22 tier-stat-card refs; got ${n}`);
-});
-
-test('/track-record preservation: 24× exchange-stat-card byte-identical', async () => {
-  const src = await read('src/index.ts');
-  const n = countOcc(src, 'exchange-stat-card');
-  assert.ok(n >= 24, `Expected ≥24 exchange-stat-card refs; got ${n}`);
-});
-
-test('/track-record preservation: 4× tf-bar-chart byte-identical', async () => {
-  const src = await read('src/index.ts');
-  const n = countOcc(src, 'tf-bar-chart');
-  assert.ok(n >= 4, `Expected ≥4 tf-bar-chart refs; got ${n}`);
+  const func = scopeToPerfFunc(src);
+  assert.strictEqual(countOcc(func, 'id="leaderboard-section"'), 1, 'unified leaderboard present');
+  assert.ok(/function renderLeaderboard\(\)/.test(func), 'renderLeaderboard controller present');
+  assert.strictEqual(countOcc(func, 'class="tier-stat-grid"'), 0, 'rendered tier-stat-grid removed');
+  assert.strictEqual(countOcc(func, 'class="exchange-stat-grid"'), 0, 'rendered exchange-stat-grid removed');
+  assert.strictEqual(countOcc(func, 'id="tf-bar-chart"'), 0, 'rendered tf-bar-chart removed');
 });
 
 test('/track-record preservation: 3× verify-any-call-card byte-identical', async () => {
@@ -217,11 +217,19 @@ test('/track-record W11-FF: pkg_version live-bind span added (additive — 45th 
     'pkg_version live-bind span must wrap ${PKG_VERSION} template literal (build-time fallback + future proxy hydration target)');
 });
 
-test('/track-record preservation: 44 unique data-tr-field keys', async () => {
+// SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1 (Q-P1-9): the 35 per-segment static
+// data-tr-field spans (tier_t*/ex_*/tf_*) are replaced by the leaderboard's dynamic
+// render from cachedData — genuinely live, re-rendered on the existing 30s load()
+// loop. The lower static count does NOT reduce live coverage: every surviving
+// critical live-bind key persists, and leaderboard numbers stay live.
+test('/track-record: surviving data-tr-field live-bind keys intact post-P1 (Q-P1-9)', async () => {
   const src = await read('src/index.ts');
-  const matches = src.match(/data-tr-field="[^"]+"/g) || [];
-  const unique = new Set(matches);
-  assert.ok(unique.size >= 44, `Expected ≥44 unique data-tr-field keys; got ${unique.size}`);
+  const func = scopeToPerfFunc(src);
+  for (const k of ['pkg_version', 'exchange_count', 'asset_count', 'merkle_batch_count', 'latest_batch_at', 'next_batch_in']) {
+    assert.ok(new RegExp(`data-tr-field="${k}"`).test(func), `${k} live-bind must persist`);
+  }
+  // leaderboard numbers stay live via the 30s loop (renderAll -> renderLeaderboard).
+  assert.ok(/renderLeaderboard\(\);/.test(func), 'renderLeaderboard invoked for live re-render');
 });
 
 test('/track-record preservation: setInterval count unchanged (W11 adds 0)', async () => {
@@ -230,10 +238,16 @@ test('/track-record preservation: setInterval count unchanged (W11 adds 0)', asy
   assert.strictEqual(n, 7, `Expected exactly 7 setInterval calls (baseline); got ${n}`);
 });
 
-test('/track-record preservation: JSON-LD count = 0 (R-1 inline-fix: spec premise corrected; W8-FIX did NOT add JSON-LD)', async () => {
+// SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1 (R4 GEO): baseline was 0; P1 adds
+// exactly 1 schema.org Dataset (variableMeasured = PFE Win Rate + Sample Size).
+// No synthetic aggregateRating (Data Integrity LAW + Google rich-results policy).
+test('/track-record: exactly 1 Dataset JSON-LD (P1 R4; baseline was 0)', async () => {
   const src = await read('src/index.ts');
-  const n = countOcc(src, 'application/ld+json');
-  assert.strictEqual(n, 0, `Expected exactly 0 JSON-LD blocks (R-1 corrected baseline); got ${n}`);
+  const func = scopeToPerfFunc(src);
+  assert.strictEqual(countOcc(func, 'application/ld+json'), 1, 'exactly 1 JSON-LD block');
+  assert.ok(/"@type":"Dataset"/.test(func), 'JSON-LD is a Dataset');
+  assert.ok(/"variableMeasured"/.test(func), 'Dataset declares variableMeasured');
+  assert.ok(!/"aggregateRating"/.test(func), 'no synthetic aggregateRating key');
 });
 
 // ── Build Rule 9 forbidden-phrase canary (comment-stripped per canonical rule) ──
@@ -272,14 +286,17 @@ test('/track-record: brand block live-bind spans intact (exchange_count + asset_
   assert.ok(/\$\{PKG_VERSION\}/.test(func), 'pkg_version template literal must persist (now inside data-tr-field span)');
 });
 
-test('/track-record: KPI live-bind spans intact (4 tiers + 5 exchanges + 8 timeframes)', async () => {
+// SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1: the per-segment data-tr-field spans
+// (tier_t*_wr / ex_*_wr|n / tf_*_wr) are replaced by the leaderboard reading the
+// SAME segment maps from cachedData (live, re-rendered each 30s refresh).
+test('/track-record: leaderboard reads all 4 segment dimensions from the payload (P1)', async () => {
   const src = await read('src/index.ts');
   const func = scopeToPerfFunc(src);
-  for (const t of ['tier_t1_wr', 'tier_t2_wr', 'tier_t3_wr', 'tier_t4_wr']) {
-    assert.ok(new RegExp(`data-tr-field="${t}"`).test(func), `${t} live-bind must persist`);
-  }
-  for (const ex of ['BINANCE', 'BITGET', 'BYBIT', 'HL', 'OKX']) {
-    assert.ok(new RegExp(`data-tr-field="ex_${ex}_n"`).test(func), `ex_${ex}_n live-bind must persist`);
-    assert.ok(new RegExp(`data-tr-field="ex_${ex}_wr"`).test(func), `ex_${ex}_wr live-bind must persist`);
-  }
+  assert.ok(/d\.byExchange/.test(func), 'reads byExchange (Venue dimension)');
+  assert.ok(/d\.byAsset/.test(func), 'reads byAsset (Asset dimension)');
+  assert.ok(/d\.byTimeframe/.test(func), 'reads byTimeframe (Timeframe dimension)');
+  assert.ok(/d\.byTier/.test(func), 'reads byTier (Tier dimension)');
+  // Q-P1-8: the Timeframe dimension derives its included set from the single
+  // HIDE_TFS source so it can't drift from the published aggregate.
+  assert.ok(/HIDE_TFS\[tf\]/.test(func), 'timeframe dimension filtered through HIDE_TFS (single source)');
 });

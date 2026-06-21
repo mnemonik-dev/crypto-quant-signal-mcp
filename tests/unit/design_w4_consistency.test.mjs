@@ -115,35 +115,21 @@ test('landing/index.html: inline-style baseline (W6 Q-W1 documented relaxation)'
 
 test('src/index.ts: getPerformanceDashboardHtml W3 + W4 layers both present', async () => {
   const ts = await read('src/index.ts');
-  // W3 tier-stat preservation
-  for (const k of ['tier1', 'tier2', 'tier3', 'tier4']) {
-    assert.ok(ts.includes(`id="tier-stat-card-${k}"`), `W3 tier-stat-card-${k} preserved`);
-  }
-  // W4 exchange-stat (5 cards)
-  for (const ex of ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']) {
-    assert.ok(ts.includes(`id="exchange-stat-card-${ex}"`), `W4 exchange-stat-card-${ex}`);
-  }
-  // W4 tf-bar 11 rows (1m..1d)
-  // DESIGN-W8-FIX (2026-05-11): 1m / 3m / 1d trimmed from bar chart per Mr.1
-  // directive (insufficient signal count for meaningful WR on 1m/3m; 1d high
-  // variance). 8 evaluated TFs remain. "11 TIMEFRAMES" marketing claim
-  // preserved elsewhere (refers to SUPPORTED TF count via get_trade_call MCP
-  // tool, distinct from evaluated-WR chart granularity).
-  for (const tf of ['5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h']) {
-    assert.ok(ts.includes(`data-tf="${tf}"`), `W4 tf-bar-row data-tf="${tf}"`);
-  }
-  // W4 tr-recent-calls panel preserved through W8 architectural shift.
-  // DESIGN-W8 (2026-05-11): the 2.5s /api/recent-calls polling IIFE was
-  // REPLACED by 30s cachedData.recentSignals hydration via renderAll() to
-  // get real .id (per-row deep-link) + .tier per Q-W8-1=B architect ratification.
-  // Canonical track-record-2.jsx FeedSection has no polling.
+  // SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1: the W3 tier-stat + W4 exchange-stat
+  // + tf-bar grids are replaced by ONE unified leaderboard rendered from the same
+  // payload (byTier / byExchange / byTimeframe / byAsset). Removed grids:
+  const func = ts.slice(ts.indexOf('function getPerformanceDashboardHtml'), ts.indexOf('// ── Smithery sandbox export'));
+  assert.ok(func.includes('id="leaderboard-section"'), 'unified leaderboard present (P1)');
+  assert.ok(!func.includes('id="tier-stat-card-tier1"'), 'old tier-stat grid removed');
+  assert.ok(!func.includes('id="exchange-stat-card-HL"'), 'old exchange-stat grid removed');
+  assert.ok(!func.includes('id="tf-bar-chart"'), 'old tf-bar-chart removed');
+  // W4 tr-recent-calls panel preserved through the P1 leaderboard rebuild.
   assert.match(ts, /id="tr-recent-calls-panel"/, 'tr-recent-calls-panel container');
   assert.match(ts, /id="tr-recent-calls-rows"/, 'tr-recent-calls-rows hydration target');
-  assert.match(ts, /id="tr-recent-calls-tbody"/, 'W8 tr-recent-calls-tbody 8-col table body');
-  // byExchange + byTimeframe hydration
-  assert.match(ts, /d\.byExchange/, 'byExchange hydration reference');
-  assert.match(ts, /d\.byTimeframe/, 'byTimeframe hydration reference');
-  assert.match(ts, /setProperty\('--exchange-color'/, 'exchange color via setProperty (no inline style=)');
+  assert.match(ts, /id="tr-recent-calls-tbody"/, 'W8 tr-recent-calls-tbody table body');
+  // byExchange + byTimeframe still read — now by the leaderboard controller.
+  assert.match(ts, /d\.byExchange/, 'byExchange read by leaderboard');
+  assert.match(ts, /d\.byTimeframe/, 'byTimeframe read by leaderboard');
 });
 
 test('landing/verify.html: W4 deliverables PRESERVED through W9 rebuild (form + canonical loader + 0 gold)', async () => {

@@ -131,21 +131,20 @@ test('algovault-design.css: D2-C + W3 components both present', async () => {
   assert.match(css, /@keyframes\s+pulse\s*\{/, 'D2-C @keyframes pulse preserved');
 });
 
-test('src/index.ts: getPerformanceDashboardHtml has W3 tier-stat-grid (C4)', async () => {
+test('src/index.ts: track-record tier breakdown served by the unified leaderboard (P1; was W3 tier-stat-grid)', async () => {
   const ts = await read('src/index.ts');
   // 4 tier-stat-card divs (tier1..tier4)
-  for (const k of ['tier1', 'tier2', 'tier3', 'tier4']) {
-    assert.ok(ts.includes(`id="tier-stat-card-${k}"`), `tier-stat-card-${k} markup present`);
-  }
-  // data-tier-color attribute (NOT inline style=) for each tier
-  const dataAttrs = (ts.match(/data-tier-color="#/g) || []).length;
-  assert.ok(dataAttrs >= 4, `>=4 data-tier-color attrs (got ${dataAttrs})`);
-  // Cross-origin algovault-design.css link (D2-C signup + W3 dashboard)
+  // SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1: the W3 tier-stat-grid (4 per-tier
+  // cards in getPerformanceDashboardHtml) is replaced by the unified leaderboard,
+  // which reads byTier from the same payload. The .tier-stat-card CSS class itself
+  // remains (used by /account + /integrations — see design_w10).
+  const func = ts.slice(ts.indexOf('function getPerformanceDashboardHtml'), ts.indexOf('// ── Smithery sandbox export'));
+  assert.ok(func.includes('id="leaderboard-section"'), 'unified leaderboard present');
+  assert.ok(/d\.byTier/.test(func), 'tier breakdown read from byTier in the leaderboard');
+  assert.ok(!func.includes('id="tier-stat-card-tier1"'), 'old per-tier stat cards removed from track-record');
+  // Cross-origin algovault-design.css link (D2-C signup + dashboard) preserved
   const links = (ts.match(/https:\/\/algovault\.com\/_design\/algovault-design\.css/g) || []).length;
   assert.ok(links >= 2, `>=2 cross-origin design CSS links (got ${links})`);
-  // byTier hydration block
-  assert.match(ts, /getElementById\('tier-stat-card-' \+ k\)/, 'byTier hydration block present');
-  assert.match(ts, /setProperty\('--tier-color'/, 'tier color set via setProperty (no inline style=)');
 });
 
 test('plan-card tiers preserved (REFERRAL-WEB-FIX-W1: extracted index.ts → signup-flow.ts renderPlanCards)', async () => {

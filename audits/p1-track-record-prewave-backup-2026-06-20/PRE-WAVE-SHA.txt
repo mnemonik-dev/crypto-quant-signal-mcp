@@ -1,0 +1,3 @@
+PRE-WAVE origin/main SHA: e49c6da00dffdf25d53442f056ba68411c5bf9d4
+(branch feat/track-record-leaderboard-w1 created off this)
+Date: 2026-06-21 (dir dated 2026-06-20 per architect)

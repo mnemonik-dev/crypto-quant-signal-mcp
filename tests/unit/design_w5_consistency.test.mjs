@@ -168,19 +168,16 @@ test('D1-C+D2-C+W3+W4+W6 preservation regression-free (W7 hero shift acknowledge
 test('src/index.ts: dashboard JSX-faithful H2 alignment + W3+W4 deliverables preserved', async () => {
   const ts = await read('src/index.ts');
   // C3 H2 alignment per JSX track-record-2.jsx mapping
-  assert.match(ts, /<h2>Performance by Timeframe<\/h2>/, 'TF H2 matches JSX (parenthetical dropped)');
+  // SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1: "Performance by Timeframe" (+ the
+  // by-Tier / by-Exchange fixed sections) are replaced by the unified leaderboard.
+  assert.match(ts, /Ranked by verified <span class="text-mint-400">win rate<\/span>\./, 'leaderboard GEO H2 present (P1)');
   assert.match(ts, /<h2>Latest Trade Calls<\/h2>/, 'recent-calls H2 matches JSX FeedSection');
-  // W3+W4 deliverables preserved
-  for (const k of ['tier1', 'tier2', 'tier3', 'tier4']) {
-    assert.ok(ts.includes(`id="tier-stat-card-${k}"`), `W3 tier-stat-card-${k} preserved`);
-  }
-  for (const ex of ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']) {
-    assert.ok(ts.includes(`id="exchange-stat-card-${ex}"`), `W4 exchange-stat-card-${ex} preserved`);
-  }
-  // DESIGN-W8-FIX (2026-05-11): 1m / 3m / 1d trimmed; 8 evaluated TFs.
-  for (const tf of ['5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h']) {
-    assert.ok(ts.includes(`data-tf="${tf}"`), `W4 tf-bar-row data-tf="${tf}" preserved`);
-  }
+  // P1 deliverable: one leaderboard reading every segment dimension from the payload.
+  const func = ts.slice(ts.indexOf('function getPerformanceDashboardHtml'), ts.indexOf('// ── Smithery sandbox export'));
+  assert.ok(func.includes('id="leaderboard-section"'), 'unified leaderboard present');
+  assert.ok(!func.includes('<h2>Performance by Timeframe</h2>'), 'old fixed TF section removed');
+  assert.ok(!func.includes('id="tier-stat-card-tier1"'), 'old fixed tier section removed');
+  assert.ok(!func.includes('id="exchange-stat-card-HL"'), 'old fixed exchange section removed');
   assert.match(ts, /id="tr-recent-calls-panel"/, 'W4 tr-recent-calls panel preserved');
   // DESIGN-W8 (2026-05-11): 2.5s polling IIFE REMOVED; LATEST TRADE CALLS now
   // hydrates from cachedData.recentSignals via renderAll() (30s page refresh)

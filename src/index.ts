@@ -3283,7 +3283,22 @@ tailwind.config = {
   .verify-any-call-btn:hover { background: #82EFB8; }
   .verify-any-call-form-sub { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #6e7681; line-height: 1.55; margin-top: 4px; }
   .verify-any-call-form-sub-mid { color: #c9d1d9; }
+  /* P1-TRACK-RECORD-LEADERBOARD-W1: 3 ratified new classes (Q-P1-5). Everything
+     else reuses .recent-table / .tab / .tf-bar-track / .tf-bar-fill / .tier-badge. */
+  .lb-scroll { max-height: 560px; overflow: auto; background: oklch(0.18 0.014 265 / 0.5); border: 1px solid var(--line); border-radius: 12px; }
+  .lb-scroll::-webkit-scrollbar { width: 10px; }
+  .lb-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 8px; }
+  .lb-rank { color: #6e7681; font-variant-numeric: tabular-nums; font-size: 12px; text-align: left; }
+  .lb-small-sample { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #8b949e; background: oklch(0.22 0.012 265); border: 1px solid var(--line); }
 </style>
+<!-- P1-TRACK-RECORD-LEADERBOARD-W1 (R4 GEO): schema.org Dataset for the track
+     record. Baseline JSON-LD on /track-record was 0 (probed); this adds 1.
+     variableMeasured = PFE Win Rate + Sample Size (descriptive PropertyValue
+     nodes — NO hardcoded metric values, forward-stable). No aggregateRating
+     (Data Integrity + Google rich-results policy). Server-rendered raw HTML. -->
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Dataset","name":"AlgoVault trade-call track record","description":"Per-segment directional accuracy (PFE win rate) and sample size for AlgoVault trade calls, broken down by venue, asset, timeframe, and asset tier. Every call is Merkle-anchored on Base L2 for independent on-chain verification.","url":"https://algovault.com/track-record","isAccessibleForFree":true,"creator":{"@type":"Organization","name":"AlgoVault Labs","url":"https://algovault.com"},"measurementTechnique":"Peak Favorable Excursion (PFE) within each timeframe's evaluation window; confidence of at least 60% trade calls only","variableMeasured":[{"@type":"PropertyValue","name":"PFE Win Rate","description":"Share of trade calls where price moved in the called direction at any point during the evaluation window."},{"@type":"PropertyValue","name":"Sample Size","description":"Number of evaluated BUY/SELL trade calls in the segment (n)."}]}
+</script>
 </head>
 <body>
 <!-- DESIGN-W11 / C2 / Q-W11-1+Q-W11-4: canonical Nav VERBATIM from live algovault.com per audits/DESIGN-W11-canonical-chrome-extract.md §1. Track Record link uses active-link styling (text-mint-400 font-medium) replacing hover:text-white transition. Brand-mark wrap uses /account precedent (direct ahref + aria-label + cross-origin href). -->
@@ -3368,204 +3383,66 @@ tailwind.config = {
   </div>
   <div id="eval-indicator" style="text-align:center;color:#8b949e;font-size:13px;margin:-8px 0 12px 0"></div>
 
-  <!-- DESIGN-W3 / C4: Performance by Asset Tier — canonical track-record.jsx
-       TierSection translation. 4 tier-stat-cards (T1/T2/T3/T4) hydrated from
-       /api/performance-public.byTier on page load (NOT polling — tier
-       breakdown is slow-moving). Uses .tier-stat-grid + .tier-stat-card from
-       D2-C/D3-C1 algovault-design.css. Tier colors are SEMANTIC non-brand
-       (Tier 1 blue / T2 green / T3 purple / T4 orange) — preserved per D1-C;
-       NOT mint-swapped. Sits ABOVE the existing tier-cards JS-hydrated grid
-       (preserved untouched for backward compat). -->
-  <div class="section"><h2>Performance by Asset Tier</h2>
-    <div class="tier-stat-grid" id="tier-stat-grid">
-      <div class="tier-stat-card" id="tier-stat-card-tier1" data-tier-color="#58a6ff">
-        <div class="tier-stat-card-stripe"></div>
-        <div class="tier-stat-card-header">
-          <div>
-            <span class="tier-stat-tier-label">T1</span>
-            <div class="tier-stat-name" data-tr-field="tier_t1_name">Blue Chip</div>
-          </div>
-          <span class="tier-stat-sample" data-tr-field="tier_t1_sample">BTC &middot; ETH</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="tier_t1_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-pfe-bar"><div class="tier-stat-pfe-fill" id="tier-stat-pfe-tier1"></div></div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="tier_t1_n">&mdash;</div>
-        </div>
-      </div>
-      <div class="tier-stat-card" id="tier-stat-card-tier2" data-tier-color="#3fb950">
-        <div class="tier-stat-card-stripe"></div>
-        <div class="tier-stat-card-header">
-          <div>
-            <span class="tier-stat-tier-label">T2</span>
-            <div class="tier-stat-name" data-tr-field="tier_t2_name">Major Alts</div>
-          </div>
-          <span class="tier-stat-sample" data-tr-field="tier_t2_sample">&mdash;</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="tier_t2_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-pfe-bar"><div class="tier-stat-pfe-fill" id="tier-stat-pfe-tier2"></div></div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="tier_t2_n">&mdash;</div>
+  <!-- P1-TRACK-RECORD-LEADERBOARD-W1: unified filterable/sortable leaderboard.
+       REPLACES the 3 fixed sections (Performance by Asset Tier / Exchange /
+       Timeframe). Rows render client-side from the already-fetched
+       /api/performance-public payload (cachedData.byExchange / byAsset /
+       byTimeframe / byTier) via renderLeaderboard(), re-rendered on the existing
+       30s load() loop — NO new setInterval. PFE WR + n (count) ONLY (allow-list;
+       never outcome_return_pct / P&L). Controls: dimension pills (Q-P1-3 default
+       Venue), sort (WR / n) + direction toggle (worst-first in one tap), and a
+       min-sample FILTER (Q-P1-4: hides below the floor; n >= 0 restores
+       everything; default n >= 30) with a muted "small sample" tag on shown
+       sub-threshold rows. Timeframe set = byTimeframe minus HIDE_TFS (Q-P1-8
+       single-source — the set composing the published aggregate; 1m/1d excluded).
+       Asset caption live-rendered from the payload row count (Q-P1-7: never
+       hardcoded). GEO heading: kicker -> sentence-case H2 (mint noun) -> dek. -->
+  <div class="section" id="leaderboard-section">
+    <div style="margin-bottom:18px">
+      <div style="color:#5BEEB3;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px">track record &middot; leaderboard</div>
+      <h2 style="font-family:'Inter Tight',sans-serif;font-size:28px;font-weight:500;letter-spacing:-0.02em;line-height:1.1;color:#f0eee9;text-transform:none;margin:0 0 10px">Ranked by verified <span class="text-mint-400">win rate</span>.</h2>
+      <p style="font-size:14px;color:#c9d1d9;line-height:1.55;max-width:640px;margin:0">Filter by venue, asset, timeframe, or tier. Sort by win rate or sample size &mdash; low-sample rows are tagged, never hidden.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px 28px;margin-bottom:16px;align-items:flex-end">
+      <div role="group" aria-label="Leaderboard dimension">
+        <div style="color:#6e7681;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Dimension</div>
+        <div class="tabs" id="lb-dim-pills" style="margin-bottom:0">
+          <div class="tab active" data-dim="exchange" onclick="setLbDim('exchange')">Venue</div>
+          <div class="tab" data-dim="asset" onclick="setLbDim('asset')">Asset</div>
+          <div class="tab" data-dim="timeframe" onclick="setLbDim('timeframe')">Timeframe</div>
+          <div class="tab" data-dim="tier" onclick="setLbDim('tier')">Tier</div>
         </div>
       </div>
-      <div class="tier-stat-card" id="tier-stat-card-tier3" data-tier-color="#bc8cff">
-        <div class="tier-stat-card-stripe"></div>
-        <div class="tier-stat-card-header">
-          <div>
-            <span class="tier-stat-tier-label">T3</span>
-            <div class="tier-stat-name" data-tr-field="tier_t3_name">TradFi</div>
-          </div>
-          <span class="tier-stat-sample" data-tr-field="tier_t3_sample">&mdash;</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="tier_t3_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-pfe-bar"><div class="tier-stat-pfe-fill" id="tier-stat-pfe-tier3"></div></div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="tier_t3_n">&mdash;</div>
+      <div role="group" aria-label="Leaderboard sort">
+        <div style="color:#6e7681;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Sort</div>
+        <div class="tabs" id="lb-sort-pills" style="margin-bottom:0">
+          <div class="tab active" data-sort="wr" onclick="setLbSort('wr')">Win rate</div>
+          <div class="tab" data-sort="n" onclick="setLbSort('n')">Calls (n)</div>
+          <div class="tab" id="lb-dir" onclick="toggleLbDir()" title="Toggle sort direction (worst-first in one tap)">&darr; high&rarr;low</div>
         </div>
       </div>
-      <div class="tier-stat-card" id="tier-stat-card-tier4" data-tier-color="#d29922">
-        <div class="tier-stat-card-stripe"></div>
-        <div class="tier-stat-card-header">
-          <div>
-            <span class="tier-stat-tier-label">T4</span>
-            <div class="tier-stat-name" data-tr-field="tier_t4_name">Meme &amp; Micro</div>
-          </div>
-          <span class="tier-stat-sample" data-tr-field="tier_t4_sample">&mdash;</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="tier_t4_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-pfe-bar"><div class="tier-stat-pfe-fill" id="tier-stat-pfe-tier4"></div></div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="tier_t4_n">&mdash;</div>
+      <div role="group" aria-label="Minimum sample size filter">
+        <div style="color:#6e7681;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Min sample</div>
+        <div class="tabs" id="lb-minn-pills" style="margin-bottom:0">
+          <div class="tab" data-minn="0" onclick="setLbMinN(0)">n &ge; 0</div>
+          <div class="tab active" data-minn="30" onclick="setLbMinN(30)">n &ge; 30</div>
+          <div class="tab" data-minn="100" onclick="setLbMinN(100)">n &ge; 100</div>
+          <div class="tab" data-minn="500" onclick="setLbMinN(500)">n &ge; 500</div>
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- DESIGN-W4 / C3: Performance by Exchange — translated from track-record-2.jsx
-       ExchangeSection. 5 cards (Hyperliquid/Binance/Bybit/OKX/Bitget verbatim)
-       hydrated from /api/performance-public.byExchange on page load (extends
-       applyView(); no polling — exchange breakdown is slow-moving). Brand colors
-       match Supported Exchanges row on landing. -->
-  <div class="section"><h2>Performance by Exchange</h2>
-    <div class="exchange-stat-grid" id="exchange-stat-grid">
-      <div class="exchange-stat-card" id="exchange-stat-card-HL" data-exchange-color="#4ade80">
-        <div class="exchange-stat-card-stripe"></div>
-        <div class="exchange-stat-card-logo">
-          <span class="exchange-stat-card-mark">H</span>
-          <span>Hyperliquid</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="ex_HL_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="ex_HL_n">&mdash;</div>
-        </div>
-      </div>
-      <div class="exchange-stat-card" id="exchange-stat-card-BINANCE" data-exchange-color="#F0B90B">
-        <div class="exchange-stat-card-stripe"></div>
-        <div class="exchange-stat-card-logo">
-          <span class="exchange-stat-card-mark">B</span>
-          <span>Binance</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="ex_BINANCE_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="ex_BINANCE_n">&mdash;</div>
-        </div>
-      </div>
-      <div class="exchange-stat-card" id="exchange-stat-card-BYBIT" data-exchange-color="#F7A600">
-        <div class="exchange-stat-card-stripe"></div>
-        <div class="exchange-stat-card-logo">
-          <span class="exchange-stat-card-mark">BY</span>
-          <span>Bybit</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="ex_BYBIT_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="ex_BYBIT_n">&mdash;</div>
-        </div>
-      </div>
-      <div class="exchange-stat-card" id="exchange-stat-card-OKX" data-exchange-color="#ffffff">
-        <div class="exchange-stat-card-stripe"></div>
-        <div class="exchange-stat-card-logo">
-          <span class="exchange-stat-card-mark">O</span>
-          <span>OKX</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="ex_OKX_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="ex_OKX_n">&mdash;</div>
-        </div>
-      </div>
-      <div class="exchange-stat-card" id="exchange-stat-card-BITGET" data-exchange-color="#00C8BC">
-        <div class="exchange-stat-card-stripe"></div>
-        <div class="exchange-stat-card-logo">
-          <span class="exchange-stat-card-mark">BG</span>
-          <span>Bitget</span>
-        </div>
-        <div class="tier-stat-wr-row">
-          <span class="tier-stat-wr"><span data-tr-field="ex_BITGET_wr">&mdash;</span><span class="tier-stat-wr-suffix">%</span></span>
-          <span class="tier-stat-wr-cap">WR</span>
-        </div>
-        <div class="tier-stat-divider">
-          <div class="tier-stat-n-cap">n =</div>
-          <div class="tier-stat-n" data-tr-field="ex_BITGET_n">&mdash;</div>
-        </div>
-      </div>
+    <div class="lb-scroll">
+      <table class="recent-table" style="table-layout:fixed;min-width:560px">
+        <thead><tr>
+          <th style="width:9%;text-align:left;position:sticky;top:0;background:#0d1117;z-index:2">#</th>
+          <th style="width:45%;text-align:left;position:sticky;top:0;background:#0d1117;z-index:2">Segment</th>
+          <th style="width:32%;text-align:left;position:sticky;top:0;background:#0d1117;z-index:2">PFE Win Rate</th>
+          <th style="width:14%;text-align:right;position:sticky;top:0;background:#0d1117;z-index:2">Calls (n)</th>
+        </tr></thead>
+        <tbody id="lb-tbody"><tr><td colspan="4" class="empty">Loading leaderboard&hellip;</td></tr></tbody>
+      </table>
     </div>
-  </div>
-
-  <!-- DESIGN-W4 / C3 + DESIGN-W8-FIX (2026-05-11) + OPS-DASHBOARD-3M-DISPLAY-W1
-       (2026-05-23): Performance by Timeframe canonical bar chart — translated
-       from track-record-2.jsx TimeframeSection.
-       9 evaluated timeframes (3m / 5m / 15m / 30m / 1h / 2h / 4h / 8h / 12h).
-       1m / 1d trimmed per Mr.1 directive — 1m stays shadow pending sample-
-       density accrual; 1d shows wide variance due to small n. 3m joined
-       the dashboard on 2026-05-23 (slot #3 best by PFE) after clearing
-       shadow-mode decision gates per SHADOW-REVEAL-3M-W1 (2026-05-19).
-       Hydrated from /api/performance-public.byTimeframe on page load. The
-       "11 TIMEFRAMES" marketing claim is preserved verbatim across landing /
-       signup / faq / docs (claim of SUPPORTED TF count via the get_trade_call
-       MCP tool, distinct from the 9-row evaluated-WR chart granularity). -->
-  <div class="section"><h2>Performance by Timeframe</h2>
-    <div class="tf-bar-chart" id="tf-bar-chart">
-      <div class="tf-bar-row" data-tf="3m"><span class="tf-bar-label">3m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-3m"></div></div><span class="tf-bar-value" data-tr-field="tf_3m_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="5m"><span class="tf-bar-label">5m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-5m"></div></div><span class="tf-bar-value" data-tr-field="tf_5m_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="15m"><span class="tf-bar-label">15m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-15m"></div></div><span class="tf-bar-value" data-tr-field="tf_15m_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="30m"><span class="tf-bar-label">30m</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-30m"></div></div><span class="tf-bar-value" data-tr-field="tf_30m_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="1h"><span class="tf-bar-label">1h</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-1h"></div></div><span class="tf-bar-value" data-tr-field="tf_1h_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="2h"><span class="tf-bar-label">2h</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-2h"></div></div><span class="tf-bar-value" data-tr-field="tf_2h_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="4h"><span class="tf-bar-label">4h</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-4h"></div></div><span class="tf-bar-value" data-tr-field="tf_4h_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="8h"><span class="tf-bar-label">8h</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-8h"></div></div><span class="tf-bar-value" data-tr-field="tf_8h_wr">&mdash;</span></div>
-      <div class="tf-bar-row" data-tf="12h"><span class="tf-bar-label">12h</span><div class="tf-bar-track"><div class="tf-bar-fill" id="tf-bar-fill-12h"></div></div><span class="tf-bar-value" data-tr-field="tf_12h_wr">&mdash;</span></div>
-    </div>
+    <div id="lb-caption" style="color:#6e7681;font-size:12px;margin-top:10px;display:none"></div>
   </div>
 
   <!-- DESIGN-W8-FIX / C2 (2026-05-11): Verify Any Call teaser card — translated
@@ -3774,6 +3651,105 @@ function setTierFilter(mode) {
   renderAll();
 }
 
+// ── P1-TRACK-RECORD-LEADERBOARD-W1: unified leaderboard controller ──────────
+// Renders ONE sortable/filterable table from the already-fetched payload
+// (cachedData.byExchange / byAsset / byTimeframe / byTier). Re-rendered by
+// renderAll() on the existing 30s load() loop — adds NO setInterval. PFE WR +
+// n (count) ONLY (allow-list; never outcome_return_pct / P&L). Replaces the 3
+// fixed per-segment hydration blocks (tier-stat-card / exchange-stat-card /
+// tf-bar-chart) removed from renderAll().
+var LB_DIM = 'exchange';      // Q-P1-3 default dimension: Venue
+var LB_SORT = 'wr';           // 'wr' | 'n'
+var LB_SORT_DIR = 'desc';     // 'desc' (high->low) | 'asc' (worst-first)
+var LB_MIN_N = 30;            // Q-P1-4 filter floor (n>=0 = show everything); default 30
+var LB_SMALL_N = 30;          // muted "small sample" tag bar (single source w/ default floor)
+var LB_EX_LABEL = { HL: 'Hyperliquid', BINANCE: 'Binance', BYBIT: 'Bybit', OKX: 'OKX', BITGET: 'Bitget' };
+var LB_EX_COLOR = { HL: '#4ade80', BINANCE: '#F0B90B', BYBIT: '#F7A600', OKX: '#ffffff', BITGET: '#00C8BC' };
+var LB_EX_ORDER = ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET'];
+
+// Build the row set for the active dimension from cachedData. Each row = {label, wr, n, [color], [tier]}.
+function lbRows() {
+  var d = cachedData; if (!d) return [];
+  var rows = [];
+  if (LB_DIM === 'exchange') {
+    var be = d.byExchange || {};
+    LB_EX_ORDER.forEach(function(ex){ var e = be[ex]; if (!e) return;
+      rows.push({ label: LB_EX_LABEL[ex] || ex, wr: e.pfeWinRate, n: e.count || 0, color: LB_EX_COLOR[ex] }); });
+  } else if (LB_DIM === 'tier') {
+    var bt = d.byTier || {};
+    ['tier1','tier2','tier3','tier4'].forEach(function(k){ var t = bt[k]; if (!t) return;
+      rows.push({ label: (t.label || ('Tier ' + t.tier)) + ' &middot; ' + (t.name || ''), wr: t.pfeWinRate, n: t.count || 0, color: t.color }); });
+  } else if (LB_DIM === 'timeframe') {
+    var btf = d.byTimeframe || {};
+    // Q-P1-8: TF set = byTimeframe minus HIDE_TFS (single-source; equals the set
+    // composing the published aggregate PFE WR — 1m latency-excluded, 1d not in aggregate).
+    Object.keys(btf).forEach(function(tf){ if (HIDE_TFS[tf]) return;
+      rows.push({ label: tf, wr: btf[tf].pfeWinRate, n: btf[tf].count || 0 }); });
+    rows.sort(function(a,b){ return TF_ORDER.indexOf(a.label) - TF_ORDER.indexOf(b.label); });
+  } else if (LB_DIM === 'asset') {
+    var ba = d.byAsset || {};
+    Object.keys(ba).forEach(function(sym){ var a = ba[sym];
+      rows.push({ label: sym, wr: a.pfeWinRate, n: a.count || 0, tier: a.tier }); });
+  }
+  return rows;
+}
+
+function lbSorted(rows) {
+  var dir = LB_SORT_DIR === 'asc' ? 1 : -1;
+  return rows.slice().sort(function(a,b){
+    var av = LB_SORT === 'n' ? a.n : (a.wr == null ? -1 : a.wr);
+    var bv = LB_SORT === 'n' ? b.n : (b.wr == null ? -1 : b.wr);
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    if (a.n !== b.n) return b.n - a.n; // stable tiebreak: larger sample first
+    return a.label < b.label ? -1 : 1;
+  });
+}
+
+function renderLeaderboard() {
+  var tbody = document.getElementById('lb-tbody'); if (!tbody) return;
+  var all = lbRows();
+  var total = all.length;
+  var shown = lbSorted(all.filter(function(r){ return (r.n || 0) >= LB_MIN_N; })); // Q-P1-4: real filter
+  if (!shown.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No segments at n &ge; ' + LB_MIN_N + '. Lower the min-sample filter.</td></tr>';
+  } else {
+    tbody.innerHTML = shown.map(function(r, i){
+      var wrTxt = r.wr != null ? (r.wr * 100).toFixed(1) + '%' : '—';
+      var wrW = r.wr != null ? (r.wr * 100).toFixed(1) : 0;
+      var small = (r.n || 0) < LB_SMALL_N;
+      var dot = r.color ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + r.color + ';margin-right:8px;vertical-align:middle"></span>' : '';
+      var tierB = r.tier ? '<span class="tier-badge" style="background:' + (TIER_COLORS[r.tier] || '#8b949e') + '20;color:' + (TIER_COLORS[r.tier] || '#8b949e') + '">T' + r.tier + '</span> ' : '';
+      var tag = small ? ' <span class="lb-small-sample">small sample</span>' : '';
+      return '<tr' + (small ? ' style="opacity:0.6"' : '') + '>'
+        + '<td class="lb-rank">' + (i + 1) + '</td>'
+        + '<td style="text-align:left">' + dot + tierB + '<strong>' + r.label + '</strong>' + tag + '</td>'
+        + '<td style="text-align:left"><div style="display:flex;align-items:center;gap:10px"><div class="tf-bar-track" style="flex:1;max-width:170px"><div class="tf-bar-fill" style="width:' + wrW + '%"></div></div><span style="min-width:54px;font-weight:600;color:var(--fg)">' + wrTxt + '</span></div></td>'
+        + '<td style="text-align:right;font-variant-numeric:tabular-nums">' + (r.n || 0).toLocaleString() + '</td>'
+        + '</tr>';
+    }).join('');
+  }
+  var cap = document.getElementById('lb-caption');
+  if (cap) {
+    if (LB_DIM === 'asset') {
+      // Live counts from the payload (Q-P1-7: never hardcoded). "assets with evaluated calls"
+      // is a different denominator than the landing's live asset_count — kept distinct so the
+      // two can never contradict.
+      cap.textContent = shown.length + ' of ' + total + ' assets with evaluated calls shown';
+      cap.style.display = '';
+    } else { cap.style.display = 'none'; }
+  }
+}
+
+function lbActivate(containerId, key, val) {
+  var c = document.getElementById(containerId); if (!c) return;
+  c.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-' + key) === String(val)); });
+}
+function setLbDim(dim) { LB_DIM = dim; lbActivate('lb-dim-pills', 'dim', dim); renderLeaderboard(); }
+function setLbSort(s) { LB_SORT = s; lbActivate('lb-sort-pills', 'sort', s); renderLeaderboard(); }
+function toggleLbDir() { LB_SORT_DIR = LB_SORT_DIR === 'desc' ? 'asc' : 'desc'; var el = document.getElementById('lb-dir'); if (el) el.innerHTML = LB_SORT_DIR === 'desc' ? '&darr; high&rarr;low' : '&uarr; low&rarr;high'; renderLeaderboard(); }
+function setLbMinN(n) { LB_MIN_N = n; lbActivate('lb-minn-pills', 'minn', n); renderLeaderboard(); }
+
 function renderAll() {
   var d = cachedData; if (!d) return;
   var s = src(); if (!s) return;
@@ -3803,77 +3779,10 @@ function renderAll() {
     evalEl.textContent = 'Trade Calls: ' + (s.overall.totalCalls||0).toLocaleString() + ' · Evaluated: ' + (s.overall.totalEvaluated||0).toLocaleString() + ' · PFE Win Rate: ' + pct(s.overall.pfeWinRate) + ' · HOLD Rate: ' + holdRate;
   }
 
-  // DESIGN-W8 / C4 (2026-05-11): legacy #tier-cards JS-hydrated grid rendering
-  // REMOVED — superseded by W3 4-tier-stat-card grid hydrated below.
-  var bt = d.byTier || {};
-  var exTier = s.byTier || {};
-
-  // DESIGN-W3 / C4: hydrate canonical .tier-stat-card[data-tr-field] spans from
-  // /api/performance-public.byTier. Page-load only (no polling — tier breakdown
-  // is slow-moving). Sets --tier-color via setProperty (no inline style=).
-  ['tier1','tier2','tier3','tier4'].forEach(function(k){
-    var t = bt[k]; if (!t) return;
-    var tc = exTier[k] || { count: 0, pfeWinRate: null };
-    var card = document.getElementById('tier-stat-card-' + k);
-    if (!card) return;
-    var color = card.getAttribute('data-tier-color') || t.color;
-    if (color) card.style.setProperty('--tier-color', color);
-    var setText = function(field, val){
-      var el = card.querySelector('[data-tr-field="' + field + '"]');
-      if (el) el.textContent = val;
-    };
-    var tag = 't' + t.tier; // t1..t4
-    setText('tier_' + tag + '_name', t.name || '—');
-    var sample = (t.assets||[]).slice(0,3).join(' · ');
-    setText('tier_' + tag + '_sample', sample || '—');
-    var wrPct = (tc.pfeWinRate != null) ? (tc.pfeWinRate * 100).toFixed(1) : '—';
-    setText('tier_' + tag + '_wr', wrPct);
-    setText('tier_' + tag + '_n', (tc.count != null ? tc.count.toLocaleString() : '—'));
-    var fill = document.getElementById('tier-stat-pfe-' + k);
-    if (fill && tc.pfeWinRate != null) fill.style.width = (tc.pfeWinRate * 100).toFixed(1) + '%';
-  });
-
-  // DESIGN-W4 / C3: hydrate canonical .exchange-stat-card spans from
-  // /api/performance-public.byExchange. Page-load only — exchange breakdown
-  // is slow-moving. Brand colors set via data-exchange-color → --exchange-color
-  // CSS custom property (no inline style=).
-  var byEx = d.byExchange || {};
-  ['HL','BINANCE','BYBIT','OKX','BITGET'].forEach(function(ex){
-    var card = document.getElementById('exchange-stat-card-' + ex);
-    if (!card) return;
-    var color = card.getAttribute('data-exchange-color');
-    if (color) card.style.setProperty('--exchange-color', color);
-    var exData = byEx[ex] || { count: 0, pfeWinRate: null };
-    var wrEl = card.querySelector('[data-tr-field="ex_' + ex + '_wr"]');
-    var nEl  = card.querySelector('[data-tr-field="ex_' + ex + '_n"]');
-    if (wrEl) wrEl.textContent = (exData.pfeWinRate != null) ? (exData.pfeWinRate * 100).toFixed(1) : '—';
-    if (nEl)  nEl.textContent  = (exData.count != null) ? exData.count.toLocaleString() : '—';
-  });
-
-  // DESIGN-W4 / C3 + DESIGN-W8-FIX (2026-05-11) + OPS-DASHBOARD-3M-DISPLAY-W1
-  // (2026-05-23): hydrate canonical .tf-bar-chart from
-  // /api/performance-public.byTimeframe. Page-load only. Renders 9 evaluated
-  // TFs (3m/5m/15m/30m/1h/2h/4h/8h/12h); 1m/1d trimmed per Mr.1 directive
-  // (1m stays shadow pending sample-density accrual; 1d high variance).
-  // 3m joined 2026-05-23 (slot #3 best by PFE) after clearing shadow-mode
-  // gates per SHADOW-REVEAL-3M-W1 (2026-05-19).
-  // "11 TIMEFRAMES" marketing claim preserved elsewhere — refers to SUPPORTED
-  // TF count via get_trade_call MCP tool, not evaluated-WR chart granularity.
-  var byTF = d.byTimeframe || {};
-  ['3m','5m','15m','30m','1h','2h','4h','8h','12h'].forEach(function(tf){
-    var row = document.querySelector('[data-tf="' + tf + '"]');
-    if (!row) return;
-    var tfData = byTF[tf] || { pfeWinRate: null };
-    var valEl = row.querySelector('[data-tr-field="tf_' + tf + '_wr"]');
-    var fill = document.getElementById('tf-bar-fill-' + tf);
-    if (tfData.pfeWinRate != null) {
-      var pct = (tfData.pfeWinRate * 100).toFixed(1);
-      if (valEl) valEl.textContent = pct + '%';
-      if (fill) fill.style.width = pct + '%';
-    } else {
-      if (valEl) valEl.textContent = '—';
-    }
-  });
+  // P1-TRACK-RECORD-LEADERBOARD-W1: the 3 fixed per-segment hydration blocks
+  // (tier-stat-card / exchange-stat-card / tf-bar-chart) are REPLACED by the
+  // unified leaderboard, re-rendered from cachedData on every load() (30s loop).
+  renderLeaderboard();
 
   // DESIGN-W8 / C4 (2026-05-11): legacy #by-type, #by-timeframe, #top-assets,
   // #worst-assets, #cb-body renderers REMOVED — DOM elements deleted per Q-W8-4

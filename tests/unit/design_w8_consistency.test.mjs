@@ -134,22 +134,16 @@ test('src/index.ts: W8 8 legacy sections removed from dashboard HTML', async () 
 test('src/index.ts: W8 preservation-LAW — W3/W4/W6 deliverables intact', async () => {
   const ts = await read('src/index.ts');
   const dash = dashboardFn(ts);
-  // W3 D2-C: 4 tier-stat-cards
-  for (const t of ['tier1', 'tier2', 'tier3', 'tier4']) {
-    assert.ok(dash.includes(`id="tier-stat-card-${t}"`), `W3 tier-stat-card-${t} preserved`);
-  }
-  // W4 C3: 5 exchange-stat-cards
-  for (const ex of ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET']) {
-    assert.ok(dash.includes(`id="exchange-stat-card-${ex}"`), `W4 exchange-stat-card-${ex} preserved`);
-  }
-  // Current tf-bar set (3m re-added post-W8; 1m/1d remain trimmed). 9 rows: 3m–12h.
-  for (const tf of ['3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h']) {
-    assert.ok(dash.includes(`data-tf="${tf}"`), `tf-bar-row data-tf="${tf}" present`);
-  }
-  // Trimmed TFs MUST be absent from bar chart
-  for (const tf of ['1m', '1d']) {
-    assert.ok(!dash.includes(`data-tf="${tf}"`), `tf-bar-row data-tf="${tf}" trimmed`);
-  }
+  // SUPERSEDED BY P1-TRACK-RECORD-LEADERBOARD-W1: the W3/W4 per-segment grids
+  // (tier-stat-card / exchange-stat-card / tf-bar-chart) are replaced by ONE
+  // unified leaderboard (#leaderboard-section) rendered live from the same
+  // /api/performance-public payload. The rendered grids are gone; the panel +
+  // cross-venue callout + methodology below remain intact through P1.
+  assert.ok(dash.includes('id="leaderboard-section"'), 'unified leaderboard present (P1)');
+  assert.ok(/function renderLeaderboard\(\)/.test(dash), 'renderLeaderboard controller present');
+  assert.ok(!dash.includes('id="tier-stat-card-tier1"'), 'old per-tier grid removed from track-record');
+  assert.ok(!dash.includes('id="exchange-stat-card-HL"'), 'old per-exchange grid removed from track-record');
+  assert.ok(!dash.includes('id="tf-bar-chart"'), 'old tf-bar-chart removed from track-record');
   // W4 panel wrapper preserved
   assert.match(dash, /id="tr-recent-calls-panel"/, 'tr-recent-calls-panel wrapper preserved');
   // Cross-Venue Intelligence callout preserved
