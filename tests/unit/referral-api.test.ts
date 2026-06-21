@@ -67,9 +67,12 @@ describe('resolveTgReferralCode', () => {
     const r2 = await resolveTgReferralCode(555001);
     expect(r1.code).toBe(r2.code);
     expect(isValidCodeFormat(r1.code)).toBe(true);
+    // TG-native deep-link UNTOUCHED by REFERRAL-WEB-FIX-W1 (only the WEB share_url retargets):
     expect(r1.deep_link).toBe(`https://t.me/algovaultofficialbot?start=ref_${r1.code}`);
     expect(r1.deep_link).toBe(tgDeepLink(r1.code));
-    expect(r1.share_url).toContain(`/signup?ref=${r1.code}`);
+    // WEB share_url → apex /join referee landing (REFERRAL-WEB-FIX-W1):
+    expect(r1.share_url).toContain(`/join?ref=${r1.code}`);
+    expect(r1.share_url).toContain('https://algovault.com/join?ref=');
     expect(r1.terms.bonus_calls).toBe(REFERRAL_TERMS.BONUS_CALLS);
     // fresh referrer → zero stats
     expect(r1.stats.signups).toBe(0);

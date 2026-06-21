@@ -15,9 +15,13 @@ import {
   shareLink,
   formatUsdE2,
 } from './referral-constants.js';
+import { renderPlanCards, PLAN_CARDS_CSS } from './signup-flow.js';
 
 const FTC_URL = 'https://www.ecfr.gov/current/title-16/chapter-I/subchapter-B/part-255';
 const TERMS_PATH = '/referral-terms';
+// REFERRAL-WEB-FIX-W1: /signup is api-canonical (Stripe success_url from request host;
+// NOT apex-proxied), so the apex /join plan cards must link to it ABSOLUTELY.
+const SIGNUP_BASE = 'https://api.algovault.com';
 
 function esc(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
@@ -146,6 +150,7 @@ const REFERRAL_SIGNUP_FORM_JS = `
 (function(){
   var f=document.getElementById("av-ref-form"); if(!f) return;
   var out=document.getElementById("av-ref-result"), btn=document.getElementById("av-ref-submit");
+  var origBtn=btn.textContent;
   function errMsg(c){
     if(c==="disposable_email") return "Please use a non-disposable email address.";
     if(c==="no_mx") return "That email domain cannot receive mail - please check it.";
@@ -153,25 +158,30 @@ const REFERRAL_SIGNUP_FORM_JS = `
     return "Something went wrong - please try again.";
   }
   function fail(m){ out.innerHTML=""; var p=document.createElement("p"); p.className="muted"; p.style.color="#f85149"; p.textContent=m; out.appendChild(p); }
-  function success(link){
+  function success(data){
     f.style.display="none"; out.innerHTML="";
-    var lbl=document.createElement("div"); lbl.className="l muted"; lbl.style.cssText="font-size:12px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.5px"; lbl.textContent="You are in - your referral link"; out.appendChild(lbl);
-    var a=document.createElement("a"); a.className="link mono"; a.href=link; a.textContent=link; a.style.cssText="display:block;margin:6px 0 10px"; out.appendChild(a);
+    if(data.bonus_calls){ var b=document.createElement("p"); b.style.cssText="color:var(--mint);font-weight:700;margin:0 0 10px;font-size:15px"; b.textContent="\\u2713 "+data.bonus_calls+" bonus calls added to your account!"; out.appendChild(b); }
+    var lbl=document.createElement("div"); lbl.className="l muted"; lbl.style.cssText="font-size:12px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.5px"; lbl.textContent="Your referral link"; out.appendChild(lbl);
+    var a=document.createElement("a"); a.className="link mono"; a.href=data.referral_link; a.textContent=data.referral_link; a.style.cssText="display:block;margin:6px 0 10px"; out.appendChild(a);
     var p=document.createElement("p"); p.className="muted"; p.style.margin="0"; p.textContent="Share it. We emailed your free API key for next time."; out.appendChild(p);
   }
   f.addEventListener("submit",function(e){
     e.preventDefault();
     var email=(document.getElementById("av-ref-email").value||"").trim();
     var consent=document.getElementById("av-ref-consent").checked;
+    var src=f.getAttribute("data-source")||"referral-page";
+    var ref=f.getAttribute("data-ref")||"";
+    var body={email:email,optin_consent:consent,source:src};
+    if(ref){ body.ref=ref; }
     btn.disabled=true; btn.textContent="Creating..."; out.textContent="";
-    fetch("/api/signup-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email,optin_consent:consent,source:"referral-page"})})
+    fetch("/api/signup-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
       .then(function(res){
-        btn.disabled=false; btn.textContent="Create my link \\u2192";
-        if(res.s===200 && res.j && res.j.referral_link){ success(res.j.referral_link); }
+        btn.disabled=false; btn.textContent=origBtn;
+        if(res.s===200 && res.j && res.j.referral_link){ success(res.j); }
         else { fail(errMsg((res.j&&res.j.error)||"error")); }
       })
-      .catch(function(){ btn.disabled=false; btn.textContent="Create my link \\u2192"; fail("Something went wrong - please try again."); });
+      .catch(function(){ btn.disabled=false; btn.textContent=origBtn; fail("Something went wrong - please try again."); });
   });
 })();
 `;
@@ -184,18 +194,24 @@ const REFERRAL_SIGNUP_FORM_JS = `
  * Program facts from the SoT label fns. `inputId` salt keeps multiple instances
  * unique if ever embedded twice on one page.
  */
-export function renderReferralSignupForm(): string {
+export function renderReferralSignupForm(opts?: { ref?: string; source?: string; heading?: string; cta?: string }): string {
+  // heading/cta are trusted copy (may carry intentional HTML entities like &rarr;) → raw.
+  // ref/source go into data-attrs → esc (defensive; the values are already known-safe).
+  const heading = opts?.heading ?? 'Get your referral link — free, no card.';
+  const cta = opts?.cta ?? 'Create my link &rarr;';
+  const dataSource = ` data-source="${esc(opts?.source ?? 'referral-page')}"`;
+  const dataRef = opts?.ref ? ` data-ref="${esc(opts.ref)}"` : '';
   return `
     <div class="card">
-      <h2 style="margin-top:0;text-transform:none;letter-spacing:0;font-size:20px;color:var(--fg)">Get your referral link — free, no card.</h2>
-      <form id="av-ref-form" style="margin:0">
+      <h2 style="margin-top:0;text-transform:none;letter-spacing:0;font-size:20px;color:var(--fg)">${heading}</h2>
+      <form id="av-ref-form"${dataSource}${dataRef} style="margin:0">
         <input type="email" id="av-ref-email" required autocomplete="email" placeholder="you@example.com"
           style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px;margin:0 0 10px">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg-3);margin:0 0 14px">
           <input type="checkbox" id="av-ref-consent"> Email me product updates
         </label>
         <button type="submit" id="av-ref-submit"
-          style="width:100%;font-weight:700;font-size:16px;color:var(--bg);background:var(--mint);border:none;padding:12px 24px;border-radius:10px;cursor:pointer">Create my link &rarr;</button>
+          style="width:100%;font-weight:700;font-size:16px;color:var(--bg);background:var(--mint);border:none;padding:12px 24px;border-radius:10px;cursor:pointer">${cta}</button>
       </form>
       <div id="av-ref-result" style="margin-top:14px"></div>
       <p class="muted" style="margin:14px 0 0">Already have an account? <a href="https://api.algovault.com/account">Paste your key &rarr;</a></p>
@@ -246,6 +262,38 @@ export function renderReferralLandingPage(): string {
     index: true,
     description: `Refer a friend to AlgoVault and you both win: they get ${bonusCallsLabel()} bonus calls, you earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()}, paid automatically.`,
   });
+}
+
+/**
+ * GET /join?ref=CODE — REFERRAL-WEB-FIX-W1 — the branded apex referee landing every
+ * web share link points to (the friend's first impression). A valid ref → a give-get
+ * hero + a "start free" form that carries the ref → /api/signup-email?ref= →
+ * processFreeReferralSignup actually grants the one-time bonus (fixes the #1 bug: the
+ * old /signup?ref= 400'd a free friend). Invalid/missing ref → a graceful general
+ * start-free (NO bonus claim). Paid plans below (renderPlanCards, absolute-api links).
+ * noindex (per-ref transactional landing; the indexable referral SEO surface is /referral).
+ */
+export function renderJoinPage(opts: { refValid: boolean; code?: string }): string {
+  if (opts.refValid && opts.code) {
+    const body = `
+    <style>${PLAN_CARDS_CSS}</style>
+    <h1>A friend gave you ${bonusCallsLabel()} bonus calls.</h1>
+    <p class="sub">Start free, no card — you'll get ${bonusCallsLabel()} one-time bonus calls on top of the 100 free calls every account gets.</p>
+    ${renderReferralSignupForm({ ref: opts.code, source: 'join-page', heading: 'Start free — no card', cta: `Claim my ${bonusCallsLabel()} calls — start free &rarr;` })}
+    <h2>Or pick a plan</h2>
+    ${renderPlanCards(SIGNUP_BASE)}
+  `;
+    return shell('AlgoVault — Claim your bonus calls', body);
+  }
+  const body = `
+    <style>${PLAN_CARDS_CSS}</style>
+    <h1>Start free with AlgoVault.</h1>
+    <p class="sub">100 calls a month, no card. Composite BUY/SELL/HOLD trade calls across the top perp venues, every call Merkle-anchored on Base.</p>
+    ${renderReferralSignupForm({ source: 'join-page', heading: 'Create your free account', cta: 'Create my free account &rarr;' })}
+    <h2>Or pick a plan</h2>
+    ${renderPlanCards(SIGNUP_BASE)}
+  `;
+  return shell('AlgoVault — Start free', body);
 }
 
 export interface AdminOverviewView {

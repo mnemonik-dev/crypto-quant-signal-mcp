@@ -148,10 +148,14 @@ test('src/index.ts: getPerformanceDashboardHtml has W3 tier-stat-grid (C4)', asy
   assert.match(ts, /setProperty\('--tier-color'/, 'tier color set via setProperty (no inline style=)');
 });
 
-test('src/index.ts: 4-tier pricing preserved', async () => {
-  const ts = await read('src/index.ts');
-  // Pricing tier names from getSignupPageHtml — 4 distinct H2s
+test('plan-card tiers preserved (REFERRAL-WEB-FIX-W1: extracted index.ts → signup-flow.ts renderPlanCards)', async () => {
+  // The 3 paid tier cards moved into the shared renderPlanCards() helper (single-source
+  // for getSignupPageHtml + the /join page); getSignupPageHtml output stays byte-identical.
+  const ts = await read('src/lib/signup-flow.ts');
   assert.match(ts, /<h2>Starter<\/h2>/, 'Starter tier preserved');
   assert.match(ts, /<h2>Pro<\/h2>/, 'Pro tier preserved');
   assert.match(ts, /<h2>Enterprise<\/h2>/, 'Enterprise tier preserved');
+  // index.ts must call the helper (byte-identical render):
+  const idx = await read('src/index.ts');
+  assert.match(idx, /\$\{renderPlanCards\(\)\}/, 'getSignupPageHtml renders via renderPlanCards()');
 });

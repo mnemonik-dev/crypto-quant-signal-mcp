@@ -11,6 +11,7 @@ import {
   renderReferralTermsPage,
   renderReferralLandingPage,
   renderReferralSignupForm,
+  renderJoinPage,
   renderAdminReferralsPage,
   renderAdminPayoutsPage,
 } from '../../src/lib/referral-pages.js';
@@ -23,7 +24,7 @@ describe('renderReferralStatsPage', () => {
   });
   it('shows the code + share link', () => {
     expect(page).toContain('MYCODE1');
-    expect(page).toContain('/signup?ref=MYCODE1');
+    expect(page).toContain('/join?ref=MYCODE1'); // REFERRAL-WEB-FIX-W1: shareLink retargeted to the apex /join referee landing
   });
   it('interpolates program numbers from the SoT', () => {
     expect(page).toContain(commissionPct()); // "30%"
@@ -122,7 +123,7 @@ describe('renderReferralLandingPage — LANDING-REFERRAL-PAGE-W1', () => {
   it('hands the path via the inline free-account form (REFERRAL-FREE-KEY-SIGNUP-W1)', () => {
     expect(page).toMatch(/<form id="av-ref-form"/);              // the email form IS the path now
     expect(page).toContain('/api/signup-email');                 // same-origin POST (apex-proxied)
-    expect(page).toContain('source:"referral-page"');            // tagged source
+    expect(page).toContain('data-source="referral-page"');       // tagged source (REFERRAL-WEB-FIX-W1: via data-attr)
     // /account is api-canonical (Stripe success_url from request host) → absolute api
     // (the form's "already have an account" fallback); never apex-relative (would 404).
     expect(page).toContain('href="https://api.algovault.com/account"');
@@ -162,7 +163,7 @@ describe('renderReferralSignupForm — REFERRAL-FREE-KEY-SIGNUP-W1', () => {
   it('is a same-origin AJAX form (no CORS) tagged source=referral-page', () => {
     expect(form).toMatch(/<form id="av-ref-form"/);
     expect(form).toContain('fetch("/api/signup-email"');         // relative → apex-proxied same-origin
-    expect(form).toContain('source:"referral-page"');
+    expect(form).toContain('data-source="referral-page"');       // default source via data-attr (REFERRAL-WEB-FIX-W1)
     expect(form).toContain('Create my link');
     expect(form).toContain('id="av-ref-email"');                 // the email field
     expect(form).toContain('id="av-ref-consent"');               // optional marketing checkbox
@@ -176,5 +177,43 @@ describe('renderReferralSignupForm — REFERRAL-FREE-KEY-SIGNUP-W1', () => {
     expect(form).not.toMatch(/\b500\b/);
     expect(form).not.toMatch(/\b30\s*%/);
     expect(form).not.toMatch(/\b12\s+months\b/);
+  });
+});
+
+describe('renderJoinPage — REFERRAL-WEB-FIX-W1 (the referee landing / #1 bug fix)', () => {
+  const valid = renderJoinPage({ refValid: true, code: 'FRIEND7' });
+  const invalid = renderJoinPage({ refValid: false });
+
+  it('valid ref: give-get hero + the form carries the ref to the free-grant path', () => {
+    expect(valid).toContain(`A friend gave you ${bonusCallsLabel()} bonus calls`);
+    expect(valid).toContain('data-ref="FRIEND7"');                 // the form carries the ref
+    expect(valid).toContain('data-source="join-page"');
+    expect(valid).toContain('fetch("/api/signup-email"');          // → processFreeReferralSignup
+    expect(valid).toContain(`Claim my ${bonusCallsLabel()} calls`);
+  });
+
+  it('clarifies the bonus is ONE-TIME on top of the 100/mo (kills the recurring misread)', () => {
+    expect(valid).toContain(`${bonusCallsLabel()} one-time bonus calls`);
+    expect(valid).toContain('on top of the 100 free calls');
+  });
+
+  it('shows the paid plans with ABSOLUTE api links (/signup is api-canonical, not apex-proxied)', () => {
+    expect(valid).toContain('class="plans"');
+    expect(valid).toContain('href="https://api.algovault.com/signup?plan=starter"');
+    expect(valid).not.toContain('href="/signup?plan=');           // never apex-relative (would 404)
+  });
+
+  it('invalid/missing ref: graceful general start-free, NO bonus claim, NO ref carried', () => {
+    expect(invalid).toContain('Start free with AlgoVault');
+    expect(invalid).not.toContain('gave you');                     // no bonus promise
+    expect(invalid).not.toContain('data-ref="');                   // no ref on the form
+    expect(invalid).toContain('class="plans"');                    // plans still offered
+  });
+
+  it('is noindex (per-ref transactional landing) + no outcome_* leak', () => {
+    expect(valid).toContain('content="noindex"');
+    expect(valid).not.toContain('content="index,follow"');
+    expect(valid).not.toMatch(/outcome_/);
+    expect(invalid).not.toMatch(/outcome_/);
   });
 });

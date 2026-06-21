@@ -187,7 +187,7 @@ function toolErrorContent(err: unknown): { content: { type: 'text'; text: string
   const message = err instanceof Error ? err.message : String(err);
   return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true };
 }
-import { renderSignupFlowDark } from './lib/signup-flow.js';
+import { renderSignupFlowDark, renderPlanCards } from './lib/signup-flow.js';
 import {
   accountPageHandler,
   accountPortalHandler,
@@ -1419,6 +1419,12 @@ async function startHttp() {
     }
 
     if (plan !== 'starter' && plan !== 'pro' && plan !== 'enterprise') {
+      // REFERRAL-WEB-FIX-W1: an old shared link /signup?ref=CODE (no plan) → redirect to
+      // the branded apex referee landing /join?ref= (which actually grants the free 500).
+      // /join validates the ref; a no-ref no-plan visit keeps the paid-plans page.
+      if (ref) {
+        return res.redirect(302, `https://algovault.com/join?ref=${encodeURIComponent(ref)}`);
+      }
       return res.status(400).send(getSignupPageHtml());
     }
 
@@ -1522,6 +1528,27 @@ async function startHttp() {
     const { renderReferralLandingPage } = await import('./lib/referral-pages.js');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(renderReferralLandingPage());
+  });
+  // REFERRAL-WEB-FIX-W1: the branded apex referee landing every web share link points
+  // to. Validates ?ref= (invalid/missing → graceful general start-free, no bonus claim);
+  // the start-free form carries ref → /api/signup-email?ref= → real 500 grant. Apex-served
+  // via the Caddyfile `handle /join` reverse_proxy (same mechanism as /track-record).
+  app.get('/join', async (req, res) => {
+    const ref = typeof req.query.ref === 'string' ? req.query.ref : '';
+    let refValid = false;
+    let code: string | undefined;
+    if (ref) {
+      try {
+        const { resolveCode } = await import('./lib/referral-store.js');
+        const c = await resolveCode(ref);
+        if (c) { refValid = true; code = c.code; }
+      } catch (err) {
+        console.warn('[/join] ref resolve failed (graceful general landing):', err instanceof Error ? err.message : err);
+      }
+    }
+    const { renderJoinPage } = await import('./lib/referral-pages.js');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderJoinPage({ refValid, code }));
   });
 
   // TG-REFERRAL-W1 (C1): internal JSON API for the Telegram bot (algovault-bot),
@@ -2371,8 +2398,8 @@ async function startHttp() {
       // Consent is NO LONGER required (D4): the free account + key email are
       // transactional. The marketing opt-in is recorded separately, ONLY when the
       // box is checked — so signup_emails keeps its consenting-list semantics.
-      const allowedSources = new Set(['welcome-paywall', 'outreach-reply', 'manual', 'referral-page']);
-      const safeSource = (allowedSources.has(source) ? source : 'welcome-paywall') as 'welcome-paywall' | 'outreach-reply' | 'manual' | 'referral-page';
+      const allowedSources = new Set(['welcome-paywall', 'outreach-reply', 'manual', 'referral-page', 'join-page']);
+      const safeSource = (allowedSources.has(source) ? source : 'welcome-paywall') as 'welcome-paywall' | 'outreach-reply' | 'manual' | 'referral-page' | 'join-page';
 
       const claim = await tryClaimSignupEmailEvent(email, 'optin');
       const result = optinConsent
@@ -4068,45 +4095,7 @@ function getSignupPageHtml(): string {
     <span style="color:#00C8BC;font-size:12px;font-weight:600">Bitget</span>
   </div>
   ${renderSignupFlowDark()}
-  <div class="plans">
-    <div class="plan">
-      <h2>Starter</h2>
-      <div class="price">$9.99<span>/mo</span></div>
-      <ul>
-        <li>3,000 calls/month</li>
-        <li><span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
-        <li>All assets (crypto + TradFi)</li>
-        <li>All timeframes (1m to 1d)</li>
-        <li>Email support</li>
-      </ul>
-      <a class="btn" href="/signup?plan=starter">Subscribe to Starter</a>
-    </div>
-    <div class="plan popular">
-      <div class="pop-badge">MOST POPULAR</div>
-      <h2>Pro</h2>
-      <div class="price">$49<span>/mo</span></div>
-      <ul>
-        <li>15,000 calls/month</li>
-        <li><span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
-        <li>All assets (crypto + TradFi)</li>
-        <li>All timeframes (1m to 1d)</li>
-        <li>Priority support</li>
-      </ul>
-      <a class="btn" href="/signup?plan=pro">Subscribe to Pro</a>
-    </div>
-    <div class="plan">
-      <h2>Enterprise</h2>
-      <div class="price">$299<span>/mo</span></div>
-      <ul>
-        <li>100,000 calls/month</li>
-        <li><span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> exchanges (HL, Binance, Bybit, OKX, Bitget)</li>
-        <li>All assets &amp; timeframes</li>
-        <li>SLA guarantee</li>
-        <li>Dedicated support</li>
-      </ul>
-      <a class="btn ent" href="/signup?plan=enterprise">Subscribe to Enterprise</a>
-    </div>
-  </div>
+  ${renderPlanCards()}
   <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px 28px;margin-top:20px;display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between">
     <div style="flex:1;min-width:260px">
       <h2 style="font-size:18px;margin-bottom:6px;color:#e1e4e8">No subscription? Pay-per-call with x402</h2>

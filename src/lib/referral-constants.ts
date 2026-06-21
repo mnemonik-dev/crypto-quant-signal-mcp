@@ -53,9 +53,16 @@ export function isValidCodeFormat(code: unknown): code is string {
   return typeof code === 'string' && REFERRAL_TERMS.CODE_RE.test(code);
 }
 
-/** The canonical share link for a code (interpolated everywhere, never hardcoded). */
-export function shareLink(code: string, baseUrl = 'https://api.algovault.com'): string {
-  return `${baseUrl}/signup?ref=${encodeURIComponent(code)}`;
+/**
+ * The canonical WEB share link for a code (interpolated everywhere, never hardcoded).
+ * REFERRAL-WEB-FIX-W1: points at the apex brand-domain referee landing `/join?ref=`
+ * (a 200 give-get page that actually grants the free 500), NOT the old
+ * `api.algovault.com/signup?ref=` which 400'd for a free friend. The TG-native
+ * one-tap deep-link (t.me/<bot>?start=ref_) is built separately by `tgDeepLink()`
+ * and is intentionally NOT affected by this.
+ */
+export function shareLink(code: string, baseUrl = 'https://algovault.com'): string {
+  return `${baseUrl}/join?ref=${encodeURIComponent(code)}`;
 }
 
 /** Convert integer e2-cents (USD × 100) to a "$X.YY" display string. */

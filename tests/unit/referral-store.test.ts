@@ -58,8 +58,8 @@ describe('referral-constants (SoT renderers)', () => {
     expect(REFERRAL_TERMS.COMMISSION_MONTHS).toBe(12);
     expect(REFERRAL_TERMS.USDC_MIN_PAYOUT_USD).toBe(50);
   });
-  it('shareLink interpolates the code', () => {
-    expect(shareLink('ABC123')).toBe('https://api.algovault.com/signup?ref=ABC123');
+  it('shareLink interpolates the code (REFERRAL-WEB-FIX-W1: apex /join referee landing)', () => {
+    expect(shareLink('ABC123')).toBe('https://algovault.com/join?ref=ABC123');
   });
   it('formatUsdE2 renders cents', () => {
     expect(formatUsdE2(9000)).toBe('$90.00');
