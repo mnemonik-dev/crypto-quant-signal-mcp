@@ -12,6 +12,7 @@ import {
   commissionMonthsLabel,
   bonusCallsLabel,
   usdcMinPayoutLabel,
+  payoutScheduleLabel,
   shareLink,
   formatUsdE2,
 } from './referral-constants.js';
@@ -83,6 +84,13 @@ export interface ReferralStatsView {
   creditedUsdE2: number;
   usdcPendingUsdE2: number;
   usdcPaidUsdE2: number;
+  // REFERRAL-PAYOUT-OPS-W1 / C1 — payout-address management (optional, trailing, so
+  // every existing test/caller that omits them stays valid; the card renders with
+  // empty state when apiKey is absent).
+  apiKey?: string;
+  payoutAddress?: string | null;
+  savedFlash?: boolean;
+  addressError?: string | null;
 }
 
 // REFERRAL-WEB-FIX-W1 (C2) — copy/native-share for the /account stats link (graceful
@@ -100,6 +108,34 @@ const STATS_SHARE_JS = `
 /** /account/referrals — a referrer's own stats. All program numbers interpolated. */
 export function renderReferralStatsPage(v: ReferralStatsView): string {
   const link = shareLink(v.code, v.baseUrl);
+
+  // REFERRAL-PAYOUT-OPS-W1 / C1 — payout-address card. All program numbers via SoT.
+  const eligible = v.usdcPendingUsdE2 >= REFERRAL_TERMS.USDC_MIN_PAYOUT_USD * 100;
+  const hasAddr = !!(v.payoutAddress && v.payoutAddress.length);
+  const payoutFlash = v.savedFlash
+    ? `<p style="color:var(--mint);font-weight:600;margin:0 0 10px">&#10003; Payout address saved.</p>`
+    : v.addressError
+      ? `<p style="color:#f85149;font-weight:600;margin:0 0 10px">${esc(v.addressError)}</p>`
+      : '';
+  const payoutHint = eligible && hasAddr
+    ? `<p style="color:var(--mint);margin:0 0 10px">&#10003; You've reached ${usdcMinPayoutLabel()} and your address is set — you're in the next payout batch.</p>`
+    : eligible
+      ? `<p style="color:#d29922;margin:0 0 10px">&#9888; You've reached ${usdcMinPayoutLabel()} pending — add your Base USDC address below to receive your payout.</p>`
+      : `<p class="muted" style="margin:0 0 10px">Add your Base USDC address now so you're ready when your pending balance reaches ${usdcMinPayoutLabel()}.</p>`;
+  const inputStyle = 'width:100%;background:#0d1117;border:1px solid var(--line);border-radius:8px;padding:11px 13px;color:var(--fg);font-family:ui-monospace,Menlo,monospace;font-size:13px;box-sizing:border-box';
+  const addressForm = v.apiKey
+    ? `<form method="post" action="/account/referrals/payout-address" style="margin-top:14px">
+        <input type="hidden" name="api_key" value="${esc(v.apiKey)}">
+        <div class="l muted" style="margin-bottom:6px">BASE USDC PAYOUT ADDRESS</div>
+        <input type="text" name="payout_address" value="${esc(v.payoutAddress ?? '')}" placeholder="0x…" autocomplete="off" spellcheck="false" style="${inputStyle}">
+        <label style="display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:13px;color:var(--fg-3);cursor:pointer">
+          <input type="checkbox" name="confirm" value="1" style="margin-top:2px">
+          <span>I confirm this is my correct Base USDC address. Sends are <strong>irreversible</strong> — a wrong address means lost funds.</span>
+        </label>
+        <button type="submit" style="font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px;border:1px solid var(--mint);background:var(--mint);color:var(--bg);cursor:pointer">Save payout address</button>
+      </form>`
+    : `<p class="muted" style="margin-top:10px">Paste your API key on <a href="/account">/account</a> → Referrals to set your payout address.</p>`;
+
   const body = `
     <h1>Your referral dashboard</h1>
     <p class="sub">Refer, earn ${commissionPct()}. Friends get ${bonusCallsLabel()} one-time bonus calls (on top of their 100/mo free); you earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()}.</p>
@@ -128,7 +164,14 @@ export function renderReferralStatsPage(v: ReferralStatsView): string {
       <div class="stat"><div class="n">${formatUsdE2(v.usdcPendingUsdE2)}</div><div class="l">USDC pending</div></div>
       <div class="stat"><div class="n">${formatUsdE2(v.usdcPaidUsdE2)}</div><div class="l">USDC paid</div></div>
     </div>
-    <p class="muted" style="margin-top:16px">Commission is credited automatically to your next AlgoVault invoice once you have an active subscription. Otherwise it accrues and is payable in USDC on Base at ≥ ${usdcMinPayoutLabel()} (manual review). Read the <a href="${TERMS_PATH}">referral terms</a>.</p>
+    <h2>Payout</h2>
+    <div class="card">
+      <p style="margin:0 0 12px">Next payout at <strong>${usdcMinPayoutLabel()}</strong> — paid in <strong>USDC on Base</strong> ${payoutScheduleLabel()}. Active subscribers are auto-credited to their next AlgoVault invoice at any amount instead.</p>
+      ${payoutFlash}
+      ${payoutHint}
+      ${addressForm}
+    </div>
+    <p class="muted" style="margin-top:16px">Read the <a href="${TERMS_PATH}">referral terms</a> for the full payout policy — schedule, refund clawback, and tax responsibility.</p>
   `;
   return shell('AlgoVault — Referral dashboard', body);
 }
@@ -146,7 +189,9 @@ export function renderReferralTermsPage(): string {
         <li><strong>You</strong> earn <strong>${commissionPct()}</strong> of their paid AlgoVault subscription revenue for <strong>${commissionMonthsLabel()}</strong> from their first invoice.</li>
       </ul>
       <h2>Payout</h2>
-      <p>Commission is applied automatically as a credit toward your next AlgoVault invoice if you have an active subscription. Otherwise it accrues and is payable in USDC on Base once your balance reaches <strong>${usdcMinPayoutLabel()}</strong>, subject to manual review.</p>
+      <p>Commission of <strong>${usdcMinPayoutLabel()}</strong> or more is paid in <strong>USDC on Base</strong> to the address you provide on your <a href="/account">account</a>, <strong>${payoutScheduleLabel()}</strong> — the delay covers the refund-clawback window. Active subscribers are auto-credited to their next AlgoVault invoice at any amount instead.</p>
+      <h2>Taxes</h2>
+      <p>You are responsible for your own taxes. For cumulative payouts approaching U.S. 1099 reporting thresholds (around $600 per year to one U.S. person), AlgoVault Labs may request a W-9 or W-8 form before further payout.</p>
       <h2>Eligibility &amp; one grant per person</h2>
       <p>Each person may be referred once (the bonus is granted a single time per email). Codes are for genuine referrals of distinct people.</p>
       <h2>Self-referral prohibited</h2>

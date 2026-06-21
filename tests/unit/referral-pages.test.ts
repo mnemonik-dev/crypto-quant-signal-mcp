@@ -15,7 +15,7 @@ import {
   renderAdminReferralsPage,
   renderAdminPayoutsPage,
 } from '../../src/lib/referral-pages.js';
-import { commissionPct, bonusCallsLabel, commissionMonthsLabel, usdcMinPayoutLabel } from '../../src/lib/referral-constants.js';
+import { commissionPct, bonusCallsLabel, commissionMonthsLabel, usdcMinPayoutLabel, payoutScheduleLabel } from '../../src/lib/referral-constants.js';
 
 describe('renderReferralStatsPage', () => {
   const page = renderReferralStatsPage({
@@ -58,6 +58,52 @@ describe('renderReferralTermsPage', () => {
   it('states self-referral prohibition + refund clawback', () => {
     expect(page).toMatch(/self-referral/i);
     expect(page).toMatch(/claw/i);
+  });
+  // REFERRAL-PAYOUT-OPS-W1 / C1 — the full payout policy.
+  it('states the full payout policy: USDC on Base, schedule, taxes + W-form', () => {
+    expect(page).toContain('USDC on Base');
+    expect(page).toContain(payoutScheduleLabel()); // "by the 10th of the following month"
+    expect(page).toMatch(/tax/i);
+    expect(page).toMatch(/W-9|W-8/);
+  });
+});
+
+// REFERRAL-PAYOUT-OPS-W1 / C1 — payout-address card on the referral dashboard.
+describe('renderReferralStatsPage — payout address card', () => {
+  const KEY = 'av_free_0123456789abcdef01234567';
+  const ADDR = '0x1234567890AbcdEF1234567890aBcdef12345678';
+  const base = { code: 'MYCODE1', clicks: 0, signups: 0, conversions: 0, bonusRemaining: 0, accruedUsdE2: 0, creditedUsdE2: 0, usdcPaidUsdE2: 0 };
+
+  it('shows the next-payout threshold + schedule + method (all SoT)', () => {
+    const page = renderReferralStatsPage({ ...base, usdcPendingUsdE2: 0 });
+    expect(page).toContain(usdcMinPayoutLabel());   // "$50"
+    expect(page).toContain(payoutScheduleLabel());  // "by the 10th of the following month"
+    expect(page).toContain('USDC on Base');
+  });
+  it('with an api key: renders the save form (hidden key + address input + irreversibility confirm)', () => {
+    const page = renderReferralStatsPage({ ...base, usdcPendingUsdE2: 0, apiKey: KEY, payoutAddress: null });
+    expect(page).toContain('action="/account/referrals/payout-address"');
+    expect(page).toContain('name="payout_address"');
+    expect(page).toContain('name="confirm"');
+    expect(page).toContain('name="api_key"');
+    expect(page).toContain(KEY);                     // re-carried so the save POST re-derives the code
+    expect(page).toMatch(/irreversible/i);
+  });
+  it('prefills a stored address', () => {
+    expect(renderReferralStatsPage({ ...base, usdcPendingUsdE2: 0, apiKey: KEY, payoutAddress: ADDR })).toContain(`value="${ADDR}"`);
+  });
+  it('eligible without an address warns; eligible with an address confirms the batch', () => {
+    expect(renderReferralStatsPage({ ...base, usdcPendingUsdE2: 6000, apiKey: KEY, payoutAddress: null })).toMatch(/add your Base USDC address/i);
+    expect(renderReferralStatsPage({ ...base, usdcPendingUsdE2: 6000, apiKey: KEY, payoutAddress: ADDR })).toMatch(/next payout batch/i);
+  });
+  it('flashes save success + a validation error', () => {
+    expect(renderReferralStatsPage({ ...base, usdcPendingUsdE2: 0, apiKey: KEY, savedFlash: true })).toMatch(/saved/i);
+    expect(renderReferralStatsPage({ ...base, usdcPendingUsdE2: 0, apiKey: KEY, addressError: 'That is not a valid EVM (Base) address.' })).toMatch(/not a valid EVM/i);
+  });
+  it('no api key → degrades to a hint, no form', () => {
+    const page = renderReferralStatsPage({ ...base, usdcPendingUsdE2: 0 });
+    expect(page).not.toContain('action="/account/referrals/payout-address"');
+    expect(page).toMatch(/Paste your API key/i);
   });
 });
 
@@ -157,6 +203,10 @@ describe('renderReferralLandingPage — LANDING-REFERRAL-PAGE-W1', () => {
     expect(fn).not.toMatch(/\b30\s*%/);
     expect(fn).not.toMatch(/\b12\s+months\b/);
     expect(fn).not.toMatch(/\$\s*50\b/);
+    // REFERRAL-PAYOUT-OPS-W1 / C1: the payout-schedule day is SoT-only (payoutScheduleLabel()),
+    // never a bare "10th" literal. ($600 in the tax clause is an external IRS reference, not a
+    // program term, so it is intentionally NOT gated here.)
+    expect(fn).not.toMatch(/\b10th\b/);
   });
 });
 

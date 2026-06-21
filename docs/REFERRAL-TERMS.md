@@ -15,9 +15,15 @@ signs up through it:
   their first invoice.
 
 ## Payout
-Commission is applied automatically as a credit toward your next AlgoVault invoice if you
-have an active subscription. Otherwise it accrues and is payable in **USDC on Base** once
-your balance reaches **$50**, subject to manual review.
+Commission of **$50** or more is paid in **USDC on Base** to the address you provide on your
+[account](https://api.algovault.com/account), **by the 10th of the following month** — the
+delay covers the refund-clawback window. Active subscribers are auto-credited to their next
+AlgoVault invoice at any amount instead.
+
+## Taxes
+You are responsible for your own taxes. For cumulative payouts approaching U.S. 1099 reporting
+thresholds (around $600 per year to one U.S. person), AlgoVault Labs may request a W-9 or W-8
+form before further payout.
 
 ## Eligibility & one grant per person
 Each person may be referred once — the bonus is granted a single time per email. Codes are

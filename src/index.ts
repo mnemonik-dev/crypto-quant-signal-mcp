@@ -193,6 +193,7 @@ import {
   accountPortalHandler,
   accountRecoverKeyHandler,
   accountReferralsHandler,
+  accountPayoutAddressHandler,
 } from './lib/account-handlers.js';
 import { getTopAssetsByOI } from './lib/oi-ranking.js';
 
@@ -1515,6 +1516,8 @@ async function startHttp() {
   app.post('/account/recover-key', recoverKeyLimiter, express.urlencoded({ extended: false }), accountRecoverKeyHandler);
   // REFERRAL-LIGHT-W1 (C4): referral dashboard (paste key) + public terms page.
   app.post('/account/referrals', express.urlencoded({ extended: false }), accountReferralsHandler);
+  // REFERRAL-PAYOUT-OPS-W1 (C1): save/clear the referrer's Base USDC payout address.
+  app.post('/account/referrals/payout-address', express.urlencoded({ extended: false }), accountPayoutAddressHandler);
   app.get('/referral-terms', async (_req, res) => {
     const { renderReferralTermsPage } = await import('./lib/referral-pages.js');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

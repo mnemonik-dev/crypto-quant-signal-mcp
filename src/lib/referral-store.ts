@@ -82,6 +82,31 @@ export function _resetReferralSchemaInitForTest(): void {
   _initialized = false;
 }
 
+// REFERRAL-PAYOUT-OPS-W1 / C1 — referrer's Base USDC payout address, added to
+// referral_codes AFTER migration 015 (so it's an ALTER, not part of the base DDL).
+// PG ADD COLUMN IF NOT EXISTS is natively idempotent; SQLite has none, so it needs
+// a PRAGMA table_info() pre-check (CLAUDE.md DB/migrations rule). PROD pre-applies
+// migration 017 via SSH before deploy → this is a no-op safety net there; tests
+// (SQLite) add it on first call. Mirrors subscriber-attribution.ensureSubscriberBridgeColumns.
+let _payoutColInit = false;
+export async function ensureReferralPayoutColumns(): Promise<void> {
+  if (_payoutColInit) return;
+  ensureReferralSchema();
+  if (PG) {
+    dbExec('ALTER TABLE referral_codes ADD COLUMN IF NOT EXISTS owner_payout_address TEXT;');
+  } else {
+    const rows = await dbQuery<{ name: string }>('PRAGMA table_info(referral_codes)', []);
+    if (!rows.some((r) => r.name === 'owner_payout_address')) {
+      dbExec('ALTER TABLE referral_codes ADD COLUMN owner_payout_address TEXT;');
+    }
+  }
+  _payoutColInit = true;
+}
+/** Reset the payout-column latch — tests only. */
+export function _resetPayoutColInitForTest(): void {
+  _payoutColInit = false;
+}
+
 // ── Types ──
 export type ReferralKind = 'user' | 'partner';
 export type ReferralChannel = 'paid_checkout' | 'free_signup' | 'tg';
@@ -132,6 +157,7 @@ export interface PendingPayout {
   owner_key: string | null;
   owner_email: string | null;
   owner_label: string | null;
+  payout_address: string | null;
   pending_usd_e2: number;
   row_count: number;
   ledger_ids: number[];
@@ -251,6 +277,24 @@ export async function mintPartnerCode(params: {
     code, kind: 'partner', owner_key: null,
     owner_email: params.owner_email ?? null, owner_label: params.owner_label, created_at: '',
   };
+}
+
+// ── Payout address (Base USDC; checksummed by the caller via evm-address) ──
+/** Read a code's stored Base USDC payout address (null if unset). */
+export async function getPayoutAddress(code: string): Promise<string | null> {
+  await ensureReferralPayoutColumns();
+  const rows = await dbQuery<{ owner_payout_address: string | null }>(
+    'SELECT owner_payout_address FROM referral_codes WHERE code = ?',
+    [code],
+  );
+  return rows.length > 0 ? (rows[0].owner_payout_address ?? null) : null;
+}
+
+/** Set (or clear, with null) a code's payout address. Caller MUST pass an already
+ *  EIP-55-checksummed address (normalizePayoutAddress) — the store does not validate. */
+export async function setPayoutAddress(code: string, address: string | null): Promise<void> {
+  await ensureReferralPayoutColumns();
+  dbRun('UPDATE referral_codes SET owner_payout_address = ? WHERE code = ?', address, code);
 }
 
 // ── Attributions (one grant per human; referee_email UNIQUE) ──
@@ -496,11 +540,12 @@ export async function topReferrers(limit = 20): Promise<ReferrerStats[]> {
 
 /** USDC-pending payout queue, grouped by code, gated on per-code total >= minUsd. */
 export async function pendingPayouts(minUsd: number): Promise<PendingPayout[]> {
-  ensureReferralSchema();
+  await ensureReferralPayoutColumns();
   const minE2 = Math.round(minUsd * 100);
   const rows = await dbQuery<Record<string, unknown>>(
     `SELECT l.id AS id, l.code AS code, l.commission_usd_e2 AS commission_usd_e2,
-            c.owner_key AS owner_key, c.owner_email AS owner_email, c.owner_label AS owner_label
+            c.owner_key AS owner_key, c.owner_email AS owner_email, c.owner_label AS owner_label,
+            c.owner_payout_address AS owner_payout_address
      FROM referral_ledger l
      LEFT JOIN referral_codes c ON c.code = l.code
      WHERE l.status = 'usdc_pending'
@@ -517,6 +562,7 @@ export async function pendingPayouts(minUsd: number): Promise<PendingPayout[]> {
         owner_key: (r.owner_key as string) ?? null,
         owner_email: (r.owner_email as string) ?? null,
         owner_label: (r.owner_label as string) ?? null,
+        payout_address: (r.owner_payout_address as string) ?? null,
         pending_usd_e2: 0,
         row_count: 0,
         ledger_ids: [],

@@ -40,8 +40,10 @@ import {
   markLedger,
   referrerStats,
   pendingPayouts,
+  setPayoutAddress,
+  getPayoutAddress,
 } from '../../src/lib/referral-store.js';
-import { REFERRAL_TERMS, isValidCodeFormat, commissionPct, shareLink, formatUsdE2 } from '../../src/lib/referral-constants.js';
+import { REFERRAL_TERMS, isValidCodeFormat, commissionPct, shareLink, formatUsdE2, payoutScheduleLabel } from '../../src/lib/referral-constants.js';
 import { dbRun } from '../../src/lib/performance-db.js';
 
 beforeEach(() => {
@@ -57,6 +59,10 @@ describe('referral-constants (SoT renderers)', () => {
     expect(REFERRAL_TERMS.BONUS_CALLS).toBe(500);
     expect(REFERRAL_TERMS.COMMISSION_MONTHS).toBe(12);
     expect(REFERRAL_TERMS.USDC_MIN_PAYOUT_USD).toBe(50);
+    expect(REFERRAL_TERMS.PAYOUT_BY_DAY_OF_MONTH).toBe(10);
+  });
+  it('payoutScheduleLabel derives the schedule phrase from the SoT day-of-month', () => {
+    expect(payoutScheduleLabel()).toBe('by the 10th of the following month');
   });
   it('shareLink interpolates the code (REFERRAL-WEB-FIX-W1: apex /join referee landing)', () => {
     expect(shareLink('ABC123')).toBe('https://algovault.com/join?ref=ABC123');
@@ -226,5 +232,31 @@ describe('pendingPayouts — minUsd gate', () => {
     expect(big?.row_count).toBe(2);
     expect(big?.ledger_ids).toHaveLength(2);
     expect(big?.owner_email).toBe('big@x.com');
+    expect(big?.payout_address).toBeNull(); // unset by default
+  });
+  it('surfaces the stored payout address on the batch row', async () => {
+    await mintPartnerCode({ code: 'PAYADDR', owner_label: 'p', owner_email: 'p@x.com' });
+    const addr = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+    await setPayoutAddress('PAYADDR', addr);
+    await appendLedger({ code: 'PAYADDR', stripe_event_id: 'evt_addr', gross_usd_e2: 20000, commission_usd_e2: 6000, status: 'usdc_pending' });
+    const q = await pendingPayouts(REFERRAL_TERMS.USDC_MIN_PAYOUT_USD);
+    expect(q.find((p) => p.code === 'PAYADDR')?.payout_address).toBe(addr);
+  });
+});
+
+// REFERRAL-PAYOUT-OPS-W1 / C1 — payout-address column get/set.
+describe('payout address get/set', () => {
+  it('round-trips an address on a referrer code (null until set)', async () => {
+    const code = await ensureUserCode('av_free_0123456789abcdef01234567');
+    expect(await getPayoutAddress(code)).toBeNull();
+    const addr = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+    await setPayoutAddress(code, addr);
+    expect(await getPayoutAddress(code)).toBe(addr);
+  });
+  it('clears with null', async () => {
+    const code = await ensureUserCode('av_free_abcdef0123456789abcdef01');
+    await setPayoutAddress(code, '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed');
+    await setPayoutAddress(code, null);
+    expect(await getPayoutAddress(code)).toBeNull();
   });
 });

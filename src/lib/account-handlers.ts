@@ -21,6 +21,7 @@
 import type { Request, Response } from 'express';
 import { getCustomerByApiKey, getCustomerByEmail, createBillingPortalSession } from './stripe.js';
 import { sendKeyRecoveryEmail } from './email.js';
+import type { ReferralStatsView } from './referral-pages.js';
 
 // DESIGN-W10 / C2 / Q-W10-10: REPLACED body-flex-centering with var(--bg) layout.
 // Existing .tabs/.tab/.panel/.subtitle/.footer/.error/.success class blocks PRESERVED
@@ -300,9 +301,50 @@ export async function accountRecoverKeyHandler(req: Request, res: Response): Pro
   res.send(getAccountRecoverySuccessHtml());
 }
 
-// REFERRAL-LIGHT-W1 (C4): paste-key → the caller's own referral dashboard. The
-// code is derived deterministically from the key (no Stripe call needed); stats +
-// bonus come from the frozen referral-store. Lazy imports match the file's style.
+// REFERRAL-PAYOUT-OPS-W1 / C1 — build the full referral dashboard view for an API
+// key. Shared by the view handler and the payout-address save handler so both render
+// an identical, fully-populated dashboard (stats + clicks + bonus + payout address).
+// The code is derived deterministically from the key (no Stripe call needed).
+async function loadReferralStatsView(
+  apiKey: string,
+  extra?: { savedFlash?: boolean; addressError?: string | null },
+): Promise<ReferralStatsView> {
+  const { ensureUserCode, referrerStats, getBonusRemaining, getPayoutAddress } = await import('./referral-store.js');
+  const { dbQuery } = await import('./performance-db.js');
+
+  const code = await ensureUserCode(apiKey);
+  const stats = await referrerStats(code);
+  const bonusRemaining = await getBonusRemaining(apiKey);
+  const payoutAddress = await getPayoutAddress(code);
+
+  // clicks = referral_click funnel events for this code (fail-open → 0).
+  let clicks = 0;
+  try {
+    const rows = await dbQuery<{ c: number | string }>(
+      `SELECT COUNT(*) AS c FROM funnel_events WHERE event_type = 'referral_click' AND meta_json LIKE ?`,
+      [`%"code":"${code}"%`],
+    );
+    clicks = rows.length ? Number(rows[0].c) : 0;
+  } catch { /* fail-open — clicks default 0 */ }
+
+  return {
+    code,
+    apiKey,
+    clicks,
+    signups: stats.signups,
+    conversions: stats.conversions,
+    bonusRemaining,
+    accruedUsdE2: stats.accrued_usd_e2,
+    creditedUsdE2: stats.credited_usd_e2,
+    usdcPendingUsdE2: stats.usdc_pending_usd_e2,
+    usdcPaidUsdE2: stats.usdc_paid_usd_e2,
+    payoutAddress,
+    savedFlash: extra?.savedFlash,
+    addressError: extra?.addressError ?? null,
+  };
+}
+
+// REFERRAL-LIGHT-W1 (C4): paste-key → the caller's own referral dashboard.
 export async function accountReferralsHandler(req: Request, res: Response): Promise<void> {
   try {
     const apiKey = typeof req.body?.api_key === 'string' ? req.body.api_key.trim() : '';
@@ -310,39 +352,63 @@ export async function accountReferralsHandler(req: Request, res: Response): Prom
       res.status(400).send(getAccountErrorPageHtml('Please paste a valid AlgoVault API key (av_live_… or av_free_…).'));
       return;
     }
-    const { ensureUserCode, referrerStats, getBonusRemaining } = await import('./referral-store.js');
     const { renderReferralStatsPage } = await import('./referral-pages.js');
-    const { dbQuery } = await import('./performance-db.js');
-
-    const code = await ensureUserCode(apiKey);
-    const stats = await referrerStats(code);
-    const bonusRemaining = await getBonusRemaining(apiKey);
-
-    // clicks = referral_click funnel events for this code (fail-open → 0).
-    let clicks = 0;
-    try {
-      const rows = await dbQuery<{ c: number | string }>(
-        `SELECT COUNT(*) AS c FROM funnel_events WHERE event_type = 'referral_click' AND meta_json LIKE ?`,
-        [`%"code":"${code}"%`],
-      );
-      clicks = rows.length ? Number(rows[0].c) : 0;
-    } catch { /* fail-open — clicks default 0 */ }
-
+    const view = await loadReferralStatsView(apiKey);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(renderReferralStatsPage({
-      code,
-      clicks,
-      signups: stats.signups,
-      conversions: stats.conversions,
-      bonusRemaining,
-      accruedUsdE2: stats.accrued_usd_e2,
-      creditedUsdE2: stats.credited_usd_e2,
-      usdcPendingUsdE2: stats.usdc_pending_usd_e2,
-      usdcPaidUsdE2: stats.usdc_paid_usd_e2,
-    }));
+    res.send(renderReferralStatsPage(view));
   } catch (err) {
     console.error('/account/referrals error:', err instanceof Error ? err.message : err);
     res.status(500).send(getAccountErrorPageHtml('Could not load your referral stats. Please try again or contact support@algovault.com.'));
+  }
+}
+
+// REFERRAL-PAYOUT-OPS-W1 / C1 — save (or clear) the caller's Base USDC payout
+// address. A plain form POST (no JS / no JSON): validates the EIP-55 checksum +
+// requires an explicit irreversibility confirm, then re-renders the SAME dashboard
+// with a success/error flash. The api_key is re-supplied as a hidden field by
+// renderReferralStatsPage so the code is re-derived deterministically.
+export async function accountPayoutAddressHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const apiKey = typeof req.body?.api_key === 'string' ? req.body.api_key.trim() : '';
+    if (!/^av_(live|free)_[a-f0-9]{24}$/.test(apiKey)) {
+      res.status(400).send(getAccountErrorPageHtml('Please paste a valid AlgoVault API key (av_live_… or av_free_…).'));
+      return;
+    }
+    const { ensureUserCode, setPayoutAddress } = await import('./referral-store.js');
+    const { normalizePayoutAddress } = await import('./evm-address.js');
+    const { renderReferralStatsPage } = await import('./referral-pages.js');
+
+    const raw = typeof req.body?.payout_address === 'string' ? req.body.payout_address.trim() : '';
+    const confirmed = req.body?.confirm === '1' || req.body?.confirm === 'on' || req.body?.confirm === 'true';
+    const code = await ensureUserCode(apiKey);
+
+    let savedFlash = false;
+    let addressError: string | null = null;
+    if (raw === '') {
+      // Empty = intentional clear; no confirm required to remove.
+      await setPayoutAddress(code, null);
+      savedFlash = true;
+    } else {
+      const checksummed = normalizePayoutAddress(raw);
+      if (!checksummed) {
+        addressError = 'That is not a valid EVM (Base) address. Paste your full 0x… address.';
+      } else if (!confirmed) {
+        addressError = 'Please tick the confirmation box — USDC sends are irreversible.';
+      } else {
+        await setPayoutAddress(code, checksummed);
+        savedFlash = true;
+      }
+    }
+
+    const view = await loadReferralStatsView(apiKey, { savedFlash, addressError });
+    // On error, echo the user's attempt back (esc-safe) so they can correct it.
+    if (addressError && raw) view.payoutAddress = raw;
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(addressError ? 400 : 200).send(renderReferralStatsPage(view));
+  } catch (err) {
+    console.error('/account/referrals/payout-address error:', err instanceof Error ? err.message : err);
+    res.status(500).send(getAccountErrorPageHtml('Could not save your payout address. Please try again or contact support@algovault.com.'));
   }
 }

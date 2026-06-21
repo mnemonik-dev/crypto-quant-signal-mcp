@@ -18,8 +18,11 @@ export const REFERRAL_TERMS = {
   COMMISSION_RATE: 0.3,
   /** Commission window length (months) from the referred customer's first invoice. */
   COMMISSION_MONTHS: 12,
-  /** Minimum accrued USD before a USDC-on-Base payout is eligible (manual approve). */
+  /** Minimum accrued USD before a USDC-on-Base payout is eligible. */
   USDC_MIN_PAYOUT_USD: 50,
+  /** The commission batch is paid by this day-of-month of the FOLLOWING month
+   *  (the delay covers the refund/clawback window). Net-~30 affiliate norm. */
+  PAYOUT_BY_DAY_OF_MONTH: 10,
   /** Referral code format: 6-16 uppercase alphanumerics. */
   CODE_RE: /^[A-Z0-9]{6,16}$/,
 } as const;
@@ -42,6 +45,21 @@ export function bonusCallsLabel(): string {
 /** "$50" — minimum USDC payout threshold as a display string. */
 export function usdcMinPayoutLabel(): string {
   return `$${REFERRAL_TERMS.USDC_MIN_PAYOUT_USD}`;
+}
+
+/** "10th" — English ordinal for a day-of-month (1st/2nd/3rd/…/10th/…/21st). */
+function ordinal(n: number): string {
+  const j = n % 10;
+  const k = n % 100;
+  if (j === 1 && k !== 11) return `${n}st`;
+  if (j === 2 && k !== 12) return `${n}nd`;
+  if (j === 3 && k !== 13) return `${n}rd`;
+  return `${n}th`;
+}
+
+/** "by the 10th of the following month" — payout schedule phrase (SoT-derived). */
+export function payoutScheduleLabel(): string {
+  return `by the ${ordinal(REFERRAL_TERMS.PAYOUT_BY_DAY_OF_MONTH)} of the following month`;
 }
 
 /**
