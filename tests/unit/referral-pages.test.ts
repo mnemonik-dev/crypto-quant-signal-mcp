@@ -145,7 +145,9 @@ describe('renderReferralLandingPage — LANDING-REFERRAL-PAGE-W1', () => {
   it('source contains zero hardcoded program-number literals (SoT-only)', () => {
     const src = readFileSync(new URL('../../src/lib/referral-pages.ts', import.meta.url), 'utf8');
     // Covers the form JS const + renderReferralSignupForm + renderReferralLandingPage.
-    const start = src.indexOf('const REFERRAL_SIGNUP_FORM_JS');
+    // REFERRAL-WEB-FIX-W1: start at shareTextPrefix so the C2 share text + stats/form/join
+    // copy are all covered by the hardcoded-literal guard (everything must be SoT-interpolated).
+    const start = src.indexOf('function shareTextPrefix');
     const end = src.indexOf('export interface AdminOverviewView', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
@@ -172,10 +174,12 @@ describe('renderReferralSignupForm — REFERRAL-FREE-KEY-SIGNUP-W1', () => {
     expect(form).toContain('href="https://api.algovault.com/account"');
     expect(form).not.toContain('href="/account"');
   });
-  it('never leaks outcome_* and hardcodes no program numbers (incentive lives in the page copy)', () => {
+  it('never leaks outcome_*; renders the bonus number via the SoT pre-filled share text (no hardcode — source grep-gated below)', () => {
     expect(form).not.toMatch(/outcome_/);
-    expect(form).not.toMatch(/\b500\b/);
-    expect(form).not.toMatch(/\b30\s*%/);
+    // REFERRAL-WEB-FIX-W1 (C2): the pre-filled share text interpolates the SoT bonus → the
+    // rendered form now legitimately contains "500"; hardcoding is guarded by the source-scan.
+    expect(form).toContain(bonusCallsLabel());
+    expect(form).not.toMatch(/\b30\s*%/);          // % only via commissionPct() on other surfaces
     expect(form).not.toMatch(/\b12\s+months\b/);
   });
 });
@@ -215,5 +219,27 @@ describe('renderJoinPage — REFERRAL-WEB-FIX-W1 (the referee landing / #1 bug f
     expect(valid).not.toContain('content="index,follow"');
     expect(valid).not.toMatch(/outcome_/);
     expect(invalid).not.toMatch(/outcome_/);
+  });
+});
+
+describe('REFERRAL-WEB-FIX-W1 C2 — share UX on all 3 web surfaces', () => {
+  const surfaces: Array<[string, string]> = [
+    ['/referral form', renderReferralSignupForm()],
+    ['/join', renderJoinPage({ refValid: true, code: 'FRIEND7' })],
+    ['/account stats', renderReferralStatsPage({ code: 'FRIEND7', clicks: 0, signups: 0, conversions: 0, bonusRemaining: 500, accruedUsdE2: 0, creditedUsdE2: 0, usdcPendingUsdE2: 0, usdcPaidUsdE2: 0 })],
+  ];
+  for (const [name, html] of surfaces) {
+    it(`${name}: has copy + native share + pre-filled TG-framed share text`, () => {
+      expect(html).toContain('Copy link');
+      expect(html).toContain('navigator.share');                  // native share (graceful desktop fallback in the JS)
+      expect(html).toContain('data-sharetext-prefix=');           // pre-filled text plumbed to the buttons
+      expect(html).toContain('verifiable crypto trade signals');   // matches the TG bot's friend framing
+    });
+  }
+
+  it('the bonus copy is de-ambiguated to one-time-on-top-of-100/mo (kills the recurring misread)', () => {
+    expect(renderReferralLandingPage()).toContain('one-time bonus calls');
+    expect(renderReferralStatsPage({ code: 'X', clicks: 0, signups: 0, conversions: 0, bonusRemaining: 0, accruedUsdE2: 0, creditedUsdE2: 0, usdcPendingUsdE2: 0, usdcPaidUsdE2: 0 })).toContain('one-time bonus calls (on top of their 100/mo free)');
+    expect(renderJoinPage({ refValid: true, code: 'X' })).toContain('one-time bonus calls');
   });
 });

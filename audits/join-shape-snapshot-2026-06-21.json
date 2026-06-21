@@ -22,7 +22,8 @@
         "on top of the 100 free calls",
         "<form id=\"av-ref-form\" with data-source=\"join-page\" + data-ref=\"<code>\"",
         "fetch(\"/api/signup-email\" (same-origin, apex-proxied) → real 500 grant",
-        "class=\"plans\" with href=\"https://api.algovault.com/signup?plan=…\" (ABSOLUTE — /signup is api-canonical)"
+        "class=\"plans\" with href=\"https://api.algovault.com/signup?plan=…\" (ABSOLUTE — /signup is api-canonical)",
+        "C2 share affordance: Copy link + navigator.share + data-sharetext-prefix (referee re-shares — closes the web loop)"
       ],
       "must_contain_invalid_ref": [
         "Start free with AlgoVault (graceful general landing)",

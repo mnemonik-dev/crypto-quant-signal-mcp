@@ -22,6 +22,11 @@ const TERMS_PATH = '/referral-terms';
 // REFERRAL-WEB-FIX-W1: /signup is api-canonical (Stripe success_url from request host;
 // NOT apex-proxied), so the apex /join plan cards must link to it ABSOLUTELY.
 const SIGNUP_BASE = 'https://api.algovault.com';
+// REFERRAL-WEB-FIX-W1 (C2): friend-facing share text (mirrors the TG bot's framing); the
+// caller's link is appended client-side. Bonus number from the SoT (never hardcoded).
+function shareTextPrefix(): string {
+  return `I'm using AlgoVault for verifiable crypto trade signals — composite BUY/SELL/HOLD across the top perp venues, on-chain track record. Grab ${bonusCallsLabel()} bonus calls free with my link: `;
+}
 
 function esc(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
@@ -80,18 +85,35 @@ export interface ReferralStatsView {
   usdcPaidUsdE2: number;
 }
 
+// REFERRAL-WEB-FIX-W1 (C2) — copy/native-share for the /account stats link (graceful
+// desktop fallback: execCommand copy + hide Share when navigator.share absent).
+const STATS_SHARE_JS = `
+(function(){
+  var box=document.getElementById("av-stats-share"); if(!box) return;
+  var link=box.getAttribute("data-link")||"", text=(box.getAttribute("data-sharetext-prefix")||"")+link;
+  var copyBtn=document.getElementById("av-stats-copy"), shareBtn=document.getElementById("av-stats-share-btn");
+  if(copyBtn){ copyBtn.onclick=function(){ var ok=function(){copyBtn.textContent="Copied!";setTimeout(function(){copyBtn.textContent="Copy link";},1500);}; if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(ok).catch(function(){copyBtn.textContent="Copy failed";});} else {var t=document.createElement("textarea");t.value=text;document.body.appendChild(t);t.select();try{document.execCommand("copy");ok();}catch(e){}document.body.removeChild(t);} }; }
+  if(shareBtn){ if(navigator.share){ shareBtn.onclick=function(){navigator.share({text:text}).catch(function(){});}; } else { shareBtn.style.display="none"; } }
+})();
+`;
+
 /** /account/referrals — a referrer's own stats. All program numbers interpolated. */
 export function renderReferralStatsPage(v: ReferralStatsView): string {
   const link = shareLink(v.code, v.baseUrl);
   const body = `
     <h1>Your referral dashboard</h1>
-    <p class="sub">Refer, earn ${commissionPct()}. Friends get ${bonusCallsLabel()} bonus calls; you earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()}.</p>
+    <p class="sub">Refer, earn ${commissionPct()}. Friends get ${bonusCallsLabel()} one-time bonus calls (on top of their 100/mo free); you earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()}.</p>
     <div class="card">
       <div class="l muted">YOUR CODE</div>
       <div class="code mono">${esc(v.code)}</div>
       <div style="margin-top:10px" class="l muted">SHARE LINK</div>
       <a class="link mono" href="${esc(link)}">${esc(link)}</a>
+      <div id="av-stats-share" data-link="${esc(link)}" data-sharetext-prefix="${esc(shareTextPrefix())}" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button type="button" id="av-stats-copy" style="font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--mint);background:transparent;color:var(--mint);cursor:pointer">Copy link</button>
+        <button type="button" id="av-stats-share-btn" style="font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--mint);background:var(--mint);color:var(--bg);cursor:pointer">Share &rarr;</button>
+      </div>
     </div>
+    <script>${STATS_SHARE_JS}</script>
     <h2>Activity</h2>
     <div class="grid">
       <div class="stat"><div class="n">${v.clicks}</div><div class="l">Clicks</div></div>
@@ -120,7 +142,7 @@ export function renderReferralTermsPage(): string {
       <h2 style="margin-top:0">The program</h2>
       <p>Share your referral link. When someone signs up through it:</p>
       <ul>
-        <li><strong>They</strong> receive <strong>${bonusCallsLabel()} bonus calls</strong> on top of the monthly free allowance.</li>
+        <li><strong>They</strong> receive a one-time grant of <strong>${bonusCallsLabel()} bonus calls</strong> on top of the monthly free allowance.</li>
         <li><strong>You</strong> earn <strong>${commissionPct()}</strong> of their paid AlgoVault subscription revenue for <strong>${commissionMonthsLabel()}</strong> from their first invoice.</li>
       </ul>
       <h2>Payout</h2>
@@ -158,12 +180,24 @@ const REFERRAL_SIGNUP_FORM_JS = `
     return "Something went wrong - please try again.";
   }
   function fail(m){ out.innerHTML=""; var p=document.createElement("p"); p.className="muted"; p.style.color="#f85149"; p.textContent=m; out.appendChild(p); }
+  function shareRow(link){
+    var prefix=f.getAttribute("data-sharetext-prefix")||"";
+    var text=prefix+link;
+    var row=document.createElement("div"); row.style.cssText="display:flex;gap:8px;margin:12px 0 0;flex-wrap:wrap";
+    var bcss="font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--mint);background:transparent;color:var(--mint);cursor:pointer";
+    var copyBtn=document.createElement("button"); copyBtn.type="button"; copyBtn.textContent="Copy link"; copyBtn.style.cssText=bcss;
+    copyBtn.onclick=function(){ var ok=function(){copyBtn.textContent="Copied!";setTimeout(function(){copyBtn.textContent="Copy link";},1500);}; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok).catch(function(){copyBtn.textContent="Copy failed";}); } else { var t=document.createElement("textarea"); t.value=text; document.body.appendChild(t); t.select(); try{document.execCommand("copy");ok();}catch(e){} document.body.removeChild(t); } };
+    row.appendChild(copyBtn);
+    if(navigator.share){ var shareBtn=document.createElement("button"); shareBtn.type="button"; shareBtn.textContent="Share \\u2192"; shareBtn.style.cssText=bcss+";background:var(--mint);color:var(--bg)"; shareBtn.onclick=function(){ navigator.share({text:text}).catch(function(){}); }; row.appendChild(shareBtn); }
+    return row;
+  }
   function success(data){
     f.style.display="none"; out.innerHTML="";
-    if(data.bonus_calls){ var b=document.createElement("p"); b.style.cssText="color:var(--mint);font-weight:700;margin:0 0 10px;font-size:15px"; b.textContent="\\u2713 "+data.bonus_calls+" bonus calls added to your account!"; out.appendChild(b); }
+    if(data.bonus_calls){ var b=document.createElement("p"); b.style.cssText="color:var(--mint);font-weight:700;margin:0 0 10px;font-size:15px"; b.textContent="\\u2713 "+data.bonus_calls+" one-time bonus calls added (on top of your 100/mo free)!"; out.appendChild(b); }
     var lbl=document.createElement("div"); lbl.className="l muted"; lbl.style.cssText="font-size:12px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.5px"; lbl.textContent="Your referral link"; out.appendChild(lbl);
-    var a=document.createElement("a"); a.className="link mono"; a.href=data.referral_link; a.textContent=data.referral_link; a.style.cssText="display:block;margin:6px 0 10px"; out.appendChild(a);
-    var p=document.createElement("p"); p.className="muted"; p.style.margin="0"; p.textContent="Share it. We emailed your free API key for next time."; out.appendChild(p);
+    var a=document.createElement("a"); a.className="link mono"; a.href=data.referral_link; a.textContent=data.referral_link; a.style.cssText="display:block;margin:6px 0 0"; out.appendChild(a);
+    out.appendChild(shareRow(data.referral_link));
+    var p=document.createElement("p"); p.className="muted"; p.style.margin="12px 0 0"; p.textContent="We emailed your free API key for next time."; out.appendChild(p);
   }
   f.addEventListener("submit",function(e){
     e.preventDefault();
@@ -204,7 +238,7 @@ export function renderReferralSignupForm(opts?: { ref?: string; source?: string;
   return `
     <div class="card">
       <h2 style="margin-top:0;text-transform:none;letter-spacing:0;font-size:20px;color:var(--fg)">${heading}</h2>
-      <form id="av-ref-form"${dataSource}${dataRef} style="margin:0">
+      <form id="av-ref-form"${dataSource}${dataRef} data-sharetext-prefix="${esc(shareTextPrefix())}" style="margin:0">
         <input type="email" id="av-ref-email" required autocomplete="email" placeholder="you@example.com"
           style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px;margin:0 0 10px">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg-3);margin:0 0 14px">
@@ -236,14 +270,14 @@ export function renderReferralSignupForm(opts?: { ref?: string; source?: string;
 export function renderReferralLandingPage(): string {
   const body = `
     <h1>Refer a friend — both win.</h1>
-    <p class="sub">Your friend gets ${bonusCallsLabel()} bonus calls. You earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()} — paid automatically.</p>
+    <p class="sub">Your friend gets ${bonusCallsLabel()} one-time bonus calls. You earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()} — paid automatically.</p>
     ${renderReferralSignupForm()}
 
     <h2>How it works</h2>
     <div class="card">
       <ol style="margin:0;padding-left:20px;line-height:1.9">
         <li><strong>Grab your link.</strong> Every account gets one automatically — find it in your account.</li>
-        <li><strong>Share it.</strong> Your friend gets ${bonusCallsLabel()} bonus calls the moment they join.</li>
+        <li><strong>Share it.</strong> Your friend gets ${bonusCallsLabel()} one-time bonus calls (on top of the free 100/mo) the moment they join.</li>
         <li><strong>Earn.</strong> Get ${commissionPct()} of their subscription every month for ${commissionMonthsLabel()} — auto-credited.</li>
       </ol>
     </div>
