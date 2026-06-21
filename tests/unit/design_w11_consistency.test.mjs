@@ -203,11 +203,14 @@ test('/track-record W11-FF: logo icon REMOVED from brand block context', async (
   assert.ok(!/width="36" height="36"/.test(func), 'Old 36x36 brand-block logo image must be removed');
 });
 
-test('/track-record W11-FF: subtitle uses canonical text-sm + inline style color:var(--fg-3)', async () => {
+test('/track-record W11-FF: subtitle uses canonical text-sm + mint accent color #5BEEB3 (matches leaderboard kicker)', async () => {
   const src = await read('src/index.ts');
   const func = scopeToPerfFunc(src);
-  assert.ok(/<p class="text-sm" style="color:var\(--fg-3\)">/.test(func),
-    'Subtitle must use canonical class="text-sm" + inline style="color:var(--fg-3)" (FF-REL-1 inline-fix: text-fg-muted not in Tailwind config)');
+  // P1-TRACK-RECORD-LEADERBOARD-W1 follow-up (operator request 2026-06-21): the
+  // brand-block subtitle was recolored from var(--fg-3) to the leaderboard kicker
+  // mint (#5BEEB3) for visual continuity. data-tr-field hydration spans unchanged.
+  assert.ok(/<p class="text-sm" style="color:#5BEEB3">/.test(func),
+    'Subtitle must use class="text-sm" + inline style="color:#5BEEB3" (mint accent matching the leaderboard kicker)');
 });
 
 test('/track-record W11-FF: pkg_version live-bind span added (additive — 45th unique data-tr-field key)', async () => {

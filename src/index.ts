@@ -3346,7 +3346,7 @@ tailwind.config = {
      (matches Cross-Venue ↔ On-Chain Verified visual gap per Mr.1 directive). -->
 <div class="space-y-2 mb-8">
   <h1 class="text-5xl sm:text-6xl font-semibold tracking-tight" style="color:var(--fg)">Live <span class="text-mint-400">Track Record</span></h1>
-  <p class="text-sm" style="color:var(--fg-3)">v<span data-tr-field="pkg_version">${PKG_VERSION}</span> &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> Exchanges &middot; <span data-tr-field="asset_count">736</span> assets</p>
+  <p class="text-sm" style="color:#5BEEB3">v<span data-tr-field="pkg_version">${PKG_VERSION}</span> &middot; <span data-tr-field="exchange_count">${EXCHANGE_COUNT}</span> Exchanges &middot; <span data-tr-field="asset_count">736</span> assets</p>
 </div>
 <div id="loading">Loading performance data...</div>
 <div id="content" style="display:none">
