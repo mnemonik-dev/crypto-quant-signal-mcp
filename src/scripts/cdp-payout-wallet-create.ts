@@ -9,7 +9,7 @@
  * is safe to run repeatedly. It creates an empty account; it never moves money. Fund
  * the printed address with ~one month's batch of USDC on Base (the primary risk bound).
  */
-import { cdpPayoutConfigured, PAYOUT_ACCOUNT_NAME, PAYOUT_NETWORK } from '../lib/payout-config.js';
+import { cdpPayoutConfigured, PAYOUT_ACCOUNT_NAME, PAYOUT_SMART_ACCOUNT_NAME, PAYOUT_NETWORK } from '../lib/payout-config.js';
 
 export async function main(): Promise<void> {
   if (!cdpPayoutConfigured()) {
@@ -19,10 +19,14 @@ export async function main(): Promise<void> {
   }
   const { CdpClient } = await import('@coinbase/cdp-sdk');
   const cdp = new CdpClient();
-  const account = await cdp.evm.getOrCreateAccount({ name: PAYOUT_ACCOUNT_NAME });
-  console.log(`CDP payout account "${PAYOUT_ACCOUNT_NAME}" ready.`);
-  console.log(`FUND THIS ADDRESS with USDC on ${PAYOUT_NETWORK}:`);
-  console.log(account.address);
+  // Gasless design: a Smart Account (owned by the EOA) holds + sends the USDC; CDP
+  // sponsors its gas on Base, so it needs NO ETH. Fund the SMART account address.
+  const owner = await cdp.evm.getOrCreateAccount({ name: PAYOUT_ACCOUNT_NAME });
+  const smart = await cdp.evm.getOrCreateSmartAccount({ name: PAYOUT_SMART_ACCOUNT_NAME, owner });
+  console.log(`CDP gasless payout smart account "${PAYOUT_SMART_ACCOUNT_NAME}" ready (owner EOA "${PAYOUT_ACCOUNT_NAME}").`);
+  console.log(`FUND THIS ADDRESS with USDC on ${PAYOUT_NETWORK} (gasless — no ETH needed):`);
+  console.log(smart.address);
+  console.log(`(owner EOA — reference only, do NOT fund: ${owner.address})`);
 }
 
 const argv1 = process.argv[1] ?? '';

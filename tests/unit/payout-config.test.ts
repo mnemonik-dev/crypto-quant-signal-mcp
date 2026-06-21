@@ -4,9 +4,9 @@
  * creds (the signing CDP_WALLET_SECRET is the gate that keeps the Stub in place).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { perTxCapE2, batchCapE2, cdpPayoutConfigured } from '../../src/lib/payout-config.js';
+import { perTxCapE2, batchCapE2, cdpPayoutConfigured, payoutPaymasterUrl, PAYOUT_SMART_ACCOUNT_NAME } from '../../src/lib/payout-config.js';
 
-const KEYS = ['PAYOUT_MAX_PER_TX_USD', 'PAYOUT_MAX_BATCH_USD', 'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET'];
+const KEYS = ['PAYOUT_MAX_PER_TX_USD', 'PAYOUT_MAX_BATCH_USD', 'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'PAYOUT_PAYMASTER_URL'];
 const saved: Record<string, string | undefined> = {};
 beforeEach(() => { for (const k of KEYS) { saved[k] = process.env[k]; delete process.env[k]; } });
 afterEach(() => { for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } });
@@ -42,5 +42,22 @@ describe('cdpPayoutConfigured', () => {
     process.env.CDP_API_KEY_SECRET = 'sec';
     process.env.CDP_WALLET_SECRET = 'wsec';
     expect(cdpPayoutConfigured()).toBe(false); // missing CDP_API_KEY_ID
+  });
+});
+
+describe('payoutPaymasterUrl (OPS-PAYOUT-GASLESS-W1)', () => {
+  it('undefined by default → CDP built-in Base sponsorship', () => {
+    expect(payoutPaymasterUrl()).toBeUndefined();
+  });
+  it('returns a trimmed override when set', () => {
+    process.env.PAYOUT_PAYMASTER_URL = '  https://pm.example/base/k  ';
+    expect(payoutPaymasterUrl()).toBe('https://pm.example/base/k');
+  });
+  it('treats blank as unset', () => {
+    process.env.PAYOUT_PAYMASTER_URL = '   ';
+    expect(payoutPaymasterUrl()).toBeUndefined();
+  });
+  it('the smart account name is distinct from the owner EOA name', () => {
+    expect(PAYOUT_SMART_ACCOUNT_NAME).toBe('algovault-referral-payout-sa');
   });
 });

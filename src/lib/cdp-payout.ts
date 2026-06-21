@@ -13,7 +13,7 @@
 import { CdpClient } from '@coinbase/cdp-sdk';
 import type { PayoutSender, PayoutResult } from './referral-payout.js';
 import { normalizePayoutAddress } from './evm-address.js';
-import { PAYOUT_ACCOUNT_NAME, PAYOUT_NETWORK, perTxCapE2 } from './payout-config.js';
+import { PAYOUT_ACCOUNT_NAME, PAYOUT_SMART_ACCOUNT_NAME, PAYOUT_NETWORK, perTxCapE2, payoutPaymasterUrl } from './payout-config.js';
 
 // USDC has 6 decimals. amountUsdE2 is integer cents ($1 = 100 e2 = 1 USDC = 1e6 base
 // units), so base units = e2-cents × 10_000.
@@ -33,13 +33,22 @@ export class CdpPayoutSender implements PayoutSender {
     const amount = BigInt(Math.round(amountUsdE2)) * USDC_E2_TO_BASE_UNITS;
     // CdpClient reads CDP_API_KEY_ID / CDP_API_KEY_SECRET / CDP_WALLET_SECRET from env.
     const cdp = new CdpClient();
-    const account = await cdp.evm.getOrCreateAccount({ name: PAYOUT_ACCOUNT_NAME });
-    const baseAccount = await account.useNetwork(PAYOUT_NETWORK);
-    const result = await baseAccount.transfer({
+    // Gasless (OPS-PAYOUT-GASLESS-W1): a CDP Smart Account HOLDS + SENDS the USDC; the
+    // EOA only owns/signs it. On Base, CDP sponsors the user-operation gas (zero-fee),
+    // so the smart account needs NO ETH — the spec's "zero-fee Base" design.
+    const owner = await cdp.evm.getOrCreateAccount({ name: PAYOUT_ACCOUNT_NAME });
+    const smart = await cdp.evm.getOrCreateSmartAccount({ name: PAYOUT_SMART_ACCOUNT_NAME, owner });
+    const base = await smart.useNetwork(PAYOUT_NETWORK);
+    const paymasterUrl = payoutPaymasterUrl();
+    const { userOpHash } = await base.transfer({
       to: addr as `0x${string}`,
       amount,
       token: 'usdc',
+      ...(paymasterUrl ? { paymasterUrl } : {}),
     });
-    return { txRef: result.transactionHash };
+    // transfer() broadcasts a user-operation; wait for on-chain completion to get the tx hash.
+    const op = await base.waitForUserOperation({ userOpHash });
+    if (!('transactionHash' in op)) throw new Error(`userop_${op.status} (${userOpHash})`);
+    return { txRef: op.transactionHash };
   }
 }
