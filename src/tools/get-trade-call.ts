@@ -6,6 +6,7 @@ import { hashSignal } from '../lib/merkle.js';
 import { getDexForCoin, classifyAsset, isMemeCoinLiquid, isKnownTradFi, getTop20ByOI } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
 import { TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError, InsufficientCandlesError } from '../lib/errors.js';
+import { referralCodeForKey } from '../lib/referral-store.js'; // REFERRAL-INPRODUCT-NUDGE-W1: keyed→code, keyless→null
 import { resolveAssetClass } from '../lib/underlying-type.js';
 import { classifyUnderlyingSession, isClosedState } from '../lib/market-sessions.js';
 import { tradfiFundingAnnotation } from '../lib/tradfi-funding.js';
@@ -112,6 +113,7 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
       tier: licenseForReset.tier,
       suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
       retryAfterDays: daysUntilMonthReset(licenseForReset),
+      referralCode: referralCodeForKey(licenseForReset.key),
     });
   }
 

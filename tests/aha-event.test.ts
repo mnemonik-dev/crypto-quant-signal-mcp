@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   recordFirstNonHoldVerdict,
   shouldEmitFirstNonHold,
+  shouldShowAhaReferral,
+  ahaReferralAlreadyShown,
   _resetFirstNonHoldForTest,
 } from '../src/lib/aha-event.js';
 
@@ -101,6 +103,35 @@ describe('aha-event — shouldEmitFirstNonHold', () => {
     expect(shouldEmitFirstNonHold('x')).toBe(true);
     expect(shouldEmitFirstNonHold('x')).toBe(false);
     expect(shouldEmitFirstNonHold('y')).toBe(true);
+  });
+});
+
+describe('aha-event — shouldShowAhaReferral (REFERRAL-INPRODUCT-NUDGE-W1 ≤1/session cap)', () => {
+  it('returns true once per session, false thereafter (first aha trigger wins)', () => {
+    expect(shouldShowAhaReferral('cap1')).toBe(true);
+    expect(shouldShowAhaReferral('cap1')).toBe(false); // 2nd trigger same session → suppressed
+    expect(shouldShowAhaReferral('cap2')).toBe(true);  // distinct session → independent slot
+  });
+
+  it('ahaReferralAlreadyShown peeks WITHOUT consuming the slot', () => {
+    expect(ahaReferralAlreadyShown('peek1')).toBe(false); // peek does not consume
+    expect(ahaReferralAlreadyShown('peek1')).toBe(false); // still free
+    expect(shouldShowAhaReferral('peek1')).toBe(true);    // consume now
+    expect(ahaReferralAlreadyShown('peek1')).toBe(true);  // peek reflects consumed
+    expect(shouldShowAhaReferral('peek1')).toBe(false);   // already shown
+  });
+
+  it('is an INDEPENDENT store from the aha-emit dedup (separate concerns)', () => {
+    // Consuming the referral slot must not affect the first-non-HOLD emit decision.
+    expect(shouldShowAhaReferral('iso')).toBe(true);
+    expect(shouldEmitFirstNonHold('iso')).toBe(true); // independent set — still emits
+  });
+
+  it('_resetFirstNonHoldForTest clears BOTH the emit + the referral session stores', () => {
+    shouldShowAhaReferral('rst');
+    expect(ahaReferralAlreadyShown('rst')).toBe(true);
+    _resetFirstNonHoldForTest();
+    expect(ahaReferralAlreadyShown('rst')).toBe(false);
   });
 });
 

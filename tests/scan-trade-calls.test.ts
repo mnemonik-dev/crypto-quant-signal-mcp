@@ -20,7 +20,7 @@ vi.mock('../src/lib/exchange-universe.js', () => ({
 
 import { getExchangeTopAssetsWithVolume } from '../src/lib/exchange-universe.js';
 import { _setScanScorerForTest, _clearScanCaches, type ScanScore } from '../src/lib/trade-call-scanner.js';
-import { trackCallByKey } from '../src/lib/license.js';
+import { trackCallByKey, requestContext } from '../src/lib/license.js';
 import {
   runScanTradeCall,
   SCAN_TRADE_CALLS_SCHEMA,
@@ -135,12 +135,57 @@ describe('runScanTradeCall — exhausted-tier entry block', () => {
     expect(isExhausted(r)).toBe(true);
     if (!isExhausted(r)) return;
     expect(r.error).toBe('quota_exhausted');
-    // ACTIVATION-NUDGE-W1: approved 100%-limit copy (was "Free tier limit reached").
+    // REFERRAL-INPRODUCT-NUDGE-W1: the scan wall is now referral-prominent (keyless
+    // here → the get-your-link path leads) + carries the structured referral_hint.
     expect(r.message).toContain("You've hit your");
-    expect(r.message).toContain('algovault.com/track-record');
+    expect(r.message.toLowerCase()).toContain('refer a friend');
+    expect(r.message).toContain('create a free account'); // keyless get-your-link path
     expect(r.message).not.toContain('unlimited');
+    expect(r.referral_hint.from).toBe('limit');
+    expect(r.referral_hint.link_or_path).toContain('upgrade_from=limit_referral');
     expect(r.suggested_action).toBeTruthy();
     expect(calls.n).toBe(0); // scanner never ran
+  });
+});
+
+describe('runScanTradeCall — trigger (b) multi-hit-scan referral (REFERRAL-INPRODUCT-NUDGE-W1)', () => {
+  it('KEYED + session + ≥3 non-HOLD → aha_scan referral hint (human + structured)', async () => {
+    _setScanScorerForTest(specScorer(SPEC)); // SPEC = 5 non-HOLD
+    const r = await requestContext.run(
+      { license: starter('scan-ref-b'), sessionId: 'sess-scan-b', ipHash: null },
+      () => runScanTradeCall({ topN: 100, timeframe: '15m', exchange: 'BINANCE', limit: 10 }, starter('scan-ref-b')),
+    );
+    if (isExhausted(r)) throw new Error('unexpected exhaustion');
+    expect(r.eligible_non_hold).toBe(5);
+    expect(r._algovault.referral_hint?.from).toBe('aha_scan');
+    expect(r._algovault.referral_hint?.bonus_calls).toBe(500);
+    expect(r._algovault.upgrade_hint).toContain('Your scan surfaced 5 live calls');
+    expect(r._algovault.upgrade_hint).toContain('join?ref='); // keyed give-get link
+  });
+
+  it('below the multi-hit threshold (<3 non-HOLD) → NO referral hint', async () => {
+    _setScanScorerForTest(specScorer({ COIN0: { call: 'BUY', confidence: 90 }, COIN1: { call: 'SELL', confidence: 60 } })); // 2 non-HOLD
+    const r = await requestContext.run(
+      { license: starter('scan-ref-b2'), sessionId: 'sess-scan-b2', ipHash: null },
+      () => runScanTradeCall({ topN: 100, timeframe: '15m', exchange: 'BINANCE', limit: 10 }, starter('scan-ref-b2')),
+    );
+    if (isExhausted(r)) throw new Error('unexpected exhaustion');
+    expect(r.eligible_non_hold).toBe(2);
+    expect(r._algovault.referral_hint).toBeUndefined();
+    expect(r._algovault.upgrade_hint).toBeUndefined();
+  });
+
+  it('≤1 aha referral per session — a second qualifying scan that session does NOT re-fire', async () => {
+    _setScanScorerForTest(specScorer(SPEC));
+    const run = () => requestContext.run(
+      { license: starter('scan-ref-cap'), sessionId: 'sess-scan-cap', ipHash: null },
+      () => runScanTradeCall({ topN: 100, timeframe: '15m', exchange: 'BINANCE', limit: 10 }, starter('scan-ref-cap')),
+    );
+    const r1 = await run();
+    const r2 = await run();
+    if (isExhausted(r1) || isExhausted(r2)) throw new Error('unexpected exhaustion');
+    expect(r1._algovault.referral_hint?.from).toBe('aha_scan'); // first wins
+    expect(r2._algovault.referral_hint).toBeUndefined();        // session cap holds
   });
 });
 

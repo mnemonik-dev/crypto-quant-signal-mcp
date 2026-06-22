@@ -30,7 +30,7 @@ import { buildErc8004ReputationBody } from './lib/erc8004-reputation.js';
 import { verifyProof } from './lib/merkle.js';
 import { warmTierCaches } from './lib/asset-tiers.js';
 import { EXCHANGES, EXCHANGE_COUNT, TIMEFRAME_COUNT, getAssetCount, floorRoundTo10 } from './lib/capabilities.js';
-import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, getRequestSessionId, getRequestIpHash, getRequestVerdict, setRequestVerdict, initQuotaDb, checkQuota, checkInternalBypass } from './lib/license.js';
+import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, getRequestSessionId, getRequestIpHash, getRequestVerdict, setRequestVerdict, initQuotaDb, checkQuota, checkInternalBypass, recordAhaMilestoneCrossing } from './lib/license.js';
 import { initX402, settleX402Async, buildX402PaymentRequiredResult } from './lib/x402.js';
 import { mountX402HttpRoutes, HTTP_TOOLS } from './lib/x402-http-routes.js';
 import { PUBLIC_READONLY_TOOL_ANNOTATIONS } from './tool-annotations.js';
@@ -48,11 +48,12 @@ import { getSkillsAnalytics } from './resources/skills-analytics.js';
 import { generateFunnelSnapshot } from './lib/funnel-snapshot.js';
 import { recordFunnelEvent } from './lib/performance-db.js';
 import { classifyCtaEventType } from './lib/cta-attribution.js';
-import { recordFirstNonHoldVerdict } from './lib/aha-event.js';
+import { recordFirstNonHoldVerdict, shouldShowAhaReferral, ahaReferralAlreadyShown } from './lib/aha-event.js';
+import { referralCodeForKey } from './lib/referral-store.js'; // REFERRAL-INPRODUCT-NUDGE-W1: keyed→code, keyless→null
 // ACTIVATION-NUDGE-W1 (2026-06-18): the one-time aha upgrade_hint render reuses
 // C1's single first-non-HOLD detection; the warmer keeps the track-record SoT
 // fresh for all nudge copy (started once at server boot, below).
-import { buildAhaHint } from './lib/nudge-copy.js';
+import { buildAhaHint, buildAhaReferral, buildReferralHint, AHA_HIGH_CONVICTION_CONFIDENCE, type ReferralHint, type AhaReferralFrom } from './lib/nudge-copy.js';
 import { getTrackRecord, startTrackRecordWarmer } from './lib/track-record-snapshot.js';
 import { renderReceiptText, renderScanReceiptText } from './lib/receipts.js';
 import { startReceiptTrackRecordWarmer } from './lib/receipts-track-record.js';
@@ -177,6 +178,9 @@ function toolErrorContent(err: unknown): { content: { type: 'text'; text: string
       tier: err.tier,
       suggested_upgrade_url: err.suggested_upgrade_url,
       retry_after_days: err.retry_after_days,
+      // REFERRAL-INPRODUCT-NUDGE-W1: additive, allow-listed referral hint (agent-
+      // relayable). The human `message` already leads with the referral arm.
+      referral_hint: err.referral_hint,
     };
     return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }], isError: true };
   }
@@ -427,9 +431,37 @@ function createServer(): McpServer {
         // idempotent are already enforced inside recordFirstNonHoldVerdict.
         // Precedence aha > soft: overwrite any soft quota nudge the tool set
         // (the 100% limit is a separate error envelope, not reached here).
-        if (isAha) {
-          const meta = (result as { _algovault?: { upgrade_hint?: string } })._algovault;
-          if (meta) meta.upgrade_hint = buildAhaHint(getTrackRecord());
+        // REFERRAL-INPRODUCT-NUDGE-W1: the aha value moment now offers a referral
+        // hint to KEYED users — high-conviction first non-HOLD (reuse isAha + the
+        // confidence gate) or a usage milestone — capped to ≤1 per session across
+        // all aha triggers (single-source `shouldShowAhaReferral`, first wins).
+        // Keyless aha keeps the existing upgrade hint (no link to show). aha > soft.
+        const ahaMeta = (result as { _algovault?: { upgrade_hint?: string; referral_hint?: ReferralHint } })._algovault;
+        if (ahaMeta) {
+          const refCode = referralCodeForKey(license.key);
+          const sid = getRequestSessionId() ?? null;
+          // Evaluate triggers only when a keyed user still has a free session slot —
+          // so a milestone crossing isn't committed when the slot is already spent.
+          let aha: { from: AhaReferralFrom; verdict?: string; callCountUser?: number } | null = null;
+          if (refCode && sid && !ahaReferralAlreadyShown(sid)) {
+            const conf = (result as { confidence?: number }).confidence ?? 0;
+            if (isAha && conf >= AHA_HIGH_CONVICTION_CONFIDENCE && (verdict === 'BUY' || verdict === 'SELL')) {
+              aha = { from: 'aha_call', verdict };                          // (a) high-conviction call
+            } else {
+              const milestone = await recordAhaMilestoneCrossing(license);  // (c) usage milestone
+              if (milestone !== null) aha = { from: 'aha_milestone', callCountUser: milestone };
+            }
+          }
+          if (aha && refCode && sid && shouldShowAhaReferral(sid)) {
+            ahaMeta.upgrade_hint = buildAhaReferral({
+              from: aha.from, code: refCode, stats: getTrackRecord(),
+              verdict: aha.verdict, callCountUser: aha.callCountUser,
+            });
+            ahaMeta.referral_hint = buildReferralHint({ from: aha.from, code: refCode });
+          } else if (isAha) {
+            // Keyless aha (or no referral fired) → the existing upgrade hint, unchanged.
+            ahaMeta.upgrade_hint = buildAhaHint(getTrackRecord());
+          }
         }
         const sessionIdForCohort = getRequestSessionId() ?? null;
         if (sessionIdForCohort !== null) {

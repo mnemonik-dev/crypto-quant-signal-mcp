@@ -29,6 +29,15 @@ import { recordFunnelEvent } from './performance-db.js';
 const emittedSessions = new Set<string>();
 const MAX_EMITTED_SESSIONS = 8192;
 
+// REFERRAL-INPRODUCT-NUDGE-W1 (2026-06-22): the ≤1-aha-referral-per-session cap.
+// A SIBLING bounded-LRU in THIS single-source session store (same pattern as
+// `emittedSessions`) — NOT a new throttle store / not a new file. The FIRST aha
+// referral trigger (high-conviction call / multi-hit scan / usage milestone) to
+// pass its gate in a session wins (peak-end); later triggers that session skip the
+// referral hint so we never stack. Best-effort (in-memory); a duplicate after a
+// process restart is harmless (worst case one extra hint), exactly like the aha.
+const ahaReferralShownSessions = new Set<string>();
+
 /**
  * Returns `true` the FIRST time a session_id is seen (caller should emit),
  * `false` on every subsequent call. Evicts the oldest insertion when full.
@@ -43,9 +52,33 @@ export function shouldEmitFirstNonHold(sessionId: string): boolean {
   return true;
 }
 
+/**
+ * Returns `true` the FIRST time an aha referral hint is shown for `sessionId`
+ * (caller should render), `false` on every subsequent call that session. Mirrors
+ * `shouldEmitFirstNonHold`'s bounded LRU. This is the single-source ≤1/session cap
+ * shared across all aha referral triggers (call / scan / milestone).
+ */
+export function shouldShowAhaReferral(sessionId: string): boolean {
+  if (ahaReferralShownSessions.has(sessionId)) return false;
+  if (ahaReferralShownSessions.size >= MAX_EMITTED_SESSIONS) {
+    const oldest = ahaReferralShownSessions.values().next().value;
+    if (oldest !== undefined) ahaReferralShownSessions.delete(oldest);
+  }
+  ahaReferralShownSessions.add(sessionId);
+  return true;
+}
+
+/** Read-only peek: has an aha referral hint already shown this session? Lets the
+ *  caller decide whether to even evaluate a trigger (so a milestone crossing isn't
+ *  committed/consumed when the session slot is already spent). Does NOT consume. */
+export function ahaReferralAlreadyShown(sessionId: string): boolean {
+  return ahaReferralShownSessions.has(sessionId);
+}
+
 /** Reset module state — tests only; production code never calls this. */
 export function _resetFirstNonHoldForTest(): void {
   emittedSessions.clear();
+  ahaReferralShownSessions.clear();
 }
 
 export interface FirstNonHoldInput {

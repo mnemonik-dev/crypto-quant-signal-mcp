@@ -16,9 +16,9 @@
 // ACTIVATION-NUDGE-W1 (2026-06-18): the 100% TIER_LIMIT_REACHED message renders
 // the approved CTA copy with LIVE track-record values (replacing the legacy
 // over-promising wording that violated the bounded-tier copy rule). Both imports
-// are pure / side-effect-free (getTrackRecord starts no timer); no import cycle.
-import { getTrackRecord } from './track-record-snapshot.js';
-import { buildLimitMessage } from './nudge-copy.js';
+// are pure / side-effect-free; no import cycle. REFERRAL-INPRODUCT-NUDGE-W1: the
+// referral arm + structured hint also come from the (pure) nudge-copy SoT.
+import { buildLimitMessage, buildReferralHint, type ReferralHint } from './nudge-copy.js';
 
 /**
  * Thrown by an exchange adapter when the upstream API returns HTTP 429
@@ -98,6 +98,10 @@ export class TierLimitReachedError extends Error {
   readonly tier: string;
   readonly suggested_upgrade_url: string;
   readonly retry_after_days: number;
+  /** REFERRAL-INPRODUCT-NUDGE-W1: additive, allow-listed referral hint surfaced in
+   *  the tool envelope (agent-relayable). `from: 'limit'`; keyed → own link, keyless
+   *  → get-your-link path. NO outcome_*. */
+  readonly referral_hint: ReferralHint;
 
   constructor(args: {
     currentUsage: number;
@@ -105,14 +109,19 @@ export class TierLimitReachedError extends Error {
     tier: string;
     suggestedUpgradeUrl: string;
     retryAfterDays: number;
+    /** Caller's derived referral code (keyed) or null (keyless) — drives the
+     *  referral-prominent copy + the structured referral_hint. */
+    referralCode?: string | null;
   }) {
-    // ACTIVATION-NUDGE-W1: approved 100%-limit copy + LIVE track-record values
-    // via the shared builder (generator-level — all throw sites inherit the fix;
-    // replaces the legacy over-promising wording that broke the bounded-tier copy
-    // rule). The human MESSAGE carries the BARE upgrade_from=limit URL; the structured
-    // `suggested_upgrade_url` field keeps the caller's utm_* chain + adds
-    // upgrade_from=limit for funnel attribution (A2).
-    super(buildLimitMessage({ total: args.monthlyLimit, ...getTrackRecord() }));
+    // REFERRAL-INPRODUCT-NUDGE-W1 (was ACTIVATION-NUDGE-W1): the shared builder now
+    // renders the referral-PROMINENT + upgrade-RETAINED copy (generator-level — all 4
+    // throw sites inherit it). State-adaptive on `referralCode` (keyed → own link;
+    // keyless → get-your-link path). The human MESSAGE carries the BARE
+    // upgrade_from=limit URL; the structured `suggested_upgrade_url` keeps the
+    // caller's utm_* chain + adds upgrade_from=limit (A2); `referral_hint` is the
+    // additive agent-relayable structured field.
+    super(buildLimitMessage({ total: args.monthlyLimit, referralCode: args.referralCode ?? null }));
+    this.referral_hint = buildReferralHint({ from: 'limit', code: args.referralCode ?? null });
     this.current_usage = args.currentUsage;
     this.monthly_limit = args.monthlyLimit;
     this.tier = args.tier;

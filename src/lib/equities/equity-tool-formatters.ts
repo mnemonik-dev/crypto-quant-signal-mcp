@@ -11,6 +11,7 @@
  */
 import { trackCall, checkQuota, daysUntilMonthReset } from '../license.js';
 import { TierLimitReachedError } from '../errors.js';
+import { referralCodeForKey } from '../referral-store.js'; // REFERRAL-INPRODUCT-NUDGE-W1: keyed→code, keyless→null
 import { PKG_VERSION } from '../pkg-version.js';
 import type { LicenseInfo } from '../../types.js';
 import { normalizeSymbol } from './equity-symbols.js';
@@ -98,6 +99,7 @@ function tierLimitError(license: LicenseInfo, q: { used: number; total: number }
     tier: license.tier,
     suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
     retryAfterDays: daysUntilMonthReset(license),
+    referralCode: referralCodeForKey(license.key),
   });
 }
 

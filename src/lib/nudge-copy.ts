@@ -20,6 +20,10 @@
  * utm_* secondary chain stays only on the structured machine fields.
  */
 
+// REFERRAL-INPRODUCT-NUDGE-W1 (2026-06-22): the referral arm pulls the bonus
+// number + the keyed give-get link from the referral SoT (pure module — no cycle).
+import { shareLink, bonusCallsLabel, REFERRAL_TERMS } from './referral-constants.js';
+
 /** Canonical signup base. `{signup_url}` in the approved copy resolves to this. */
 export const SIGNUP_BASE = 'https://api.algovault.com/signup';
 
@@ -67,14 +71,122 @@ export function buildAhaHint(stats: NudgeStats): string {
 }
 
 /**
- * 100% limit message — replaces the legacy "Upgrade for unlimited access" copy
- * (a no-"unlimited" copy-rule violation that was LIVE) across BOTH the
- * `TierLimitReachedError` envelope and `getQuotaExhaustedMessage`.
+ * 100% limit message — referral-PROMINENT + upgrade-RETAINED (REFERRAL-INPRODUCT-
+ * NUDGE-W1, Mr.1-approved 2026-06-22). The free path (refer a friend) LEADS; the
+ * paid path (upgrade) is retained beneath it — never removed (North Star:
+ * acquisition > revenue until 1K paying). Rendered by BOTH the
+ * `TierLimitReachedError` envelope and `getQuotaExhaustedMessage` (single source).
+ *
+ * State-adaptive: a KEYED user (has a referral code) sees their OWN give-get link;
+ * a KEYLESS user sees the free-account get-your-link path (sign up free → key +
+ * link) — NEVER a fake link. Line breaks are intentional (Mr.1 readability).
+ * `{BONUS_CALLS}` from the REFERRAL_TERMS SoT; `3,000/mo·$9.99` = the live upgrade
+ * copy. No proof line here (Mr.1's approved limit copy — proof rides the aha lines).
  */
-export function buildLimitMessage(ctx: { total: number } & NudgeStats): string {
+export function buildLimitMessage(ctx: { total: number; referralCode: string | null }): string {
+  const upgradeLine = `Or Upgrade → Starter, 3,000 calls/mo, $9.99: ${nudgeSignupUrl('limit')}`;
+  if (ctx.referralCode) {
+    return (
+      `You've hit your ${ctx.total} free calls this month.\n` +
+      `Keep going free: refer a friend — you both get ${bonusCallsLabel()} bonus calls.\n` +
+      `Your link: ${shareLink(ctx.referralCode, 'algovault.com')}.\n` +
+      upgradeLine
+    );
+  }
   return (
-    `You've hit your ${ctx.total} free calls this month. ` +
-    `Check the proof: ${ctx.pfeWr}% PFE win rate across ${ctx.callCount}+ on-chain-verified calls at ${TRACK_RECORD_URL}. ` +
-    `Upgrade now to keep scanning → Starter, 3,000 calls/mo, $9.99: ${nudgeSignupUrl('limit')}`
+    `You've hit your ${ctx.total} free calls this month.\n` +
+    `Keep going free: create a free account to get your referral link — refer a friend and you both get ${bonusCallsLabel()} bonus calls → ${referralSignupUrl('limit')}.\n` +
+    upgradeLine
   );
+}
+
+// ── REFERRAL-INPRODUCT-NUDGE-W1 (2026-06-22): referral arm at the value moments ──
+// Mr.1-approved copy applied VERBATIM (line breaks intentional). Numbers from the
+// REFERRAL_TERMS SoT (BONUS_CALLS); the keyed link from shareLink(code) — never
+// hardcoded. State-adaptive (keyed → own give-get link; keyless → free-account
+// get-your-link path). The structured ReferralHint is allow-listed (no outcome_*).
+
+/** Trigger (a) gate: the trade-call `confidence` (0-100) at/above which a first
+ *  non-HOLD is "high-conviction" enough to ask for a referral — the anti-"random
+ *  ask" guard (Mr.1 2026-06-22). Set well above the ~52 track-record record gate.
+ *  Tunable; lives here as the referral arm's gate. */
+export const AHA_HIGH_CONVICTION_CONFIDENCE = 70;
+
+/** The 4 aha referral triggers (Mr.1 2026-06-22). `aha_verify` ships its copy +
+ *  enum value here but is UNWIRED this wave — the `signal-performance` resource
+ *  read carries no per-user attribution, so the trigger is deferred to
+ *  `OPS-REFERRAL-VERIFY-NUDGE-W{NEXT}` (which adds the one call site). */
+export type AhaReferralFrom = 'aha_call' | 'aha_scan' | 'aha_milestone' | 'aha_verify';
+
+/** `referral_hint.from` — the limit wall + the aha triggers. */
+export type ReferralFrom = 'limit' | AhaReferralFrom;
+
+/** Free-account signup URL for a KEYLESS user to mint their own key + link. The
+ *  paid path keeps `?plan=starter` (`nudgeSignupUrl`); the referral path omits it
+ *  so the `/signup` start-free form is the landing. `<from>_referral` attributes
+ *  the CTA in the existing `upgrade_from` funnel capture (keys on ANY value). */
+export function referralSignupUrl(from: ReferralFrom): string {
+  return `${SIGNUP_BASE}?upgrade_from=${from}_referral`;
+}
+
+/** Structured, allow-listed referral hint — rides `_algovault.referral_hint` (aha)
+ *  + the TIER_LIMIT_REACHED envelope (limit). EXACTLY these 4 keys; NO outcome_*. */
+export interface ReferralHint {
+  cta: string;
+  link_or_path: string;
+  bonus_calls: number;
+  from: ReferralFrom;
+}
+
+/** Build the allow-listed structured referral hint. keyed → full give-get URL
+ *  (agent-relayable https link); keyless → free-account get-your-link URL. */
+export function buildReferralHint(args: { from: ReferralFrom; code: string | null }): ReferralHint {
+  const { from, code } = args;
+  return {
+    cta: code
+      ? `Refer a friend — you both get ${bonusCallsLabel()} bonus calls`
+      : `Create a free account to get your referral link — you both get ${bonusCallsLabel()} bonus calls`,
+    link_or_path: code ? shareLink(code) : referralSignupUrl(from),
+    bonus_calls: REFERRAL_TERMS.BONUS_CALLS,
+    from,
+  };
+}
+
+/** Aha referral hint (KEYED only — keyless aha keeps `buildAhaHint`). The caller
+ *  caps it to ≤1 per session via `shouldShowAhaReferral`. Each line KEEPS the
+ *  on-chain proof anchor (Q3). Copy Mr.1-approved 2026-06-22; numbers from SoT.
+ *  The display link is scheme-less (`algovault.com/join?ref=`) to match the copy. */
+export function buildAhaReferral(args: {
+  from: AhaReferralFrom;
+  code: string;
+  stats: NudgeStats;
+  verdict?: string;       // aha_call: 'BUY' | 'SELL'
+  k?: number;             // aha_scan: # live calls surfaced
+  callCountUser?: number; // aha_milestone: the milestone crossed
+}): string {
+  const { from, code, stats } = args;
+  const link = shareLink(code, 'algovault.com');
+  const bonus = bonusCallsLabel();
+  switch (from) {
+    case 'aha_call':
+      return (
+        `That's a high-conviction ${args.verdict ?? 'BUY/SELL'} call — ${stats.pfeWr}% PFE win rate across ${stats.callCount}+ on-chain-verified calls. ` +
+        `Friends get ${bonus} bonus calls with your link → ${link}`
+      );
+    case 'aha_scan':
+      return (
+        `Your scan surfaced ${args.k ?? 0} live calls — all on-chain-verified, ${stats.pfeWr}% PFE win rate. ` +
+        `Pass it on: friends get ${bonus} bonus calls → ${link}`
+      );
+    case 'aha_milestone':
+      return (
+        `You've pulled ${args.callCountUser ?? 0} calls with AlgoVault. Know a trader who'd use it? ` +
+        `They get ${bonus} bonus calls with your link → ${link}`
+      );
+    case 'aha_verify':
+      return (
+        `Every call is on-chain-verified — ${stats.pfeWr}% PFE WR across ${stats.callCount}+. ` +
+        `Share the proof: friends get ${bonus} bonus calls → ${link}`
+      );
+  }
 }

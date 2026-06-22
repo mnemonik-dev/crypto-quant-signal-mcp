@@ -1,6 +1,7 @@
 import { getAdapter, type ExchangeAdapter } from '../lib/exchange-adapter.js';
 import { getFundingArbLimit, isFreeTier, trackCall, getUpgradeHint, getQuotaExhaustedMessage, getRequestSessionId, daysUntilMonthReset, getMonthlyQuota } from '../lib/license.js';
 import { TierLimitReachedError } from '../lib/errors.js';
+import { referralCodeForKey } from '../lib/referral-store.js'; // REFERRAL-INPRODUCT-NUDGE-W1: keyed→code, keyless→null
 import { withTierWarning, DEFAULT_UPGRADE_URL } from '../lib/tier-warning.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
 import type {
@@ -152,6 +153,7 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
       tier: license.tier,
       suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
       retryAfterDays: daysUntilMonthReset(license),
+      referralCode: referralCodeForKey(license.key),
     });
   }
 

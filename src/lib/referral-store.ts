@@ -230,6 +230,16 @@ export function deriveUserCode(apiKey: string): string {
   return base32Encode(digest.subarray(0, 5)); // 5 bytes → exactly 8 base32 chars
 }
 
+/**
+ * REFERRAL-INPRODUCT-NUDGE-W1: the caller's referral code for the in-product nudge,
+ * or `null` for a KEYLESS caller (who has no account → gets the get-your-link path,
+ * never a fake link). Pure wrapper over `deriveUserCode` so the limit/aha nudge
+ * sites share ONE keyed/keyless decision instead of repeating the ternary.
+ */
+export function referralCodeForKey(key: string | null | undefined): string | null {
+  return key ? deriveUserCode(key) : null;
+}
+
 function normalizeAttribution(r: Record<string, unknown>): AttributionRow {
   return {
     id: Number(r.id),

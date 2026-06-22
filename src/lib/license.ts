@@ -502,8 +502,12 @@ export function initQuotaDb(): void {
     dbExec(`CREATE TABLE IF NOT EXISTS quota_usage (
       tracker_key TEXT PRIMARY KEY,
       call_count INTEGER NOT NULL DEFAULT 0,
-      period_start TEXT NOT NULL
+      period_start TEXT NOT NULL,
+      milestone_referral_shown INTEGER NOT NULL DEFAULT 0
     )`);
+    // REFERRAL-INPRODUCT-NUDGE-W1: backfill the lifetime-dedup column on EXISTING
+    // tables (prod PG is pre-applied via SSH; this is the in-code idempotent net).
+    ensureQuotaMilestoneColumn().catch(() => {});
     // Load persisted counts into memory (dbQuery is always async)
     const now = Date.now();
     dbQuery<{ tracker_key: string; call_count: string; period_start: string }>(
@@ -545,6 +549,66 @@ function persistTracker(key: string, tracker: CallTracker): void {
     );
   } catch {
     // Best-effort persistence — don't block the request
+  }
+}
+
+// ── REFERRAL-INPRODUCT-NUDGE-W1 (2026-06-22): usage-milestone aha referral (c) ──
+const PG = !!process.env.DATABASE_URL;
+
+/** Monthly billable-call counts at which a KEYED user is offered the referral
+ *  (trigger c). Free cap is 100/mo → both reachable. Lifetime-deduped per milestone
+ *  (the `milestone_referral_shown` column persists across the monthly reset) and
+ *  capped to ≤1 aha referral/session by `shouldShowAhaReferral`. Tunable. */
+export const MILESTONE_REFERRAL_VALUES = [25, 50] as const;
+
+let _milestoneColInit = false;
+/** Idempotent ensure of the lifetime-dedup column on the EXISTING quota_usage store
+ *  (extends it — NOT a new throttle store). PG: native IF NOT EXISTS; SQLite: PRAGMA
+ *  pre-check (no ADD COLUMN IF NOT EXISTS). Prod PG is pre-applied via SSH. */
+export async function ensureQuotaMilestoneColumn(): Promise<void> {
+  if (_milestoneColInit) return;
+  try {
+    if (PG) {
+      dbExec('ALTER TABLE quota_usage ADD COLUMN IF NOT EXISTS milestone_referral_shown INTEGER NOT NULL DEFAULT 0;');
+    } else {
+      const rows = await dbQuery<{ name: string }>('PRAGMA table_info(quota_usage)', []);
+      if (!rows.some((r) => r.name === 'milestone_referral_shown')) {
+        dbExec('ALTER TABLE quota_usage ADD COLUMN milestone_referral_shown INTEGER NOT NULL DEFAULT 0;');
+      }
+    }
+    _milestoneColInit = true;
+  } catch {
+    // Best-effort — the fresh CREATE TABLE already carries the column; never block.
+  }
+}
+
+/** Reset the milestone-column latch — tests only. */
+export function _resetMilestoneColInitForTest(): void {
+  _milestoneColInit = false;
+}
+
+/**
+ * REFERRAL-INPRODUCT-NUDGE-W1 trigger (c): if the caller's post-increment monthly
+ * billable-call count EXACTLY hits an unshown milestone, mark it shown (LIFETIME —
+ * survives the monthly reset) and return the milestone value; else `null`. Reads the
+ * live in-memory count (trackCall already ran upstream) so the exact-equality gate
+ * means the DB read/write fires only on the crossing call (≤ a couple per user,
+ * ever). Fail-soft — returns null on any error so the response path is never broken.
+ */
+export async function recordAhaMilestoneCrossing(license: LicenseInfo): Promise<number | null> {
+  try {
+    const trackerKey = deriveTrackerKey(license);
+    const callCount = callTrackers.get(trackerKey)?.count ?? 0;
+    if (!(MILESTONE_REFERRAL_VALUES as readonly number[]).includes(callCount)) return null;
+    const rows = await dbQuery<{ milestone_referral_shown: string | number | null }>(
+      'SELECT milestone_referral_shown FROM quota_usage WHERE tracker_key = ?', [trackerKey],
+    );
+    const shown = rows.length ? Number(rows[0].milestone_referral_shown ?? 0) : 0;
+    if (callCount <= shown) return null; // already shown this milestone (or a higher one)
+    dbRun('UPDATE quota_usage SET milestone_referral_shown = ? WHERE tracker_key = ?', callCount, trackerKey);
+    return callCount;
+  } catch {
+    return null;
   }
 }
 
@@ -748,13 +812,14 @@ export function getUpgradeHint(
   return undefined;
 }
 
-export function getQuotaExhaustedMessage(used: number, total: number): string {
-  // ACTIVATION-NUDGE-W1: approved 100%-limit copy + LIVE track-record values via
-  // the shared builder (same string the TIER_LIMIT_REACHED envelope renders).
-  // `used` is unused in the copy (the message states the `total` cap) but kept
-  // in the signature for call-site compatibility + future use.
+export function getQuotaExhaustedMessage(used: number, total: number, referralCode: string | null = null): string {
+  // REFERRAL-INPRODUCT-NUDGE-W1: same referral-prominent + upgrade-retained string
+  // the TIER_LIMIT_REACHED envelope renders (single source). State-adaptive on
+  // `referralCode` (keyed → own link; keyless/default → get-your-link path).
+  // `used` is unused in the copy (the message states the `total` cap) but kept in
+  // the signature for call-site compatibility.
   void used;
-  return buildLimitMessage({ total, ...getTrackRecord() });
+  return buildLimitMessage({ total, referralCode });
 }
 
 /**

@@ -74,15 +74,21 @@ describe('getUpgradeHint', () => {
 });
 
 describe('getQuotaExhaustedMessage', () => {
-  it('renders the approved 100%-limit copy (no "unlimited" violation) + track record', () => {
-    // ACTIVATION-NUDGE-W1: same shared builder the TIER_LIMIT_REACHED envelope
-    // renders; replaces the legacy "Free tier limit reached … unlimited" copy.
+  it('renders the referral-prominent + upgrade-retained limit copy (REFERRAL-INPRODUCT-NUDGE-W1)', () => {
+    // Same shared builder the TIER_LIMIT_REACHED envelope renders. No referralCode
+    // arg → keyless (get-your-link path leads); upgrade retained beneath. No "unlimited".
     const msg = getQuotaExhaustedMessage(100, 100);
     expect(msg).toContain("You've hit your 100 free calls this month");
-    expect(msg).toContain('PFE win rate');
-    expect(msg).toContain('algovault.com/track-record');
-    expect(msg).toContain('Starter, 3,000 calls/mo');
+    expect(msg.toLowerCase()).toContain('refer a friend');
+    expect(msg).toContain('create a free account'); // keyless get-your-link path
+    expect(msg).toContain('Or Upgrade → Starter, 3,000 calls/mo, $9.99');
     expect(msg).toContain('signup?plan=starter&upgrade_from=limit');
     expect(msg).not.toContain('unlimited');
+  });
+
+  it('KEYED → renders the user\'s own give-get link', () => {
+    const msg = getQuotaExhaustedMessage(100, 100, 'ABCD1234');
+    expect(msg).toContain('Your link: algovault.com/join?ref=ABCD1234');
+    expect(msg).not.toContain('create a free account');
   });
 });

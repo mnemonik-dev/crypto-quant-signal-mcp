@@ -28,6 +28,13 @@ import { checkQuota, trackCall, getQuotaExhaustedMessage, getRequestSessionId } 
 import { formatScanReceipts, type ScanReceipts } from '../lib/receipts.js';
 import { getReceiptTrackRecord } from '../lib/receipts-track-record.js';
 import { PKG_VERSION } from '../lib/pkg-version.js';
+// REFERRAL-INPRODUCT-NUDGE-W1: the limit moment (quota-exhausted) + trigger (b)
+// multi-hit-scan referral arm. Numbers from the referral SoT; ≤1 aha referral/
+// session shared with get_trade_call via the single-source aha-event store.
+import { referralCodeForKey } from '../lib/referral-store.js';
+import { buildReferralHint, buildAhaReferral, type ReferralHint } from '../lib/nudge-copy.js';
+import { shouldShowAhaReferral } from '../lib/aha-event.js';
+import { getTrackRecord } from '../lib/track-record-snapshot.js';
 import {
   SCAN_TRADE_CALLS_DESCRIPTION,
   PARAM_DESC_SCAN_TOP_N,
@@ -65,6 +72,12 @@ export interface ScanAlgovaultMeta {
   compatible_with: string[];
   signal_performance: string;
   session_id: string | null;
+  /** REFERRAL-INPRODUCT-NUDGE-W1 trigger (b): the human multi-hit-scan referral
+   *  line for a KEYED user (≤1 aha referral/session). Additive, optional. */
+  upgrade_hint?: string;
+  /** REFERRAL-INPRODUCT-NUDGE-W1: additive, allow-listed structured referral hint
+   *  (agent-relayable). NO outcome_*. */
+  referral_hint?: ReferralHint;
 }
 
 export interface ScanTradeCallsResponse extends ScanTradeCallsResult {
@@ -85,8 +98,15 @@ export interface ScanQuotaExhaustedResponse {
   message: string;
   quota: { used: number; total: number; remaining: number };
   suggested_action: string;
+  /** REFERRAL-INPRODUCT-NUDGE-W1: the limit moment also carries the structured,
+   *  allow-listed referral hint (`from: 'limit'`); the `message` leads with it. */
+  referral_hint: ReferralHint;
   _algovault: { tool: 'scan_trade_calls'; version: string; session_id: string | null };
 }
+
+/** REFERRAL-INPRODUCT-NUDGE-W1 trigger (b): min # live (non-HOLD) calls in one scan
+ *  to count as a "multi-hit" referral moment (Step-0; scan default limit is 10). */
+const SCAN_REFERRAL_MIN_HITS = 3;
 
 const UPGRADE_HINT = 'Upgrade to Starter at https://api.algovault.com/signup?plan=starter or pay per call via x402.';
 const TRACK_RECORD_POINTER =
@@ -102,14 +122,17 @@ export async function runScanTradeCall(
   params: ScanTradeCallsParams,
   license: LicenseInfo,
 ): Promise<ScanTradeCallsResponse | ScanQuotaExhaustedResponse> {
+  const refCode = referralCodeForKey(license.key);
   const entry = checkQuota(license);
   if (!entry.allowed) {
+    // Limit moment (the scan wall): referral-prominent message + structured hint.
     return {
       error: 'quota_exhausted',
       code: 'tier_limit_reached',
-      message: getQuotaExhaustedMessage(entry.used, entry.total),
+      message: getQuotaExhaustedMessage(entry.used, entry.total, refCode),
       quota: { used: entry.used, total: entry.total, remaining: 0 },
       suggested_action: UPGRADE_HINT,
+      referral_hint: buildReferralHint({ from: 'limit', code: refCode }),
       _algovault: { tool: 'scan_trade_calls', version: PKG_VERSION, session_id: getRequestSessionId() ?? null },
     };
   }
@@ -119,16 +142,26 @@ export async function runScanTradeCall(
   const units = Math.max(1, result.eligible_non_hold);
   const tracked = trackCall(license, units);
 
+  const sid = getRequestSessionId() ?? null;
+  const meta: ScanAlgovaultMeta = {
+    tool: 'scan_trade_calls',
+    version: PKG_VERSION,
+    quota: { used: tracked.used, total: tracked.total, remaining: tracked.remaining },
+    compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-execution-mcp'],
+    signal_performance: TRACK_RECORD_POINTER,
+    session_id: sid,
+  };
+  // Trigger (b): a multi-hit scan (≥ SCAN_REFERRAL_MIN_HITS live calls) → referral
+  // hint for a KEYED user. ≤1 aha referral/session, shared with get_trade_call via
+  // the single-source aha store (the first aha trigger that session wins).
+  if (refCode && sid && result.eligible_non_hold >= SCAN_REFERRAL_MIN_HITS && shouldShowAhaReferral(sid)) {
+    meta.upgrade_hint = buildAhaReferral({ from: 'aha_scan', code: refCode, stats: getTrackRecord(), k: result.eligible_non_hold });
+    meta.referral_hint = buildReferralHint({ from: 'aha_scan', code: refCode });
+  }
+
   return {
     ...result,
-    _algovault: {
-      tool: 'scan_trade_calls',
-      version: PKG_VERSION,
-      quota: { used: tracked.used, total: tracked.total, remaining: tracked.remaining },
-      compatible_with: ['crypto-quant-risk-mcp', 'crypto-quant-execution-mcp'],
-      signal_performance: TRACK_RECORD_POINTER,
-      session_id: getRequestSessionId() ?? null,
-    },
+    _algovault: meta,
     // Envelope-shared inline proof (live, cached, in-process; fail-open).
     _receipts: formatScanReceipts(getReceiptTrackRecord()),
   };

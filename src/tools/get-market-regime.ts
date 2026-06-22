@@ -3,6 +3,7 @@ import { adx, atr, detectPriceStructure } from '../lib/indicators.js';
 import { getDexForCoin, isKnownTradFi } from '../lib/asset-tiers.js';
 import { getVenuesSupporting, COVERAGE_PROBED_AT } from '../lib/venue-coverage.js';
 import { TradFiSymbolUnsupportedOnVenueError, TierLimitReachedError, InsufficientCandlesError } from '../lib/errors.js';
+import { referralCodeForKey } from '../lib/referral-store.js'; // REFERRAL-INPRODUCT-NUDGE-W1: keyed→code, keyless→null
 import { resolveAssetClass } from '../lib/underlying-type.js';
 import { classifyUnderlyingSession, isClosedState } from '../lib/market-sessions.js';
 import { fetchTradFiFundingByVenue, normalizeTo8h, computeTradFiFundingSentiment, buildFundingByVenue } from '../lib/tradfi-funding.js';
@@ -45,6 +46,7 @@ export async function getMarketRegime(input: MarketRegimeInput): Promise<MarketR
       tier: license.tier,
       suggestedUpgradeUrl: 'https://api.algovault.com/signup?plan=starter&utm_source=mcp_tool&utm_campaign=tier_limit_reached',
       retryAfterDays: daysUntilMonthReset(license),
+      referralCode: referralCodeForKey(license.key),
     });
   }
 
