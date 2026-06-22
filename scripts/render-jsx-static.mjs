@@ -2109,8 +2109,11 @@ async function main() {
       raw = w7HeroCounter(raw);                    // H-PR1 + label "Agent Calls"
       raw = w7HeroRecentCall(raw);                 // H-PR2 mount-point (poller fills via JS)
       raw = w7HeroDropVerdict(raw);                // Q-W7-2 DROP verdict snippet
-      raw = w7HeroP50ToPfeWr(raw);                 // Q-W7-1 P50 → PFE WR
-      raw = w7HeroFourStatLiveBinds(raw);          // VENUES + TIMEFRAMES + Total Trade Calls
+      // LANDING-HERO-DEDENSIFY-W1 (2026-06-22): the right-panel 4-stat row (PFE WR / Venues /
+      // Timeframes / Total Trade Calls) was removed from the hero to de-densify. The two passes
+      // that rewrote+live-bound that row (w7HeroP50ToPfeWr + w7HeroFourStatLiveBinds) are now
+      // no-ops on the new JSX and are intentionally NOT called; pfe_wr/exchange_count/
+      // timeframe_count/call_count still live-bind via the proof line + diagram footer.
       raw = w7HeroDiagramFooter(raw);              // Q-W7-4 footer "5 venues integrated · 5 featured" live-bind
       raw = w7HeroNavVersion(raw, version);        // Q-W7-3 nav v1.x shipped
       raw = w7HeroDiagramChipsToLogos(raw);        // W6 Q-W7 carry-forward (5 SVG <image> logos in V0Diagram chips, Mr.1 fix-forward: fill chip)

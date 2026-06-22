@@ -66,7 +66,7 @@ test('Q-D3..Q-D9: 7 H2 texts adopted from JSX verbatim', async () => {
     'Brain + execution pairing.',                  // Q-D5
     'Every qualifying call, on the record.',       // Q-D6
     'Simple pricing.',                             // Q-D7
-    'Two transports. Same tools.',                 // Q-D8
+    'Connect.',                 // Q-D8
     'Frequently asked.',                           // Q-D9
   ];
   for (const heading of jsxHeadings) {
@@ -87,26 +87,20 @@ test('Q-D1: 4-tier pricing preserved (NO X402 5th card)', async () => {
   assert.doesNotMatch(html, /X402 PER CALL/, 'no JSX UPPERCASE X402 PER CALL pricing card (Q-D1 architect-ratified A)');
 });
 
-test('Q-F1 → W7 4-stat row (Venues/Timeframes/Total Trade Calls/PFE WR); p50 latency stays REMOVED', async () => {
+test('LANDING-HERO-DEDENSIFY-W1: right-panel 4-stat row REMOVED from hero (SUPERSEDES W5 Q-F1 / W7 Q-W7-1)', async () => {
   const html = await read('landing/index.html');
-  // W5 Q-F1 ratified 3-stat row (Venues/Timeframes/Signals; p50 REMOVED).
-  // W7 ARCHITECTURAL SHIFT 2026-05-10: Mr.1 directive "make algovault.com same as the HTML" +
-  // architect-ratified Q-W7-1 → 4-stat row (Venues / Timeframes / Total Trade Calls / PFE WR).
-  // P50 LATENCY stays REMOVED (W5 Q-F1 still in force) — replaced with PFE WR live-bind.
-  // SIGNALS label renamed to "Total Trade Calls" per Mr.1 H-PR3.
-  assert.match(html, />Venues</, 'Venues stat label present');
-  assert.match(html, />Timeframes</, 'Timeframes stat label present');
-  assert.match(html, />Total Trade Calls</, 'Total Trade Calls stat label present (W7 H-PR3 rename)');
-  assert.match(html, />PFE WR</, 'PFE WR stat label present (W7 Q-W7-1 P50 replacement)');
-  // 4 data-tr-field bindings (live)
-  assert.match(html, /data-tr-field="exchange_count"/, 'venues binds to exchange_count');
-  assert.match(html, /data-tr-field="timeframe_count"/, 'timeframes binds to timeframe_count');
-  assert.match(html, /data-tr-field="call_count"/, 'total trade calls binds to call_count');
-  assert.match(html, /data-tr-field="pfe_wr"/, 'PFE WR binds to pfe_wr');
-  // p50 latency / 640ms NOT present anywhere in rendered markup
+  // SUPERSEDED BY LANDING-HERO-DEDENSIFY-W1 (2026-06-22): the hero was de-densified — the
+  // right-panel stat grid (PFE WR / Venues / Timeframes / Total Trade Calls) was removed.
+  // The four labels are gone; the live-bind fields still hydrate elsewhere (the proof line keeps
+  // pfe_wr; venues/timeframes/calls remain in the kicker / diagram / on /track-record).
   const stripped = html.replace(/<!--[\s\S]*?-->/g, '');
-  assert.doesNotMatch(stripped, />640ms</, 'no 640ms p50 latency value in rendered markup');
-  assert.doesNotMatch(stripped, />p50 latency</i, 'no p50 latency label in rendered markup');
+  for (const label of [/>Venues</, />Timeframes</, />Total Trade Calls</, />PFE WR</]) {
+    assert.doesNotMatch(stripped, label, `hero stat label ${label} removed (de-densify)`);
+  }
+  assert.match(html, /data-tr-field="pfe_wr"/, 'pfe_wr still live-binds via the hero proof line');
+  // p50 latency / 640ms remain absent (W5 Q-F1 / W7 still in force)
+  assert.doesNotMatch(stripped, />640ms</, 'no 640ms p50 latency value');
+  assert.doesNotMatch(stripped, />p50 latency</i, 'no p50 latency label');
 });
 
 test('Q-D2: /verify subhead adopted from JSX (shorter form)', async () => {
@@ -154,7 +148,7 @@ test('D1-C+D2-C+W3+W4+W6 preservation regression-free (W7 hero shift acknowledge
   // GEO-W1 H1 + hero opening verbatim
   assert.match(html, /The Brain Layer/, 'H1 verbatim (V1Hero word-break: "The Brain Layer<br>for AI Trading Agents.")');
   // W7 fix-forward ROUND 10 (2026-05-11): hero rewritten to 3-line arrangement per Mr.1 directive.
-  assert.match(html, /One MCP call returns direction, confidence, and regime/, 'hero opening verbatim (ROUND 10)');
+  assert.match(html, /One MCP call returns a composite verdict — direction, confidence, regime/, 'hero opening verbatim (ROUND 10)');
   // 5 exchange names
   for (const ex of ['Hyperliquid', 'Binance', 'Bybit', 'OKX', 'Bitget']) {
     assert.ok(html.includes(ex), `exchange "${ex}" preserved`);

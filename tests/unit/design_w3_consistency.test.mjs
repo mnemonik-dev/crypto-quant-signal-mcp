@@ -57,7 +57,7 @@ test('landing/index.html: D1-C foundation preserved', async () => {
   assert.doesNotMatch(html, /#d4af37|#ffd700/, '0 residual gold-hex');
   assert.match(html, /The Brain Layer for AI Trading Agents/, 'H1 verbatim');
   // W7 fix-forward ROUND 10 (2026-05-11): hero rewritten to 3-line arrangement per Mr.1 directive.
-  assert.match(html, /One MCP call returns direction, confidence, and regime/, 'hero opening verbatim (ROUND 10)');
+  assert.match(html, /One MCP call returns a composite verdict — direction, confidence, regime/, 'hero opening verbatim (ROUND 10)');
 });
 
 test('landing/index.html: hero flow diagram (W7 V0Diagram supersedes W3 hero-flow-container)', async () => {

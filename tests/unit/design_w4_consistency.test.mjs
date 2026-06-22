@@ -91,7 +91,7 @@ test('landing/index.html: W6+W7 hero+below-fold+landing-rest dual-renders presen
 test('landing/index.html: hero opening + H1 + 5 exchanges + MCP tools verbatim', async () => {
   const html = await read('landing/index.html');
   // W7 fix-forward ROUND 10 (2026-05-11): hero rewritten to 3-line arrangement per Mr.1 directive.
-  assert.match(html, /One MCP call returns direction, confidence, and regime/, 'hero opening verbatim (ROUND 10)');
+  assert.match(html, /One MCP call returns a composite verdict — direction, confidence, regime/, 'hero opening verbatim (ROUND 10)');
   assert.match(html, /The Brain Layer for AI Trading Agents/, 'H1 verbatim');
   for (const ex of ['Hyperliquid', 'Binance', 'Bybit', 'OKX', 'Bitget']) {
     assert.ok(html.includes(ex), `exchange "${ex}" verbatim`);

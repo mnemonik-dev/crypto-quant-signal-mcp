@@ -69,17 +69,17 @@ test('H-PR2: MOST RECENT CALL poller (randomized 1-3s, /api/recent-calls?limit=1
   assert.match(html, /data-w7-recent-call[^>]*aria-live="polite"/, 'aria-live polite on data-w7-recent-call');
 });
 
-test('H-PR3: 4-stat row "Total Trade Calls" + live-bind to call_count', async () => {
+test('LANDING-HERO-DEDENSIFY-W1: hero "Total Trade Calls" stat REMOVED (SUPERSEDES W7 H-PR3)', async () => {
   const html = await read('landing/index.html');
-  assert.match(html, />Total Trade Calls</, 'Total Trade Calls label (Mr.1 H-PR3 rename from "Signals")');
-  assert.match(html, /data-tr-field="call_count"/, 'call_count live-bind');
+  // SUPERSEDED BY LANDING-HERO-DEDENSIFY-W1 (2026-06-22): the call-count was dropped from the hero stat grid.
+  assert.doesNotMatch(html, />Total Trade Calls</, 'Total Trade Calls stat label removed from hero (de-densify)');
 });
 
-test('Q-W7-1: P50 LATENCY replaced with PFE WR live-bind', async () => {
+test('LANDING-HERO-DEDENSIFY-W1: hero "PFE WR" stat REMOVED, pfe_wr still binds (SUPERSEDES W7 Q-W7-1)', async () => {
   const html = await read('landing/index.html');
-  assert.match(html, />PFE WR</, 'PFE WR label present (Q-W7-1 P50 replacement)');
-  assert.match(html, /data-tr-field="pfe_wr"/, 'pfe_wr live-bind present');
-  // P50 latency value (640ms) NOT present anywhere
+  // SUPERSEDED BY LANDING-HERO-DEDENSIFY-W1 (2026-06-22): the right-panel stat grid was removed.
+  assert.doesNotMatch(html, />PFE WR</, 'PFE WR stat label removed from hero (de-densify)');
+  assert.match(html, /data-tr-field="pfe_wr"/, 'pfe_wr still live-binds via the hero proof line');
   assert.doesNotMatch(html, />640ms</, 'no 640ms p50 placeholder');
   assert.doesNotMatch(html, />p50 latency</i, 'no p50 latency label');
 });
@@ -175,7 +175,7 @@ test('W6 below-fold + landing-rest preserved BYTE-IDENTICAL through W7', async (
   // W6 landing-rest sections (8, TradFiCallout SKIPPED)
   for (const heading of [
     'Try it in 30 seconds.', '3 tools, One verdict.', 'Brain + execution pairing.',
-    'Every qualifying call, on the record.', 'Simple pricing.', 'Two transports. Same tools.', 'Frequently asked.',
+    'Every qualifying call, on the record.', 'Simple pricing.', 'Connect.', 'Frequently asked.',
   ]) {
     assert.ok(html.includes(heading), `W6 landing-rest heading "${heading}" preserved`);
   }

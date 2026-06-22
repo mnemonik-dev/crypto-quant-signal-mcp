@@ -1,0 +1,840 @@
+/* global React */
+const { useState, useEffect, useRef } = React;
+
+/* ---------- Shared helpers ---------- */
+
+// Exchange placeholders — letter monograms, not real brand marks.
+// Distinct hue per slot so the row reads as 5 different venues without copying brand IP.
+const EXCHANGES = [
+{ id: 'hl', mono: 'H', name: 'Hyperliquid', hue: 165 },
+{ id: 'bn', mono: 'B', name: 'Binance', hue: 75 },
+{ id: 'by', mono: 'BY', name: 'Bybit', hue: 35 },
+{ id: 'ok', mono: 'O', name: 'OKX', hue: 265 },
+{ id: 'bg', mono: 'BG', name: 'Bitget', hue: 220 }];
+
+
+const ExchangeTile = ({ x, dense = false }) =>
+<span className="xchg-tile" style={dense ? { padding: '6px 10px', fontSize: 11.5 } : undefined}>
+    <span
+    className="xchg-mark"
+    style={{ '--mark': `oklch(0.72 0.1 ${x.hue})` }}>
+    {x.mono}</span>
+    {x.name}
+  </span>;
+
+
+// Live counter that ticks up
+function useTickingCounter(start = 1247892, perSec = 0.7) {
+  const [n, setN] = useState(start);
+  useEffect(() => {
+    const id = setInterval(() => setN((v) => v + 1), 1000 / perSec);
+    return () => clearInterval(id);
+  }, [perSec]);
+  return n;
+}
+
+const fmt = (n) => n.toLocaleString('en-US');
+
+// Cycling "last call" line
+const LAST_CALLS = [
+'BTC 1h Binance · HOLD · 0.8s ago',
+'ETH 4h Hyperliquid · LONG · 1.2s ago',
+'SOL 15m Bybit · SHORT · 0.4s ago',
+'BTC 5m OKX · HOLD · 0.9s ago',
+'ARB 1h Bitget · LONG · 1.5s ago'];
+
+function useCyclingCall() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI((v) => (v + 1) % LAST_CALLS.length), 2400);
+    return () => clearInterval(id);
+  }, []);
+  return LAST_CALLS[i];
+}
+
+const TrustRow = ({ compact = false }) =>
+<div className="trust-row" style={compact ? { gap: 16, fontSize: 10.5 } : undefined}>
+    <span className="trust-item">
+      <span className="placeholder-cap">npm</span>
+      <span className="trust-num">14.2k</span>
+      <span style={{ color: 'var(--fg-4)' }}>weekly</span>
+    </span>
+    <span style={{ color: 'var(--fg-4)' }}>·</span>
+    <span className="trust-item">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.7 }}>
+        <path d="M8 0l2.4 5 5.6.8-4 4 1 5.6L8 12.8 2.9 15.4l1-5.6-4-4 5.6-.8L8 0z" />
+      </svg>
+      <span className="trust-num">3.1k</span>
+      <span style={{ color: 'var(--fg-4)' }}>GitHub</span>
+    </span>
+    <span style={{ color: 'var(--fg-4)' }}>·</span>
+    <span className="trust-item">
+      <span className="trust-num">Smithery</span>
+      <span style={{ color: 'var(--fg-4)' }}>verified</span>
+    </span>
+    <span style={{ color: 'var(--fg-4)' }}>·</span>
+    <span className="trust-item">
+      <span className="trust-num">claudemarketplaces</span>
+    </span>
+  </div>;
+
+
+/* ---------- V1: Minimal / Linear-style ---------- */
+
+/* ---------- V0: Original linear flow.diagram ---------- */
+// Five featured exchanges (left) → bezier flow lines → central circle hub → AI Agents (right).
+// Scales to N venues: featured 5 keep their tile + label, the rest render as
+// thin dots so the diagram stays legible up to ~40 integrations.
+function V0Diagram({ width = 560, height = 320, count = 5 }) {
+  const cx = width / 2;
+  const cy = height / 2;
+  const leftX = 40;
+  const rightX = width - 40;
+  const N = Math.max(count, 5);
+  // Unique id per render so multiple V0Diagrams in the same DOM don't share
+  // path ids — otherwise every <mpath href="#v0-path-0"> resolves to the
+  // first SVG and dots in the second instance follow the wrong path.
+  const uid = React.useId().replace(/[:]/g, '');
+
+  // Featured-exchange indices spread evenly across the column.
+  const featuredAt = N <= 5
+    ? EXCHANGES.slice(0, N).map((_, i) => i)
+    : EXCHANGES.map((_, i) => Math.round(i * (N - 1) / 4));
+
+  const margin = 28;
+  const stride = (height - margin * 2) / Math.max(N - 1, 1);
+  const slots = Array.from({ length: N }, (_, i) => {
+    const fi = featuredAt.indexOf(i);
+    return { i, y: margin + i * stride, featured: fi >= 0 ? EXCHANGES[fi] : null };
+  });
+
+  const pathId = (i) => `v0-${uid}-path-${i}`;
+  const aiPathId = `v0-${uid}-path-ai`;
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="v0-line" x1="0" x2="1">
+          <stop offset="0%" stopColor="var(--accent-edge, oklch(0.42 0.06 200))" stopOpacity="0.3" />
+          <stop offset="50%" stopColor="var(--accent, oklch(0.86 0.13 200))" stopOpacity="1" />
+          <stop offset="100%" stopColor="var(--accent-edge, oklch(0.42 0.06 200))" stopOpacity="0.3" />
+        </linearGradient>
+        <radialGradient id="v0-hub">
+          <stop offset="0%" stopColor="var(--accent, oklch(0.86 0.13 200))" stopOpacity="0.5" />
+          <stop offset="60%" stopColor="var(--accent-deep, oklch(0.55 0.12 210))" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="var(--accent-deep, oklch(0.55 0.12 210))" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r="90" fill="url(#v0-hub)" />
+
+      {/* Lines + travelling packets — one per slot */}
+      {slots.map((s) => {
+        const midX = (leftX + cx) / 2;
+        const startX = leftX + 20;
+        const d = `M ${startX} ${s.y} C ${midX} ${s.y}, ${midX} ${cy}, ${cx - 38} ${cy}`;
+        const isFeatured = !!s.featured;
+        // Random-feeling but deterministic per-spoke timing so packets desync.
+        const seed = (Math.sin(s.i * 12.9898) * 43758.5453) % 1;
+        const jitter = Math.abs(seed); // 0..1
+        const dur = (isFeatured ? 1.4 : 1.7) + jitter * 1.3;
+        const begin = jitter * 2.4;
+        return (
+          <g key={s.i}>
+            <path id={pathId(s.i)} d={d}
+                  stroke={isFeatured ? 'oklch(0.32 0.012 265)' : 'oklch(0.3 0.012 265)'}
+                  strokeOpacity={isFeatured ? 0.7 : 0.28}
+                  strokeWidth={isFeatured ? 1 : 0.6}
+                  fill="none" />
+            {/* Raw-data packet (white) — exchange → AlgoVault MCP. */}
+            <circle r={isFeatured ? 2.4 : 1.4}
+                    fill="oklch(0.98 0.003 265)"
+                    filter={isFeatured ? "drop-shadow(0 0 3px oklch(0.98 0.003 265 / 0.7))" : undefined}
+                    opacity={isFeatured ? 1 : 0.7}>
+              <animateMotion dur={`${dur}s`} repeatCount="indefinite" begin={`${begin}s`}>
+                <mpath href={`#${pathId(s.i)}`} />
+              </animateMotion>
+              <animate attributeName="opacity"
+                       values={isFeatured ? '0;1;1;0' : '0;0.65;0.65;0'}
+                       keyTimes="0;0.15;0.85;1"
+                       dur={`${dur}s`} repeatCount="indefinite" begin={`${begin}s`} />
+            </circle>
+          </g>
+        );
+      })}
+
+      {/* Hub → AI Agents line + green moving dot */}
+      <path id={aiPathId} d={`M ${cx + 38} ${cy} L ${rightX - 30} ${cy}`}
+            stroke="oklch(0.32 0.012 265)" strokeOpacity="0.7" strokeWidth="1" fill="none" />
+      <path d={`M ${cx + 38} ${cy} L ${rightX - 30} ${cy}`}
+            stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="1.4" fill="none" strokeDasharray="4 6"
+            style={{ animation: 'pulse-dash 0.9s linear infinite' }} />
+      <circle r="3" fill="var(--accent, oklch(0.86 0.16 165))"
+              filter="drop-shadow(0 0 4px var(--accent, oklch(0.86 0.16 165)))">
+        <animateMotion dur="1.0s" repeatCount="indefinite">
+          <mpath href={`#${aiPathId}`} />
+        </animateMotion>
+        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="1.0s" repeatCount="indefinite" />
+      </circle>
+
+      {/* Anonymous venue dots (non-featured slots) */}
+      {slots.filter((s) => !s.featured).map((s) => (
+        <g key={'a' + s.i} transform={`translate(${leftX} ${s.y})`}>
+          <circle r="2.2" fill="var(--accent-edge, oklch(0.42 0.06 200))" opacity="0.55" />
+          <circle r="3.6" fill="none" stroke="var(--accent-edge, oklch(0.42 0.06 200))" strokeOpacity="0.25" strokeWidth="0.5" />
+        </g>
+      ))}
+
+      {/* Featured exchange tiles — render last so they sit above any nearby anon dots.
+          NOTE: these are placeholder logo tiles (mono letter on a hue-distinct chip). Drop
+          real licensed exchange logos into the inner mark when ready. */}
+      {slots.filter((s) => s.featured).map((s) => {
+        const x = s.featured;
+        return (
+          <g key={'n' + s.i} transform={`translate(${leftX} ${s.y})`}>
+            <rect x="-20" y="-16" width="40" height="32" rx="9"
+                  fill="oklch(0.2 0.012 265)" stroke="oklch(0.34 0.012 265)" />
+            {/* LOGO SLOT — replace this colored mark with a real <image href=…> when assets land. */}
+            <rect x="-15" y="-11" width="22" height="22" rx="6"
+                  fill={`oklch(0.72 0.1 ${x.hue})`} opacity="0.95" />
+            <text x="-4" y="5.5" textAnchor="middle"
+                  fontFamily="var(--font-mono)" fontSize="11" fontWeight="700"
+                  fill="oklch(0.16 0.012 265)">{x.mono}</text>
+            <text x="28" y="3.5"
+                  fontFamily="var(--font-mono)" fontSize="10"
+                  fill="oklch(0.78 0.008 265)">{x.name}</text>
+          </g>
+        );
+      })}
+
+      {/* Hub — AlgoVault MCP */}
+      <g transform={`translate(${cx} ${cy})`}>
+        <circle r="38" fill="oklch(0.18 0.014 265)" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="1.2" />
+        <circle r="38" fill="none" stroke="var(--accent, oklch(0.86 0.13 200))" strokeOpacity="0.25" strokeWidth="1.2"
+        style={{ transformOrigin: 'center', animation: 'pulse 2.4s ease-out infinite' }} />
+        <text y="-4" textAnchor="middle" fontFamily="var(--font-display)" fontSize="11" fontWeight="600" fill="oklch(0.97 0.005 265)">AlgoVault</text>
+        <text y="9" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9" fill="var(--accent, oklch(0.86 0.13 200))">MCP</text>
+      </g>
+
+      {/* AI Agents */}
+      <g transform={`translate(${rightX} ${cy})`}>
+        <rect x="-26" y="-22" width="52" height="44" rx="9" fill="oklch(0.2 0.012 265)" stroke="oklch(0.4 0.012 265)" />
+        <circle cx="0" cy="-4" r="7" fill="none" stroke="oklch(0.97 0.005 265)" strokeWidth="1.2" />
+        <circle cx="-2" cy="-5" r="1" fill="oklch(0.97 0.005 265)" />
+        <circle cx="2" cy="-5" r="1" fill="oklch(0.97 0.005 265)" />
+        <path d="M -4 0 Q 0 3, 4 0" stroke="oklch(0.97 0.005 265)" strokeWidth="1" fill="none" />
+        <text y="14" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="8.5" fill="oklch(0.78 0.008 265)">AI Agents</text>
+      </g>
+      <g transform={`translate(${cx + 78} ${cy - 24})`}>
+        <text fontFamily="var(--font-mono)" fontSize="9" fill="oklch(0.78 0.16 155)">verdict: LONG</text>
+      </g>
+      <g transform={`translate(${cx + 78} ${cy + 16})`}>
+        <text fontFamily="var(--font-mono)" fontSize="9" fill="oklch(0.58 0.01 265)">conf 0.84 · regime trend</text>
+      </g>
+
+      {/* Total venue counter */}
+      <text x={width / 2} y={height - 8} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9" fill="oklch(0.55 0.01 265)">
+        <tspan fill="var(--accent, oklch(0.86 0.16 165))" fontWeight="600">{N}</tspan> venues integrated · 5 featured
+      </text>
+    </svg>);
+
+}
+
+/* ---------- Hub chip variants for the radial diagram ---------- */
+// HubChip renders the supercomputer-chip silhouette + interior at the orbit center.
+// type='fabric' → mesh fabric + traces + traveling packets + sub-die.
+// type='hybrid' → fabric mesh chassis behind die-shot block layout (cache/ALU/REG-FILE).
+// `scale` shrinks the chip silhouette uniformly. Central core text in hybrid
+// mode is up-scaled 1/scale so the AlgoVault MCP CORE label keeps its visual
+// size as the chip gets smaller.
+function HubChip({ type = 'fabric', cx = 0, cy = 0, scale = 0.72 }) {
+  const HEX = '-50,-29 -25,-58 25,-58 50,-29 50,29 25,58 -25,58 -50,29';
+  const inv = 1 / scale; // compensates inner-core text so it stays readable
+  const meshId = `hub-${type}-mesh`;
+  const clipId = `hub-${type}-clip`;
+  const cacheId = 'hub-cache';
+  const aluId = 'hub-alu';
+  const regId = 'hub-reg';
+
+  return (
+    <g transform={`translate(${cx} ${cy}) scale(${scale})`}>
+      <defs>
+        <pattern id={meshId} width="8" height="8" patternUnits="userSpaceOnUse">
+          <rect width="8" height="8" fill="oklch(0.13 0.012 265)" />
+          <line x1="0" y1="4" x2="8" y2="4" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.3" strokeOpacity="0.45" />
+          <line x1="4" y1="0" x2="4" y2="8" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.3" strokeOpacity="0.45" />
+          <circle cx="4" cy="4" r="0.55" fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.8" />
+        </pattern>
+        {type === 'hybrid' &&
+        <>
+            <pattern id={cacheId} width="3.5" height="3.5" patternUnits="userSpaceOnUse">
+              <rect width="3.5" height="3.5" fill="oklch(0.18 0.014 265)" />
+              <circle cx="1.75" cy="1.75" r="0.55" fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.8" />
+            </pattern>
+            <pattern id={aluId} width="5" height="5" patternUnits="userSpaceOnUse">
+              <rect width="5" height="5" fill="oklch(0.18 0.014 265)" />
+              <rect x="0.7" y="0.7" width="3.6" height="3.6" rx="0.3" fill="none" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.4" strokeOpacity="0.7" />
+            </pattern>
+            <pattern id={regId} width="7" height="2.2" patternUnits="userSpaceOnUse">
+              <rect width="7" height="2.2" fill="oklch(0.18 0.014 265)" />
+              <rect x="0" y="0.7" width="5.6" height="0.8" fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.55" />
+            </pattern>
+          </>
+        }
+        <clipPath id={clipId}><polygon points={HEX} /></clipPath>
+      </defs>
+
+      {/* Outer hex */}
+      <polygon points={HEX} fill="oklch(0.11 0.012 265)" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="1.4" />
+
+      {type === 'fabric' ?
+      <g clipPath={`url(#${clipId})`}>
+          <rect x="-50" y="-58" width="100" height="116" fill={`url(#${meshId})`} />
+          {/* Heavy crossbar traces */}
+          <g stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.9" strokeOpacity="0.85">
+            <line x1="-50" y1="0" x2="-15" y2="0" />
+            <line x1="15" y1="0" x2="50" y2="0" />
+            <line x1="0" y1="-58" x2="0" y2="-15" />
+            <line x1="0" y1="15" x2="0" y2="58" />
+          </g>
+          <g stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.5" strokeOpacity="0.45">
+            <line x1="-44" y1="-30" x2="-15" y2="-15" />
+            <line x1="44" y1="-30" x2="15" y2="-15" />
+            <line x1="-44" y1="30" x2="-15" y2="15" />
+            <line x1="44" y1="30" x2="15" y2="15" />
+          </g>
+          {/* Traveling packets */}
+          <circle r="1.6" fill="var(--accent, oklch(0.86 0.13 200))">
+            <animate attributeName="cx" values="-50;-15" dur="1.2s" repeatCount="indefinite" />
+            <animate attributeName="cy" values="0;0" dur="1.2s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0;1;0" dur="1.2s" repeatCount="indefinite" />
+          </circle>
+          <circle r="1.6" fill="var(--accent, oklch(0.86 0.13 200))">
+            <animate attributeName="cx" values="50;15" dur="1.4s" repeatCount="indefinite" begin="0.3s" />
+            <animate attributeName="cy" values="0;0" dur="1.4s" repeatCount="indefinite" begin="0.3s" />
+            <animate attributeName="opacity" values="0;1;0" dur="1.4s" repeatCount="indefinite" begin="0.3s" />
+          </circle>
+          <circle r="1.6" fill="var(--accent, oklch(0.86 0.13 200))">
+            <animate attributeName="cx" values="0;0" dur="1.6s" repeatCount="indefinite" begin="0.5s" />
+            <animate attributeName="cy" values="-58;-15" dur="1.6s" repeatCount="indefinite" begin="0.5s" />
+            <animate attributeName="opacity" values="0;1;0" dur="1.6s" repeatCount="indefinite" begin="0.5s" />
+          </circle>
+          <circle r="1.6" fill="var(--accent, oklch(0.86 0.13 200))">
+            <animate attributeName="cx" values="0;0" dur="1.8s" repeatCount="indefinite" begin="0.8s" />
+            <animate attributeName="cy" values="58;15" dur="1.8s" repeatCount="indefinite" begin="0.8s" />
+            <animate attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite" begin="0.8s" />
+          </circle>
+        </g> :
+
+      <g clipPath={`url(#${clipId})`}>
+          {/* Faint mesh chassis */}
+          <rect x="-50" y="-58" width="100" height="116" fill={`url(#${meshId})`} opacity="0.4" />
+          {/* Cache (top-left) */}
+          <rect x="-42" y="-50" width="32" height="22" rx="1.5" fill={`url(#${cacheId})`} stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.5" strokeOpacity="0.6" />
+          <text x="-26" y="-32" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="3.4" letterSpacing="0.5" fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.85">L2$</text>
+          {/* ALU (top-right) */}
+          <rect x="10" y="-50" width="32" height="22" rx="1.5" fill={`url(#${aluId})`} stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.5" strokeOpacity="0.6" />
+          <text x="26" y="-32" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="3.4" letterSpacing="0.5" fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.85">ALU</text>
+          {/* I/O lanes flanking core */}
+          <g stroke="var(--accent, oklch(0.86 0.13 200))" strokeOpacity="0.5" strokeWidth="0.35">
+            {[-13, -7, -1, 5, 11].map((y) =>
+          <g key={'io' + y}>
+                <line x1="-42" y1={y} x2="-15" y2={y} />
+                <line x1="15" y1={y} x2="42" y2={y} />
+              </g>
+          )}
+          </g>
+          {/* Center core */}
+          <rect x="-15" y="-14" width="30" height="24" rx="1.5" fill="oklch(0.2 0.014 265)" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.9" />
+          <rect x="-15" y="-14" width="30" height="24" rx="1.5" fill="none" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.9" strokeOpacity="0.45" style={{ animation: 'pulse 1.6s infinite' }} />
+          {/* Up-scaled so AlgoVault MCP CORE stays readable as the chip shrinks. */}
+          <g transform={`scale(${inv})`}>
+            <text y="-3.5" textAnchor="middle" fontFamily="var(--font-display)" fontSize="5.5" fontWeight="600" fill="oklch(0.97 0.005 265)">AlgoVault</text>
+            <text y="3.2" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="3.4" letterSpacing="1" fill="var(--accent, oklch(0.86 0.13 200))">MCP CORE</text>
+          </g>
+          {/* Status dots */}
+          {[-9, -5, -1, 3].map((x, i) =>
+        <circle key={i} cx={x} cy="7" r="0.7" fill="var(--accent, oklch(0.86 0.13 200))">
+              <animate attributeName="opacity" values={i % 2 ? '0.2;0.8;0.2' : '0.5;1;0.5'} dur={`${0.8 + i * 0.2}s`} repeatCount="indefinite" />
+            </circle>
+        )}
+          {/* Register file (bottom) */}
+          <rect x="-42" y="15" width="84" height="34" rx="1.5" fill={`url(#${regId})`} stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.5" strokeOpacity="0.5" />
+          <text x="0" y="54" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="3.4" letterSpacing="0.5" fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.85">REG-FILE 256x64</text>
+        </g>
+      }
+
+      {/* Pulsing outer hex outline */}
+      <polygon points={HEX} fill="none" stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="1.2" strokeOpacity="0.3" style={{ animation: 'pulse 2.4s ease-out infinite' }} />
+
+      {/* Bond pads on left/right edges */}
+      <g fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.7">
+        {[-22, -10, 2, 14].map((y) => <rect key={'lp' + y} x="-46.5" y={y} width="1.4" height="1.4" />)}
+        {[-22, -10, 2, 14].map((y) => <rect key={'rp' + y} x="45" y={y} width="1.4" height="1.4" />)}
+      </g>
+
+      {/* Corner fiducials */}
+      <g stroke="var(--accent, oklch(0.86 0.13 200))" strokeWidth="0.6" strokeOpacity="0.85">
+        <g transform="translate(-36 -42)"><line x1="-2.5" y1="0" x2="2.5" y2="0" /><line x1="0" y1="-2.5" x2="0" y2="2.5" /><circle r="0.7" fill="var(--accent, oklch(0.86 0.13 200))" /></g>
+        <g transform="translate(36 -42)"><line x1="-2.5" y1="0" x2="2.5" y2="0" /><line x1="0" y1="-2.5" x2="0" y2="2.5" /><circle r="0.7" fill="var(--accent, oklch(0.86 0.13 200))" /></g>
+        <g transform="translate(-36 42)"><line x1="-2.5" y1="0" x2="2.5" y2="0" /><line x1="0" y1="-2.5" x2="0" y2="2.5" /><circle r="0.7" fill="var(--accent, oklch(0.86 0.13 200))" /></g>
+        <g transform="translate(36 42)"><line x1="-2.5" y1="0" x2="2.5" y2="0" /><line x1="0" y1="-2.5" x2="0" y2="2.5" /><circle r="0.7" fill="var(--accent, oklch(0.86 0.13 200))" /></g>
+      </g>
+
+      {/* External labels — counter-scaled so they read at chip-edge size regardless of chip scale. */}
+      <g transform={`scale(${inv})`}>
+        <text y={-66 * scale} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="7" letterSpacing="2" fill="oklch(0.97 0.005 265)">AlgoVault</text>
+        <text y={70 * scale} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="6" letterSpacing="2" fill="var(--accent, oklch(0.86 0.13 200))">MCP CORE · 7nm</text>
+      </g>
+    </g>);
+
+}
+
+/* ---------- V1: Radial HFT diagram (count + chip variants) ---------- */
+// Radial HFT-style diagram: N venues orbit the AlgoVault core, with featured
+// exchanges getting labeled spokes and the rest rendered as anonymous dots
+// (so the visual scales smoothly to 30+ venues).
+function V1Diagram({ width = 560, height = 320, count = 32, chip = 'fabric' }) {
+  const cx = width * 0.36;
+  const cy = height / 2;
+  const orbitR = Math.min(height / 2 - 24, 130);
+  const featuredAt = EXCHANGES.map((_, i) => Math.round(i * count / EXCHANGES.length));
+
+  const dots = Array.from({ length: count }, (_, i) => {
+    const a = i / count * Math.PI * 2 - Math.PI / 2;
+    const x = cx + orbitR * Math.cos(a);
+    const y = cy + orbitR * Math.sin(a);
+    const fIdx = featuredAt.indexOf(i);
+    return { i, a, x, y, featured: fIdx >= 0 ? EXCHANGES[fIdx] : null };
+  });
+
+  // Pre-pick a few non-featured indices that get animated "packet" dots.
+  const activeAnonIdx = [3, 7, 11, 17, 23, 29].filter((j) => j < count && !dots[j].featured);
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
+    style={{ display: 'block', overflow: 'visible' }}>
+      <defs>
+        <radialGradient id="v1-aura">
+          <stop offset="0%" stopColor="var(--accent, oklch(0.86 0.13 200))" stopOpacity="0.55" />
+          <stop offset="50%" stopColor="var(--accent-deep, oklch(0.55 0.12 210))" stopOpacity="0.14" />
+          <stop offset="100%" stopColor="var(--accent-deep, oklch(0.55 0.12 210))" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="v1-spoke" x1="0" x2="1">
+          <stop offset="0%" stopColor="var(--accent-edge, oklch(0.42 0.06 200))" stopOpacity="0.05" />
+          <stop offset="100%" stopColor="var(--accent, oklch(0.86 0.13 200))" stopOpacity="0.7" />
+        </linearGradient>
+        <radialGradient id="v1-sweep" cx="0" cy="0.5" r="1">
+          <stop offset="0%" stopColor="var(--accent, oklch(0.86 0.13 200))" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="var(--accent, oklch(0.86 0.13 200))" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* Hub aura */}
+      <circle cx={cx} cy={cy} r={orbitR + 30} fill="url(#v1-aura)" />
+
+      {/* Concentric reference rings */}
+      {[orbitR - 22, orbitR, orbitR + 22].map((r, i) =>
+      <circle key={r} cx={cx} cy={cy} r={r} fill="none"
+      stroke="var(--accent, oklch(0.86 0.13 200))"
+      strokeOpacity={i === 1 ? 0.18 : 0.08}
+      strokeWidth="0.8"
+      strokeDasharray={i === 1 ? '0' : '1 5'} />
+      )}
+
+      {/* Radar sweep — rotating wedge */}
+      <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: 'orbit-sweep 5s linear infinite' }}>
+        <path d={`M ${cx} ${cy} L ${cx + orbitR + 8} ${cy}
+                  A ${orbitR + 8} ${orbitR + 8} 0 0 1
+                  ${cx + Math.cos(0.9) * (orbitR + 8)} ${cy + Math.sin(0.9) * (orbitR + 8)} Z`}
+        fill="url(#v1-sweep)" opacity="0.65" />
+      </g>
+
+      {/* Spokes */}
+      {dots.map((d) => {
+        const f = !!d.featured;
+        return (
+          <line key={'l' + d.i}
+          x1={d.x} y1={d.y} x2={cx} y2={cy}
+          stroke={f ? 'url(#v1-spoke)' : 'var(--accent-edge, oklch(0.42 0.06 200))'}
+          strokeOpacity={f ? 0.6 : 0.16}
+          strokeWidth={f ? 1.2 : 0.6}
+          strokeDasharray={f ? '0' : '1 4'} />);
+
+      })}
+
+      {/* Animated packet dots — featured spokes */}
+      {dots.filter((d) => d.featured).map((d, i) =>
+      <g key={'p' + d.i}>
+          <circle r="2.2" fill="var(--accent, oklch(0.86 0.13 200))">
+            <animate attributeName="cx" values={`${d.x};${cx}`} dur="1.6s" repeatCount="indefinite" begin={`${i * 0.3}s`} />
+            <animate attributeName="cy" values={`${d.y};${cy}`} dur="1.6s" repeatCount="indefinite" begin={`${i * 0.3}s`} />
+            <animate attributeName="opacity" values="0;1;0" dur="1.6s" repeatCount="indefinite" begin={`${i * 0.3}s`} />
+          </circle>
+        </g>
+      )}
+
+      {/* Animated packet dots — anonymous spokes */}
+      {activeAnonIdx.map((j, k) => {
+        const d = dots[j];
+        return (
+          <circle key={'ap' + j} r="1.4"
+          fill="var(--accent, oklch(0.86 0.13 200))" opacity="0.6">
+            <animate attributeName="cx" values={`${d.x};${cx}`} dur={`${1.2 + k * 0.25}s`} repeatCount="indefinite" begin={`${k * 0.4}s`} />
+            <animate attributeName="cy" values={`${d.y};${cy}`} dur={`${1.2 + k * 0.25}s`} repeatCount="indefinite" begin={`${k * 0.4}s`} />
+            <animate attributeName="opacity" values="0;0.65;0" dur={`${1.2 + k * 0.25}s`} repeatCount="indefinite" begin={`${k * 0.4}s`} />
+          </circle>);
+
+      })}
+
+      {/* Venue dots */}
+      {dots.map((d) => {
+        if (d.featured) {
+          const labelOnRight = d.x > cx + 4;
+          return (
+            <g key={'d' + d.i}>
+              <circle cx={d.x} cy={d.y} r="6"
+              fill={`oklch(0.74 0.12 ${d.featured.hue})`} />
+              <circle cx={d.x} cy={d.y} r="10" fill="none"
+              stroke={`oklch(0.74 0.12 ${d.featured.hue})`}
+              strokeOpacity="0.35" strokeWidth="0.8" />
+              <text x={labelOnRight ? d.x + 12 : d.x - 12}
+              y={d.y + 3.5}
+              textAnchor={labelOnRight ? 'start' : 'end'}
+              fontFamily="var(--font-mono)" fontSize="10"
+              fill="oklch(0.85 0.008 265)">{d.featured.name}</text>
+            </g>);
+
+        }
+        return (
+          <circle key={'d' + d.i} cx={d.x} cy={d.y} r="1.6"
+          fill="var(--accent-edge, oklch(0.42 0.06 200))" opacity="0.7" />);
+
+      })}
+
+      {/* Hub — supercomputer chip (fabric or hybrid) */}
+      <HubChip type={chip} cx={cx} cy={cy} />
+
+      {/* Right-side: labels + venue counter */}
+      <g transform={`translate(${width - 12} 16)`}>
+        <text textAnchor="end" fontFamily="var(--font-mono)" fontSize="8.5" letterSpacing="1.5"
+        fill="oklch(0.5 0.01 265)">CALL STREAM</text>
+      </g>
+      <g transform={`translate(12 ${height - 14})`}>
+        <text fontFamily="var(--font-mono)" fontSize="9" fill="oklch(0.55 0.01 265)">
+          <tspan fill="var(--accent, oklch(0.86 0.13 200))">{count}</tspan> venues · 5 featured · {EXCHANGES.length}/{count} live
+        </text>
+      </g>
+    </svg>);
+
+}
+
+// Scrolling verdict feed — sits alongside the radial diagram on desktop.
+const FEED_BASE = [
+{ sym: 'BTC', tf: '1h', vx: 'BN', d: 'LONG', c: 0.84, lat: 612 },
+{ sym: 'ETH', tf: '15m', vx: 'HL', d: 'HOLD', c: 0.62, lat: 488 },
+{ sym: 'SOL', tf: '5m', vx: 'BY', d: 'SHORT', c: 0.71, lat: 540 },
+{ sym: 'BTC', tf: '4h', vx: 'OK', d: 'LONG', c: 0.79, lat: 705 },
+{ sym: 'ARB', tf: '1h', vx: 'BG', d: 'LONG', c: 0.66, lat: 522 },
+{ sym: 'AVAX', tf: '15m', vx: 'BN', d: 'HOLD', c: 0.55, lat: 410 },
+{ sym: 'OP', tf: '5m', vx: 'HL', d: 'SHORT', c: 0.74, lat: 596 },
+{ sym: 'ETH', tf: '1h', vx: 'BY', d: 'LONG', c: 0.81, lat: 633 },
+{ sym: 'DOGE', tf: '15m', vx: 'BN', d: 'HOLD', c: 0.58, lat: 470 },
+{ sym: 'LINK', tf: '4h', vx: 'OK', d: 'LONG', c: 0.69, lat: 580 }];
+
+const dirColor = (d) =>
+d === 'LONG' ? 'oklch(0.78 0.16 155)' :
+d === 'SHORT' ? 'oklch(0.72 0.18 25)' :
+'oklch(0.65 0.01 265)';
+
+function V1Feed({ rows = 7 }) {
+  const items = [...FEED_BASE, ...FEED_BASE]; // duplicate for seamless loop
+  return (
+    <div style={{
+      position: 'relative',
+      borderRadius: 12,
+      border: '1px solid var(--line)',
+      background: 'oklch(0.13 0.012 265 / 0.7)',
+      overflow: 'hidden',
+      height: rows * 22 + 28,
+      fontFamily: 'var(--font-mono)',
+      fontSize: 11,
+      animation: 'ticker-flicker 7s linear infinite'
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '6px 10px', borderBottom: '1px solid var(--line)',
+        fontSize: 9.5, color: 'var(--fg-4)', letterSpacing: '0.12em'
+      }}>
+        <span>CALL STREAM · LIVE</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--green)' }}>
+          <span className="live-pulse" style={{ width: 5, height: 5 }} />tick
+        </span>
+      </div>
+      <div style={{
+        animation: `feed-scroll ${FEED_BASE.length * 1.1}s linear infinite`,
+        willChange: 'transform'
+      }}>
+        {items.map((r, i) =>
+        <div key={i} style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
+          alignItems: 'center', gap: 6,
+          padding: '3px 10px', height: 22, lineHeight: '16px',
+          borderBottom: '1px solid oklch(0.2 0.012 265 / 0.7)',
+          color: 'var(--fg-2)'
+        }}>
+            <span style={{ color: 'var(--fg)' }}>{r.sym}</span>
+            <span style={{ color: 'var(--fg-3)' }}>{r.tf}</span>
+            <span style={{ color: 'var(--fg-4)' }}>{r.vx}</span>
+            <span style={{ color: dirColor(r.d), fontWeight: 600, letterSpacing: '0.04em' }}>{r.d}</span>
+            <span style={{ color: 'var(--fg-4)', textAlign: 'right' }}>{r.lat}<span style={{ fontSize: 9 }}>ms</span></span>
+          </div>
+        )}
+      </div>
+      {/* fade masks */}
+      <div style={{ position: 'absolute', inset: '28px 0 0 0', pointerEvents: 'none',
+        background: 'linear-gradient(180deg, oklch(0.13 0.012 265) 0%, transparent 12%, transparent 88%, oklch(0.13 0.012 265) 100%)' }} />
+    </div>);
+
+}
+
+function V1Hero({ mobile = false, count = 32, diagram = 'fabric' }) {
+  const calls = useTickingCounter();
+  const last = useCyclingCall();
+  const Diagram = diagram === 'flow' ? V0Diagram : V1Diagram;
+  const chip = diagram === 'hybrid' ? 'hybrid' : 'fabric';
+  if (mobile) {
+    return (
+      <div className="artboard" style={{ width: 375, height: 1100, padding: '20px 22px' }}>
+        <div className="bg-grid" />
+        <div className="bg-radial-accent" />
+        <div className="bg-noise" />
+        <nav className="nav" style={{ marginBottom: 36 }}>
+          <div className="nav-logo">
+            <span className="nav-logo-mark">A</span>
+            AlgoVault
+          </div>
+          <button style={{ background: 'none', border: 'none', color: 'var(--fg-2)', padding: 6, cursor: 'pointer' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
+        </nav>
+
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 11px',
+          border: '1px solid var(--line)', borderRadius: 999, fontFamily: 'var(--font-mono)',
+          fontSize: 10.5, color: 'var(--fg-2)', marginBottom: 22 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent, var(--cyan))' }} />
+          MCP server · v1.4
+        </div>
+
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 38, lineHeight: 1.05,
+          letterSpacing: '-0.025em', fontWeight: 500, margin: '0 0 18px',
+          textWrap: 'balance' }}>
+          The Brain Layer<br />for AI Trading<br />
+          <span style={{ color: 'var(--accent, var(--cyan))' }}>Agents.</span>
+        </h1>
+
+        <p style={{ fontSize: 15, color: 'var(--fg-2)', margin: '0 0 24px', maxWidth: 320 }}>
+          One MCP call returns direction, confidence, and regime.<br/>Composite verdict across <span data-tr-field="exchange_count">5</span> perp venues.<br/>Built for autonomous AI agents.
+        </p>
+
+        {/* Mini diagram */}
+        <div style={{ border: '1px solid var(--line)', borderRadius: 14, padding: '14px 10px 8px',
+          background: 'oklch(0.13 0.012 265 / 0.7)', marginBottom: 14 }}>
+          <Diagram width={330} height={220} count={Math.min(count, 24)} chip={chip} />
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <V1Feed rows={5} />
+        </div>
+
+        {/* Live ticker */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--green)',
+            letterSpacing: '0.06em' }}>
+            <span className="live-pulse" />LIVE
+          </span>
+          <span className="counter" style={{ fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em' }}>
+            {fmt(calls)}
+          </span>
+        </div>
+        <div className="placeholder-cap" style={{ marginBottom: 4, fontSize: 9.5 }}>agent calls</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', marginBottom: 22 }}>
+          Last: {last}
+        </div>
+
+        {/* CTAs stack */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+          <a href="https://t.me/algovaultofficialbot" target="_blank" rel="noopener noreferrer" className="btn btn-primary accent-cyan" style={{ height: 48 }}>
+            Try Free in Telegram
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 12h14M13 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a href="#" className="btn btn-secondary" style={{ height: 48 }}>View Track Record</a>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: '0 0 22px' }}>
+          No signup required. Free tier: all assets, all 11 timeframes, 100 calls/month.
+        </p>
+
+        {/* Track record */}
+        <div style={{ padding: '14px 14px', border: '1px solid var(--line)', borderRadius: 12,
+          background: 'oklch(0.18 0.014 265 / 0.5)', marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, letterSpacing: '-0.02em' }}>
+              <span data-tr-field="pfe_wr">90.2</span>%<span style={{ color: 'var(--fg-3)' }}>+</span>
+            </span>
+            <span className="placeholder-cap">PFE win rate</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+            <span data-tr-field="call_count">79,616</span>+ trade calls · Merkle-anchored on Base L2 · <a href="#" style={{ color: 'var(--accent, var(--cyan))', textDecoration: 'none' }}>verifiable →</a>
+          </div>
+        </div>
+
+        <TrustRow compact />
+      </div>);
+
+  }
+  // Desktop
+  return (
+    <div className="artboard" style={{ width: 1440, height: 900, padding: '28px 80px' }}>
+      <div className="bg-grid" />
+      <div className="bg-radial-accent" />
+      <div className="bg-noise" />
+
+      <nav className="nav" style={{ marginBottom: 70 }}>
+        <div className="nav-logo">
+          <span className="nav-logo-mark">A</span>
+          AlgoVault
+        </div>
+        <div className="nav-links">
+          <a href="#">Product</a>
+          <a href="#">Verdicts</a>
+          <a href="#">Track Record</a>
+          <a href="#">Docs</a>
+          <a href="#">Pricing</a>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span className="nav-pill"><span className="live-pulse" />v1.4 shipped</span>
+          <a href="#" className="nav-cta">Open in Claude →</a>
+        </div>
+      </nav>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 620px', gap: 80, alignItems: 'start' }}>
+        {/* Left column */}
+        <div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 12px',
+            border: '1px solid var(--line)', borderRadius: 999, fontFamily: 'var(--font-mono)',
+            fontSize: 11.5, color: 'var(--fg-2)', marginBottom: 28 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent, var(--cyan))' }} />
+            Model Context Protocol server · 5 venues monitored
+          </div>
+
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 68, lineHeight: 1.02,
+            letterSpacing: '-0.03em', fontWeight: 500, margin: '0 0 22px', textWrap: 'balance' }}>
+            The Brain Layer<br />
+            for AI Trading{' '}
+            <span style={{ color: 'var(--accent, var(--cyan))' }}>Agents.</span>
+          </h1>
+
+          <p style={{ fontSize: 18, color: 'var(--fg-2)', margin: '0 0 40px', maxWidth: 520, lineHeight: 1.6 }}>
+            One MCP call returns direction, confidence, and regime.<br/>Composite verdict across <span data-tr-field="exchange_count">5</span> perp venues.<br/>Built for autonomous AI agents.
+          </p>
+
+          {/* Live ticker block */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 28, marginBottom: 32,
+            padding: '18px 22px', border: '1px solid var(--line)', borderRadius: 14,
+            background: 'oklch(0.18 0.014 265 / 0.5)', backdropFilter: 'blur(10px)' }}>
+            <div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--green)',
+                letterSpacing: '0.08em', marginBottom: 4 }}>
+                <span className="live-pulse" />LIVE
+              </div>
+              <div className="counter" style={{ fontSize: 38, fontWeight: 500, letterSpacing: '-0.025em', lineHeight: 1 }}>
+                {fmt(calls)}
+              </div>
+              <div className="placeholder-cap" style={{ marginTop: 4, fontSize: 10 }}>agent calls</div>
+            </div>
+            <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--line)' }} />
+            <div style={{ flex: 1, paddingTop: 4 }}>
+              <div className="placeholder-cap" style={{ fontSize: 10, marginBottom: 8 }}>recent calls</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--fg)' }}>
+                {last}
+              </div>
+            </div>
+          </div>
+
+          {/* Track record line */}
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg-3)', marginBottom: 28, lineHeight: 1.7 }}>
+            <span style={{ color: 'var(--green)' }}>●</span>{' '}
+            <span style={{ color: 'var(--fg-2)' }}><span data-tr-field="pfe_wr">90.2%</span>+ PFE Win Rate</span> across <span data-tr-field="call_count">79,616</span>+ trade calls — each
+            Merkle-anchored on Base L2 (<a href="/track-record" style={{ color: 'var(--accent, var(--cyan))', textDecoration: 'none' }}>algovault.com/track-record</a>)
+          </div>
+
+          {/* CTAs */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+            <a href="https://t.me/algovaultofficialbot" target="_blank" rel="noopener noreferrer" className="btn btn-primary accent-cyan">
+              Try Free in Telegram
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M13 5l7 7-7 7" />
+              </svg>
+            </a>
+            <a href="#" className="btn btn-secondary">View Track Record</a>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '0 0 36px' }}>
+            No signup required. Free tier: all assets, all 11 timeframes, 100 calls/month.
+          </p>
+
+          <TrustRow />
+        </div>
+
+        {/* Right column — diagram */}
+        <div style={{ position: 'relative' }}>
+          <div style={{ border: '1px solid var(--line)', borderRadius: 18, padding: '28px 24px 24px',
+            background: 'oklch(0.18 0.014 265 / 0.5)', backdropFilter: 'blur(10px)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
+              <span className="placeholder-cap">flow.diagram</span>
+              <span className="placeholder-cap" style={{ color: 'var(--accent, var(--cyan))' }}>● live</span>
+            </div>
+            <Diagram width={560} height={290} count={count} chip={chip} />
+            <div style={{ marginTop: 16 }}>
+              <V1Feed rows={6} />
+            </div>
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)',
+              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14 }}>
+              <div>
+                <div className="placeholder-cap" style={{ fontSize: 10 }}>p50 latency</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--fg)', marginTop: 2 }}>
+                  640<span style={{ color: 'var(--fg-3)', fontSize: 11 }}>ms</span>
+                </div>
+              </div>
+              <div>
+                <div className="placeholder-cap" style={{ fontSize: 10 }}>venues</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--fg)', marginTop: 2 }}>
+                  {count}
+                </div>
+              </div>
+              <div>
+                <div className="placeholder-cap" style={{ fontSize: 10 }}>timeframes</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--fg)', marginTop: 2 }}>
+                  11
+                </div>
+              </div>
+              <div>
+                <div className="placeholder-cap" style={{ fontSize: 10 }}>signals</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--fg)', marginTop: 2 }}>
+                  37
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>);
+
+}
+
+window.V1Hero = V1Hero;

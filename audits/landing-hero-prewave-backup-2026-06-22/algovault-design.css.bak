@@ -143,18 +143,6 @@
   pointer-events: none;
 }
 
-/* LANDING-HERO-DEDENSIFY-W1 (2026-06-22): headline grid-bleed fix. Root cause —
-   .bg-grid/.bg-radial-accent/.bg-noise are position:absolute z-index:auto, so by
-   CSS paint order they painted OVER the non-positioned hero content, bleeding the
-   56px grid + overlay noise across the H1 (worst at the radial-mask peak ~50%/30%,
-   exactly the headline box). isolation:isolate makes each hero .artboard a stacking
-   context so z-index:-1 scopes the bg layers BEHIND the content. Palette/layout
-   unchanged; hero-scoped (other artboards untouched). */
-.lp-hero-desktop > .artboard,
-.lp-hero-mobile  > .artboard { isolation: isolate; }
-.lp-hero-desktop .bg-grid, .lp-hero-desktop .bg-radial-accent, .lp-hero-desktop .bg-noise,
-.lp-hero-mobile  .bg-grid, .lp-hero-mobile  .bg-radial-accent, .lp-hero-mobile  .bg-noise { z-index: -1; }
-
 /* ---------- .live-pulse + @keyframes pulse ---------- */
 /* Used on existing live-call-ticker pulse-dot (C2 application). Replaces the
    D1-C inline @keyframes pulse-dot with the canonical pulse rhythm.

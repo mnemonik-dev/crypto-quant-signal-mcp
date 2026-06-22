@@ -81,7 +81,9 @@ describe('LANDING-CONVERSION-TRUST-W1 — trust band, verify link, free-start, C
     expect(count('Subscribe to Pro')).toBe(2);
     expect(count('Subscribe to Enterprise')).toBe(2);
     expect(count('>Start Free<')).toBe(2);
-    expect(count('/docs.html#x402')).toBe(2); // x402 card href untouched
+    // 2 = x402 pricing card (untouched, desktop+mobile) + 2 = Connect-section x402 card
+    // (added by LANDING-HERO-DEDENSIFY-W1; links to x402 docs, does not duplicate pricing).
+    expect(count('/docs.html#x402')).toBe(4);
   });
 
   it('every Signup link uses the absolute api.algovault.com host (algovault.com/signup 404s)', () => {
