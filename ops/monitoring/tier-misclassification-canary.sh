@@ -55,12 +55,18 @@ read -r -d '' JS <<'NODE' || true
 })();
 NODE
 
-# Choose runner: container in prod; host-side dist in DRY_RUN / no-container.
-if [ "${DRY_RUN:-0}" = "1" ] || ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${C}$"; then
-  OUT=$(cd "$(dirname "$0")/../.." 2>/dev/null && node -e "$JS" 2>/dev/null) || OUT=""
+# Choose runner by CONTAINER PRESENCE (not DRY_RUN): the container's /app/dist in prod
+# (incl. host DRY_RUN probes), the local repo's ./dist otherwise (the local C3 gate).
+# DRY_RUN controls send-vs-print below, independent of the runner.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${C}$"; then
+  RAW=$(docker exec "$C" node -e "$JS" 2>/dev/null) || RAW=""
 else
-  OUT=$(docker exec "$C" node -e "$JS" 2>/dev/null) || OUT=""
+  RAW=$(cd "$(dirname "$0")/../.." 2>/dev/null && node -e "$JS" 2>/dev/null) || RAW=""
 fi
+# Keep ONLY the `<coin> -> <class>` review lines — strip any module log noise on
+# stdout (e.g. upstream-weight-budget JSON from the warm) so "silent when empty" holds
+# and the wrapper is never handed log noise as an alert body.
+OUT=$(printf '%s\n' "$RAW" | grep -E ' -> ' || true)
 
 # Silent when empty (no review items).
 if [ -z "$OUT" ]; then
