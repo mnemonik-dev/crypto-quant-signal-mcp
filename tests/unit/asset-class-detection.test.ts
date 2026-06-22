@@ -129,13 +129,20 @@ describe('asset-class engine — cross-venue union fallback + deny-list', () => 
   });
 
   it('crypto deny-list overrides any union/venue hit (ticker-collision guard)', async () => {
-    // Even if a no-field venue lists a crypto whose ticker collides with the union,
-    // the deny-list returns null (never a silent Tier-3).
-    _setDetectorsForTest({ BINANCE: detect(m(['ASTEROID', 'EQUITY'], ['DYDX', 'EQUITY'])) });
+    // Even if a venue tags a crypto whose ticker collides with TradFi, the deny-list
+    // returns null (never a silent Tier-3). Stablecoins (USDC) + crypto gold-tokens
+    // (PAXG/XAUT) are denied — the C3 canary caught all three mis-tagged live.
+    _setDetectorsForTest({
+      BINANCE: detect(m(['ASTEROID', 'EQUITY'], ['DYDX', 'EQUITY'])),
+      GATE: detect(m(['USDC', 'FX'], ['PAXG', 'COMMODITY'], ['XAUT', 'COMMODITY'])),
+    });
     await warmAssetClasses();
     expect(getTradFiClass('ASTEROID', 'BINANCE')).toBeNull();
     expect(getTradFiClass('DYDX', 'OKX')).toBeNull();
     expect(getTradFiClass('TNSR', 'GATE')).toBeNull();
+    expect(getTradFiClass('USDC', 'GATE')).toBeNull();  // stablecoin, never FX
+    expect(getTradFiClass('PAXG', 'OKX')).toBeNull();   // crypto gold token (also a Tier-2 alt)
+    expect(getTradFiClass('XAUT')).toBeNull();          // crypto gold token
   });
 });
 

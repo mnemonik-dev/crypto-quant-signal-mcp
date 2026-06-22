@@ -60,8 +60,15 @@ export type TradFiDetector = () => Promise<Map<string, AssetClass>>;
  * `TRADFI_FALLBACK` seed in asset-tiers.ts owns SPX's tier (unchanged by this wave).
  */
 const CRYPTO_DENYLIST: ReadonlySet<string> = new Set([
+  // Ticker-collision crypto (spec C2 + the ...X majors the deToken guard also covers).
   'TNSR', 'Q', 'FIO', 'IDOL', 'ASTEROID', 'DYDX', 'APEX',
   'AVAX', 'FLUX', 'IMX', 'GMX',
+  // Stablecoins — crypto, NEVER FX. A venue's forex tag must not tier USDC/USDT as
+  // TradFi (C3 canary caught `USDC -> FX` live, 2026-06-21).
+  'USDC', 'USDT', 'USDE', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDP', 'GUSD', 'USDS', 'USD1', 'EURC', 'EURT',
+  // Crypto tokens pegged to a commodity (gold) — crypto, NOT a commodity perp; the real
+  // metal tickers (XAU/XAG/XPT/XPD) are unaffected (C3 canary caught XAUT/PAXG -> COMMODITY).
+  'XAUT', 'PAXG',
 ]);
 
 // ── Symbol normalization ──
