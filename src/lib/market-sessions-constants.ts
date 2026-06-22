@@ -17,8 +17,12 @@
  * market open right now?".
  */
 
-/** The five underlying asset classes we session-classify. CRYPTO = 24/7. */
-export type AssetClass = 'CRYPTO' | 'EQUITY' | 'KR_EQUITY' | 'COMMODITY' | 'PREMARKET';
+/**
+ * The underlying asset classes we session/tier-classify. CRYPTO = 24/7.
+ * INDEX + FX added by OPS-TIER-CLASSIFIER-XVENUE-W1 (Gate `indices`/`forex`, BingX
+ * `NCSI`/`NCFX`, MEXC index/forex zones). Every non-CRYPTO class ⇒ Tier 3.
+ */
+export type AssetClass = 'CRYPTO' | 'EQUITY' | 'KR_EQUITY' | 'COMMODITY' | 'INDEX' | 'FX' | 'PREMARKET';
 
 export interface MarketHoliday {
   /** ISO calendar date in America/New_York local terms (YYYY-MM-DD). */
@@ -98,6 +102,7 @@ export const BINANCE_UNDERLYING_TO_ASSET_CLASS: Record<string, AssetClass> = {
   EQUITY: 'EQUITY',
   KR_EQUITY: 'KR_EQUITY',
   COMMODITY: 'COMMODITY',
+  INDEX: 'INDEX',
   PREMARKET: 'PREMARKET',
 };
 
@@ -131,7 +136,7 @@ export const STATIC_ASSET_CLASS_MAP: Record<string, AssetClass> = {
   MSTR: 'EQUITY', BABA: 'EQUITY', LLY: 'EQUITY', COST: 'EQUITY', RIVN: 'EQUITY',
   TSM: 'EQUITY', CRCL: 'EQUITY', SNDK: 'EQUITY', CRWV: 'EQUITY', HIMS: 'EQUITY',
   DKNG: 'EQUITY', BX: 'EQUITY', GME: 'EQUITY', NVO: 'EQUITY', ASTS: 'EQUITY',
-  USAR: 'EQUITY', LITE: 'EQUITY',
+  USAR: 'EQUITY', LITE: 'EQUITY', GLW: 'EQUITY', // GLW (Corning): OPS-TIER-CLASSIFIER-XVENUE-W1 verified canonical (venue-less seed)
   SPY: 'EQUITY', QQQ: 'EQUITY', SP500: 'EQUITY', VIX: 'EQUITY',
   XLE: 'EQUITY', URNM: 'EQUITY',
   // ── KR_EQUITY: Korean/Japanese single-names + Asia indices/ETFs (weekend-level v1) ──

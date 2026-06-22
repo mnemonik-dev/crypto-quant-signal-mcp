@@ -41,6 +41,8 @@ export function tradfiFundingAnnotation(assetClass: AssetClass | 'UNKNOWN'): Fun
     case 'EQUITY':
     case 'KR_EQUITY':
     case 'COMMODITY':
+    case 'INDEX':
+    case 'FX':
       return { fundingStateOverride: null, fundingNote: FUNDING_NOTE_TRADFI };
     case 'CRYPTO':
     case 'UNKNOWN':
