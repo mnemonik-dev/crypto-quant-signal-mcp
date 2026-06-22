@@ -12,6 +12,7 @@ import type { DexType, ExchangeId } from '../types.js';
 import { getExchangeTopAssetsWithVolume } from './exchange-universe.js';
 import { coalescedCache } from './coalesced-cache.js';
 import { isShortLivedScript } from './runtime.js';
+import { getTradFiClass, warmAssetClasses } from './asset-class-detection.js';
 
 export type AssetTier = 1 | 2 | 3 | 4;
 
@@ -84,10 +85,18 @@ export function isKnownTradFi(symbol: string): boolean {
 
 // ── Classification ──
 
-export function classifyAsset(coin: string, top20ByOI: Set<string> | null): AssetTier {
+/**
+ * Classify a coin into a display tier. Optional trailing `venue` (TS bivariance →
+ * no caller cascade) lets the cross-venue asset-class engine resolve TradFi on the
+ * venue that actually lists it (OPS-TIER-CLASSIFIER-XVENUE-W1). Stays SYNCHRONOUS:
+ * `getTradFiClass` reads the PRE-WARMED snapshot (warmed in `warmTierCaches`), so the
+ * 11 performance-db rollup call-sites + get-trade-call never go async (Q8 ratified).
+ */
+export function classifyAsset(coin: string, top20ByOI: Set<string> | null, venue?: ExchangeId): AssetTier {
   const symbol = coin.toUpperCase();
   if (TIER_1.has(symbol)) return 1;
-  if (isKnownTradFi(symbol)) return 3;
+  if (isKnownTradFi(symbol)) return 3;                     // HL xyz + TRADFI_FALLBACK seed (incl. SPX)
+  if (getTradFiClass(symbol, venue) !== null) return 3;    // cross-venue field/union detection (any non-CRYPTO class)
   if (top20ByOI && top20ByOI.has(symbol)) return 2;
   if (MEME_KNOWN.has(symbol)) return 4;
   // Default: anything not classified lands in Tier 4 (Meme & Micro)
@@ -316,6 +325,7 @@ export async function warmTierCaches(): Promise<void> {
   await Promise.allSettled([
     getXyzSymbols(),
     getTop20ByOI(),
+    warmAssetClasses(), // cross-venue TradFi snapshot → sync getTradFiClass in classifyAsset (OPS-TIER-CLASSIFIER-XVENUE-W1)
     ...PROMOTED_VENUES.map((venue) => isMemeCoinLiquid('BTC', venue)),
   ]);
 }

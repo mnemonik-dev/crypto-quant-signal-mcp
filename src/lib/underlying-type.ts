@@ -26,6 +26,7 @@
 import { toBinanceSymbol } from './adapters/binance.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './adapters/_upstream-fetch.js';
 import { isKnownTradFi } from './asset-tiers.js';
+import { getTradFiClass, warmAssetClasses } from './asset-class-detection.js';
 import {
   STATIC_ASSET_CLASS_MAP,
   BINANCE_UNDERLYING_TO_ASSET_CLASS,
@@ -153,12 +154,17 @@ export async function resolveAssetClass(coin: string, exchange: ExchangeId): Pro
         // A normal PERPETUAL on Binance (BTCUSDT, etc.) → crypto, 24/7.
         return 'CRYPTO';
       }
-      // Symbol absent from exchangeInfo (e.g. an alias mismatch) → static fallback.
+      // Symbol absent from exchangeInfo (alias mismatch) → fall through to the engine + static.
     }
-    return staticFallback(symbol);
   }
 
-  // Non-Binance venues: static class map only in v1.
+  // Cross-venue asset-class engine (ALL venues, OPS-TIER-CLASSIFIER-XVENUE-W1): the
+  // single SoT both classifyAsset and this resolver project from — extends live
+  // per-venue detection beyond Binance. Warm-on-demand (gated/cheap; no-op under vitest
+  // unless detectors injected). A detected non-CRYPTO class wins; else static fallback.
+  await warmAssetClasses();
+  const detected = getTradFiClass(symbol, exchange);
+  if (detected) return detected;
   return staticFallback(symbol);
 }
 

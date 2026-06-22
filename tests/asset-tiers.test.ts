@@ -16,7 +16,7 @@
  * Audit reference: audits/OPS-3M-EXPAND-W1-endpoint-truth.md (Q-resolutions).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock the helper BEFORE importing the SUT — vitest hoists vi.mock.
 vi.mock('../src/lib/exchange-universe.js', () => {
@@ -33,6 +33,8 @@ import {
   _setLiquidCoinsForTest,
 } from '../src/lib/asset-tiers.js';
 import { getExchangeTopAssetsWithVolume } from '../src/lib/exchange-universe.js';
+import { _setAssetClassSnapshotForTest, _clearAssetClassCache } from '../src/lib/asset-class-detection.js';
+import type { AssetClass } from '../src/lib/market-sessions-constants.js';
 import type { ExchangeId } from '../src/types.js';
 
 // Type-cast the mock for ergonomic access
@@ -215,5 +217,69 @@ describe('classifyAsset — Tier-2 transition (OPS-TIER4-CLASSIFY-W1)', () => {
     expect(tier).toBe(2);
     expect(isMemeSpy).not.toHaveBeenCalled();
     isMemeSpy.mockRestore();
+  });
+});
+
+/**
+ * OPS-TIER-CLASSIFIER-XVENUE-W1 C2 — venue-aware classifyAsset over the cross-venue
+ * asset-class engine. Seeds the engine snapshot directly (the warm is async; the read
+ * is sync) and asserts the ratified AC matrix: each venue's TradFi → Tier 3, the OKX/
+ * Aster union fallback → Tier 3, the BingX wrapper + venue-less seed → Tier 3, and the
+ * crypto deny-list keeps colliding tickers ≠ 3.
+ */
+describe('classifyAsset — venue-aware cross-venue TradFi (OPS-TIER-CLASSIFIER-XVENUE-W1 C2)', () => {
+  const v = (...p: Array<[string, AssetClass]>) => new Map<string, AssetClass>(p);
+  beforeEach(() => {
+    _clearAssetClassCache();
+    const perVenue = new Map<ExchangeId, Map<string, AssetClass>>([
+      ['MEXC', v(['SNDKSTOCK', 'EQUITY'], ['SNDK', 'EQUITY'])],
+      ['GATE', v(['MSTRX', 'EQUITY'], ['MSTR', 'EQUITY'])],
+      ['BITGET', v(['VRT', 'EQUITY'])],
+      ['BINANCE', v(['CRWD', 'EQUITY'], ['QNTX', 'EQUITY'])],
+      ['BINGX', v(['ASML', 'EQUITY'], ['NIKKEI225', 'INDEX'])],
+    ]);
+    const union = v(
+      ['SNDKSTOCK', 'EQUITY'], ['SNDK', 'EQUITY'], ['MSTRX', 'EQUITY'], ['MSTR', 'EQUITY'],
+      ['VRT', 'EQUITY'], ['CRWD', 'EQUITY'], ['QNTX', 'EQUITY'], ['ASML', 'EQUITY'],
+      ['NIKKEI225', 'INDEX'], ['AAPL', 'EQUITY'],
+      ['DYDX', 'EQUITY'], // deliberately seeded to prove the deny-list overrides a union hit
+    );
+    _setAssetClassSnapshotForTest(perVenue, union);
+  });
+  afterEach(() => _clearAssetClassCache());
+
+  it('each venue self-classifies its own TradFi instruments → Tier 3', () => {
+    expect(classifyAsset('SNDKSTOCK', null, 'MEXC')).toBe(3);
+    expect(classifyAsset('MSTRX', null, 'GATE')).toBe(3);
+    expect(classifyAsset('VRT', null, 'BITGET')).toBe(3);
+    expect(classifyAsset('CRWD', null, 'BINANCE')).toBe(3);
+    expect(classifyAsset('QNTX', null, 'BINANCE')).toBe(3); // Binance Pre-IPO/TradFi
+  });
+
+  it('BingX NC* wrapper + venue-less STATIC seed → Tier 3', () => {
+    expect(classifyAsset('NCSKASML2USD', null, 'BINGX')).toBe(3);     // wrapper → ASML
+    expect(classifyAsset('NCSINIKKEI2252USD', null, 'BINGX')).toBe(3); // → NIKKEI225 (INDEX)
+    expect(classifyAsset('GLW', null)).toBe(3);                        // STATIC seed canonical, no venue
+  });
+
+  it('OKX/Aster no-field venues resolve via the cross-venue union → Tier 3', () => {
+    expect(classifyAsset('ASML', null, 'OKX')).toBe(3);
+    expect(classifyAsset('AAPL', null, 'ASTER')).toBe(3);
+  });
+
+  it('crypto deny-list keeps colliding tickers OUT of Tier 3 (sanity guard)', () => {
+    // The SP500-fake price-sanity case is canary-side (C3); here the sync guard is the
+    // deny-list — DYDX is seeded in the union yet still excluded.
+    expect(classifyAsset('TNSR', null, 'BINANCE')).not.toBe(3);
+    expect(classifyAsset('ASTEROID', null)).not.toBe(3);
+    for (const c of ['Q', 'FIO', 'IDOL']) expect(classifyAsset(c, null)).not.toBe(3);
+    expect(classifyAsset('DYDX', null, 'OKX')).not.toBe(3);
+  });
+
+  it('a cold engine snapshot never breaks tiering (top20 / meme / seed still resolve)', () => {
+    _clearAssetClassCache(); // snapshot null → getTradFiClass uses the STATIC seed floor only
+    expect(classifyAsset('SOL', new Set(['SOL']))).toBe(2);
+    expect(classifyAsset('WIF', null)).toBe(4);
+    expect(classifyAsset('TSLA', null)).toBe(3); // STATIC seed (also isKnownTradFi)
   });
 });
