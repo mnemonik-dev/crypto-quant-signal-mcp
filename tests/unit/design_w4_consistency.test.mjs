@@ -77,7 +77,8 @@ test('landing/index.html: W6+W7 hero+below-fold+landing-rest dual-renders presen
   // on /verify.
   assert.match(html, /lp-hero-desktop/, 'W7 hero desktop wrapper present');
   assert.match(html, /lp-hero-mobile/, 'W7 hero mobile wrapper present');
-  assert.match(html, /lp-belowfold-desktop/, 'W6 belowfold desktop wrapper present');
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: lp-belowfold removed (sections merged into lp-rest).
+  assert.doesNotMatch(html, /lp-belowfold-desktop/, 'lp-belowfold removed (LANDING-SECTION-REORDER-W1)');
   assert.match(html, /lp-rest-desktop/, 'W6 landing-rest desktop wrapper present');
   assert.match(html, /lp-rest-mobile/, 'W6 landing-rest mobile wrapper present');
   // D2-C artboard class still used by V1Hero

@@ -2051,10 +2051,12 @@ async function main() {
       );
       // Render 3 sections individually for clean per-section output (no top-level artboard wrapper —
       // C2 places each section directly in landing/index.html below-fold region).
-      const cc = renderToString(React.createElement(exports.CoreCapabilities, { mobile }));
+      // LANDING-SECTION-REORDER-W1: CoreCapabilities REMOVED from the page; WhenToUse + VsRawAPIs are
+      // now rendered into the merged 'landing-rest' sequence. This 'belowfold' target is retained but
+      // DORMANT for the homepage (lp-belowfold artboard removed). Debt: OPS-LANDING-JSX-SOT-CONSOLIDATE-W1.
       const wt = renderToString(React.createElement(exports.WhenToUse, { mobile }));
       const vs = renderToString(React.createElement(exports.VsRawAPIs, { mobile }));
-      html = cc + wt + vs;
+      html = wt + vs;
     } else if (target === 'landing-rest') {
       const srcRaw = await readFile(path.join(VAULT_DESIGN, 'v1-landing-rest.jsx'), 'utf-8');
       const src = patchLandingRest(srcRaw);
@@ -2067,9 +2069,16 @@ async function main() {
           'LRBlock', 'LREyebrow', 'LRH2', 'LRLead', 'Pill', 'Check', 'Bullet', 'FAQItem',
         ]
       );
+      // LANDING-SECTION-REORDER-W1: render the 2 moved belowfold sections (WhenToUse + VsRawAPIs) from
+      // v1-belowfold.jsx into the merged sequence (positions 7-8, after Pricing). JSX files stay separate;
+      // this render concatenation is the canonical merged-order SoT. Debt: OPS-LANDING-JSX-SOT-CONSOLIDATE-W1.
+      const bfSrc = patchBelowFold(await readFile(path.join(VAULT_DESIGN, 'v1-belowfold.jsx'), 'utf-8'));
+      const bfExports = await evalJsxSrc(bfSrc, path.join(VAULT_DESIGN, 'v1-belowfold.jsx'), ['WhenToUse', 'VsRawAPIs', 'BFIcon', 'BFEyebrow', 'BFH2', 'BFSection']);
+      const wt = renderToString(React.createElement(bfExports.WhenToUse, { mobile }));
+      const vs = renderToString(React.createElement(bfExports.VsRawAPIs, { mobile }));
       // Render in spec order, SKIP TradFiCallout (architect mandate Q-W10 spec rule 10).
       const try30 = preserveQuickstartAnchor(renderToString(React.createElement(exports.TryIn30, { mobile })));
-      const tt = renderToString(React.createElement(exports.ThreeTools, { mobile }));
+      // LANDING-SECTION-REORDER-W1: ThreeTools ("3 tools, One verdict.") REMOVED from the page (not rendered).
       const uc = injectUseCasesLogos(stripUseCasesDate(renderToString(React.createElement(exports.UseCases, { mobile }))));
       // P2-LANDING-VERDICT-CARD-W1: styled verdict-with-receipts example card. Uses
       // data-tr-field directly in JSX (TrustBand pattern) → no post-render injector.
@@ -2089,7 +2098,7 @@ async function main() {
       const fq = renderToString(React.createElement(exports.FAQ, { mobile })) + FAQ_ACCORDION_JS;
       const ft = applyFooterUrls(renderToString(React.createElement(exports.LandingFooter, { mobile })));
       // Final pass: wrap "5 exchanges" / "11 timeframes" prose literals with proxy spans (copy-consistency canary).
-      html = wrapCounterLiteralsInProse(try30 + tt + uc + lv + ltr + tp + tb + sp + fd + fq + ft);
+      html = wrapCounterLiteralsInProse(lv + ltr + tp + tb + sp + wt + vs + uc + try30 + fd + fq + ft);
     } else if (target === 'hero') {
       // DESIGN-W7 hero render — V1Hero from v1-minimal.jsx with `count=32, diagram='flow'`
       // (matches canonical AlgoVault Landing.html bootstrap line 59).

@@ -1,0 +1,985 @@
+// AlgoVault landing — sections below "Why not just use exchange APIs?".
+// Inherits hero tokens: dark bg, mint accent, Inter Tight + Inter + JetBrains Mono.
+// Card primitives match v1-belowfold.jsx (1px solid var(--line), 14px radius, oklch(0.18 0.014 265 / 0.55)).
+
+const LRBlock = ({ children, mobile, dim = false, id, py, ...rest }) =>
+<section id={id} {...rest} style={{
+  position: 'relative',
+  padding: mobile ? `${py?.m ?? 64}px 22px` : `${py?.d ?? 120}px 80px`,
+  borderTop: '1px solid var(--line)',
+  background: dim ? 'linear-gradient(180deg, transparent, oklch(0.155 0.012 265 / 0.7) 30%, oklch(0.155 0.012 265 / 0.7) 70%, transparent)' : 'transparent'
+}}>{children}</section>;
+
+
+const LREyebrow = ({ children }) =>
+<div style={{
+  display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 18,
+  fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)',
+  letterSpacing: '0.14em', textTransform: 'uppercase'
+}}>
+    <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent, var(--mint))', boxShadow: '0 0 8px var(--accent, var(--mint))' }} />
+    {children}
+  </div>;
+
+
+const LRH2 = ({ children, mobile }) =>
+<h2 style={{
+  fontFamily: 'var(--font-display)',
+  fontSize: mobile ? 30 : 48, lineHeight: 1.05,
+  letterSpacing: '-0.022em', fontWeight: 500,
+  margin: 0, textWrap: 'balance', color: 'var(--fg)'
+}}>{children}</h2>;
+
+
+const LRLead = ({ children, mobile, max = 720 }) =>
+<p style={{
+  fontSize: mobile ? 15 : 17, color: 'var(--fg-2)',
+  maxWidth: max, margin: mobile ? '14px 0 32px' : '20px 0 56px',
+  lineHeight: 1.6
+}}>{children}</p>;
+
+
+const Pill = ({ children, accent = 'mint', dim = false, mono = true, style }) =>
+<span style={{
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '6px 11px', borderRadius: 999,
+  border: `1px solid ${accent === 'violet' ? 'oklch(0.45 0.14 290 / 0.5)' : 'var(--line)'}`,
+  background: dim ? 'oklch(0.13 0.012 265 / 0.7)' : 'oklch(0.2 0.012 265 / 0.65)',
+  fontFamily: mono ? 'var(--font-mono)' : 'var(--font-display)',
+  fontSize: 11.5,
+  color: accent === 'violet' ? 'var(--violet)' : 'var(--accent, var(--mint))',
+  ...style
+}}>{children}</span>;
+
+
+const Check = ({ size = 14 }) =>
+<svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 3 }}>
+    <path d="M3 8.5l3.2 3L13 4.5" stroke="var(--accent, var(--mint))" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+
+
+const Bullet = ({ children, mobile }) =>
+<li style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: mobile ? 13.5 : 14.5, color: 'var(--fg-2)', lineHeight: 1.5 }}>
+    <Check /><span>{children}</span>
+  </li>;
+
+
+/* ================================================================
+   1. TRY IT IN 30 SECONDS  — 3 step quickstart + JSON snippet
+   ================================================================ */
+function TryIn30({ mobile = false }) {
+  const steps = [
+  {
+    title: 'Open Claude → Settings → Integrations',
+    sub: 'Or any MCP-compatible client: Cursor, Windsurf, VS Code, etc.'
+  },
+  {
+    title: 'Add custom integration → paste the URL',
+    sub: 'https://api.algovault.com/mcp',
+    copyable: 'https://api.algovault.com/mcp'
+  },
+  {
+    title: 'Ask Claude',
+    sub: '"Get me a trade call for BTC on the 15m timeframe"',
+    tag: 'Free tier: all assets, all 11 timeframes, 100 calls/month'
+  }];
+
+  return (
+    <LRBlock id="try-it" mobile={mobile}>
+      <LREyebrow>· quickstart</LREyebrow>
+      <LRH2 mobile={mobile}>Try it in 30 seconds.</LRH2>
+      <LRLead mobile={mobile}>Three steps from idle Claude to live verdict. No SDK, no auth handshake, no cold-start.</LRLead>
+
+      {/* Step list */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: mobile ? '1fr' : 'repeat(3, 1fr)',
+        gap: mobile ? 14 : 20,
+        marginBottom: mobile ? 28 : 44
+      }}>
+        {steps.map((s, i) =>
+        <article key={i} style={{
+          position: 'relative',
+          padding: mobile ? '22px 20px' : '32px 30px',
+          border: '1px solid var(--line)', borderRadius: 14,
+          background: 'oklch(0.18 0.014 265 / 0.55)',
+          display: 'flex', flexDirection: 'column', gap: 14
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{
+              width: 36, height: 36, borderRadius: 999,
+              background: 'oklch(0.22 0.012 265)',
+              border: '1px solid var(--accent, var(--mint))',
+              display: 'grid', placeItems: 'center',
+              fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600,
+              color: 'var(--accent, var(--mint))',
+              boxShadow: '0 0 14px oklch(0.86 0.16 165 / 0.25)'
+            }}>0{i + 1}</div>
+              {s.copyable &&
+            <button onClick={(e) => navigator.clipboard?.writeText(s.copyable)} style={{
+              border: '1px solid var(--line-2)', background: 'oklch(0.22 0.012 265 / 0.6)',
+              color: 'var(--fg-2)', cursor: 'pointer', padding: '5px 10px',
+              borderRadius: 7, fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '0.08em'
+            }}>COPY</button>
+            }
+            </div>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 17 : 19, fontWeight: 500, color: 'var(--fg)', letterSpacing: '-0.012em', marginBottom: 8, textWrap: 'balance' }}>
+                {s.title}
+              </div>
+              <div style={{
+              fontSize: 13.5, color: i === 1 ? 'var(--accent, var(--mint))' : 'var(--fg-2)',
+              fontFamily: i === 1 ? 'var(--font-mono)' : 'var(--font-text)',
+              lineHeight: 1.55,
+              wordBreak: i === 1 ? 'break-all' : 'normal'
+            }}>{s.sub}</div>
+            </div>
+            {s.tag &&
+          <div style={{ fontSize: 11.5, color: 'var(--fg-3)', borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 'auto' }}>
+                {s.tag}
+              </div>
+          }
+          </article>
+        )}
+      </div>
+
+      {/* Code response block */}
+      <div className="code-window" style={{ fontSize: mobile ? 11.5 : 13 }}>
+        <div className="code-window-header">
+          <span className="code-dot" style={{ background: '#ff5f57' }} />
+          <span className="code-dot" style={{ background: '#febc2e' }} />
+          <span className="code-dot" style={{ background: '#28c840' }} />
+          <span style={{ marginLeft: 12 }}>get_trade_call(<span className="tk-str">"BTC"</span>, <span className="tk-str">"15m"</span>) → response</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--accent, var(--mint))', fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>● 312ms · 200 OK</span>
+        </div>
+        <div className="code-body" style={{ padding: mobile ? '14px 16px' : '20px 24px' }}>
+{[
+          ['{', ''],
+          ['  "asset": "BTC",', '  "timeframe": "15m",'],
+          ['  "call": "BUY",', '  "confidence": 0.74,'],
+          ['  "regime": "trending_up",', '  "factors": {'],
+          ['    "trend_persistence": "HIGH",', '    "funding_state": "NEUTRAL",'],
+          ['    "breakout_pending": "ACTIVE",', '    "volatility_regime": "normal",'],
+          ['  },', '  "merkle_id": "0x4a2…f91"'],
+          ['}', '']].
+          map(([a, b], i) => {
+            const tokenize = (line) => line.split(/("[^"]*"|\b\d+\.?\d*\b|[{}\[\],:])/).map((t, k) => {
+              if (!t) return null;
+              if (/^"[^"]*"$/.test(t)) {
+                const isKey = i < 7 && line.indexOf(t) < line.indexOf(':');
+                return <span key={k} className={isKey ? 'tk-key' : 'tk-str'}>{t}</span>;
+              }
+              if (/^\d+\.?\d*$/.test(t)) return <span key={k} className="tk-num">{t}</span>;
+              if (/^[{}\[\],:]$/.test(t)) return <span key={k} className="tk-pun">{t}</span>;
+              return <span key={k}>{t}</span>;
+            });
+            return (
+              <div key={i} className="code-line" style={{ display: mobile ? 'block' : 'flex', gap: mobile ? 0 : 60, opacity: a || b ? 1 : 0.4 }}>
+      <div style={{ flex: 1 }}>{tokenize(a)}</div>
+      {!mobile && <div style={{ flex: 1 }}>{tokenize(b)}</div>}
+      {mobile && b && <div>{tokenize(b)}</div>}
+    </div>);
+
+          })}
+        </div>
+      </div>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   2. TRADFI PERPETUALS — purple callout
+   ================================================================ */
+function TradFiCallout({ mobile = false }) {
+  return (
+    <section style={{
+      padding: mobile ? '0 22px 56px' : '0 80px 96px',
+      position: 'relative'
+    }}>
+      <div style={{
+        position: 'relative',
+        padding: mobile ? '22px 22px' : '28px 32px',
+        border: '1px solid oklch(0.5 0.16 290 / 0.45)',
+        borderRadius: 14,
+        background: 'linear-gradient(180deg, oklch(0.32 0.1 290 / 0.18), oklch(0.18 0.014 265 / 0.55))',
+        boxShadow: '0 0 0 1px oklch(0.62 0.18 290 / 0.08), 0 14px 40px -22px oklch(0.62 0.18 290 / 0.5)',
+        display: mobile ? 'block' : 'grid',
+        gridTemplateColumns: '180px 1fr',
+        alignItems: 'center', gap: 24
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: mobile ? 12 : 0 }}>
+          <span style={{
+            width: 38, height: 38, borderRadius: 9,
+            display: 'grid', placeItems: 'center',
+            background: 'oklch(0.32 0.1 290 / 0.4)',
+            border: '1px solid oklch(0.5 0.14 290 / 0.5)'
+          }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M3 14V6h2v8H3zm4-3V6h2v5H7zm4-7v10h2V4h-2zm4 4v6h2V8h-2z" fill="oklch(0.78 0.16 290)" />
+            </svg>
+          </span>
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--fg-4)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>· also</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 18 : 20, fontWeight: 500, letterSpacing: '-0.012em', color: 'oklch(0.85 0.13 290)' }}>
+              TradFi Perpetuals
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: mobile ? 14 : 15, color: 'var(--fg-2)', lineHeight: 1.55 }}>
+          Stocks, commodities, indices, and FX via Hyperliquid&rsquo;s xyz dex. Trade calls for{' '}
+          <span style={{ color: 'oklch(0.85 0.13 290)', fontFamily: 'var(--font-mono)', fontSize: mobile ? 12.5 : 13 }}>TSLA</span>,{' '}
+          <span style={{ color: 'oklch(0.85 0.13 290)', fontFamily: 'var(--font-mono)', fontSize: mobile ? 12.5 : 13 }}>GOLD</span>,{' '}
+          <span style={{ color: 'oklch(0.85 0.13 290)', fontFamily: 'var(--font-mono)', fontSize: mobile ? 12.5 : 13 }}>SP500</span>, and more.
+        </div>
+      </div>
+    </section>);
+
+}
+
+/* ================================================================
+   3. THREE TOOLS, ONE VERDICT
+   ================================================================ */
+function ThreeTools({ mobile = false }) {
+  const cards = [
+  {
+    tool: 'get_trade_call',
+    title: 'Composite Trade Call',
+    bullets: ['Multi-factor composite scoring', 'Regime-aware filtering', 'Crypto + TradFi', '11 timeframes (1m–1d)'],
+    snippet: <>→ <span style={{ color: 'var(--green)' }}>BUY 68%</span> · trend_persistence: <span style={{ color: 'oklch(0.82 0.12 65)' }}>HIGH</span> · funding_state: <span style={{ color: 'oklch(0.82 0.12 65)' }}>ELEVATED</span> · breakout_pending: <span style={{ color: 'var(--fg-3)' }}>INACTIVE</span></>
+  },
+  {
+    tool: 'scan_funding_arb',
+    title: 'Funding Rate Arbitrage',
+    bullets: ['Hyperliquid vs Binance vs Bybit', 'Normalized hourly rates', 'Annualized spreads in basis points', 'Ranked by opportunity size'],
+    snippet: <>→ <span style={{ color: 'var(--accent, var(--mint))' }}>DOGE +42 bps</span> spread · HL <span style={{ color: 'oklch(0.82 0.12 65)' }}>+0.83%</span> vs Binance <span style={{ color: 'var(--fg-3)' }}>+0.01%</span></>
+  },
+  {
+    tool: 'get_market_regime',
+    title: 'Market Regime Detection',
+    bullets: ['Trending / Ranging / Volatile', 'Multi-dimensional classification', 'Cross-venue funding sentiment', 'Strategy & sizing suggestions'],
+    snippet: <>→ <span style={{ color: 'var(--green)' }}>TRENDING_UP</span> ADX=<span style={{ color: 'oklch(0.82 0.12 65)' }}>34.2</span> · Funding sentiment: <span style={{ color: 'var(--accent, var(--mint))' }}>BULLISH_BIAS</span></>
+  }];
+
+  return (
+    <LRBlock id="three-tools" mobile={mobile} dim>
+      <LREyebrow>· tools</LREyebrow>
+      <LRH2 mobile={mobile}>3 tools, one verdict.</LRH2>
+      <LRLead mobile={mobile}>
+        Each tool combines multiple data sources into a single, actionable answer.<br/>Assets are classified into quality tiers with institutional-grade liquidity filtering.
+      </LRLead>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: mobile ? '1fr' : 'repeat(3, 1fr)',
+        gap: mobile ? 14 : 20
+      }}>
+        {cards.map((c, i) =>
+        <article key={i} style={{
+          padding: mobile ? '20px 20px 22px' : '28px 28px 24px',
+          border: '1px solid var(--line)', borderRadius: 14,
+          background: 'oklch(0.18 0.014 265 / 0.55)',
+          display: 'flex', flexDirection: 'column', gap: mobile ? 14 : 18
+        }}>
+            <Pill dim style={{ alignSelf: 'flex-start' }}>
+              <span style={{ color: 'var(--fg-4)' }}>›</span>{c.tool}
+            </Pill>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 19 : 22, fontWeight: 500, letterSpacing: '-0.014em', color: 'var(--fg)' }}>
+              {c.title}
+            </div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {c.bullets.map((b, j) => <Bullet key={j} mobile={mobile}>{b}</Bullet>)}
+            </ul>
+            <div style={{
+            marginTop: 'auto',
+            padding: mobile ? '12px 12px' : '14px 14px',
+            borderRadius: 10, border: '1px solid var(--line)',
+            background: 'oklch(0.13 0.01 265)',
+            fontFamily: 'var(--font-mono)', fontSize: mobile ? 11 : 11.5,
+            lineHeight: 1.5, color: 'var(--fg-2)',
+            wordBreak: 'break-word'
+          }}>
+              {c.snippet}
+            </div>
+          </article>
+        )}
+      </div>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   4. USE CASES — Brain + Execution Pairing (4 exchange cards)
+   ================================================================ */
+function UseCases({ mobile = false }) {
+  const cards = [
+  { ex: 'Binance', mark: 'B', stripe: 'oklch(0.82 0.16 85)', body: 'Composite verdict + official Binance Skills Hub for Spot Testnet execution', pkg: 'binance/binance-skills-hub', meta: 'verified 2026-04-26' },
+  { ex: 'OKX', mark: 'O', stripe: 'oklch(0.82 0.005 265)', body: 'Composite verdict + 83 OKX execution tools across spot, swap, futures, options, grid bots', pkg: '@okx_ai/okx-trade-mcp@1.3.1', meta: '83 tools' },
+  { ex: 'Bybit', mark: 'BY', stripe: 'oklch(0.74 0.18 35)', body: "Composite verdict + Bybit's official MCP for Linear Perpetual + conditional orders", pkg: 'bybit-official-trading-server@1.0.9', meta: 'linear perp · conditional' },
+  { ex: 'Bitget', mark: 'BG', stripe: 'oklch(0.78 0.13 200)', body: 'Composite verdict + GetClaw agent-native execution inside a dedicated AI account', pkg: 'bitget-mcp-server@1.1.0', meta: 'GetClaw · AI account' }];
+
+  return (
+    <LRBlock id="use-cases" mobile={mobile}>
+      <LREyebrow>· use cases</LREyebrow>
+      <LRH2 mobile={mobile}>Brain + execution pairing.</LRH2>
+      <LRLead mobile={mobile} max={780}>
+        AlgoVault MCP gives your agent a composite verdict in one call — call, confidence, regime, factors, every call Merkle-anchored on Base L2. Pair it with any of these official Agent Trade Kits to ship a complete trading agent.
+      </LRLead>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: mobile ? '1fr' : 'repeat(4, 1fr)',
+        gap: mobile ? 14 : 16
+      }}>
+        {cards.map((c, i) =>
+        <article key={i} style={{
+          position: 'relative',
+          padding: mobile ? '20px 20px' : '24px 22px 22px',
+          border: '1px solid var(--line)', borderRadius: 14,
+          background: 'oklch(0.18 0.014 265 / 0.55)',
+          display: 'flex', flexDirection: 'column', gap: 14,
+          overflow: 'hidden'
+        }}>
+            <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+            background: c.stripe,
+            opacity: 0.85
+          }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="xchg-mark" style={{ '--mark': c.stripe, width: 28, height: 28, fontSize: 11 }}>{c.mark}</span>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 17 : 18, fontWeight: 500, letterSpacing: '-0.012em', color: 'var(--fg)' }}>
+                  {c.ex} × AlgoVault
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-4)', letterSpacing: '0.06em' }}>
+                  {c.meta}
+                </span>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: mobile ? 13.5 : 14, color: 'var(--fg-2)', lineHeight: 1.5 }}>
+              {c.body}
+            </p>
+            <div style={{
+            marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10,
+            paddingTop: 12, borderTop: '1px solid var(--line)'
+          }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                {c.pkg}
+              </span>
+              <a href="#tutorial" style={{ fontFamily: 'var(--font-text)', fontSize: 13, color: 'var(--accent, var(--mint))', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                View tutorial <span style={{ fontFamily: 'var(--font-mono)' }}>→</span>
+              </a>
+            </div>
+          </article>
+        )}
+      </div>
+      <p style={{
+        marginTop: mobile ? 22 : 32, fontSize: 11.5, color: 'var(--fg-4)',
+        lineHeight: 1.55, maxWidth: 880
+      }}>
+        All demos run testnet/demo only — zero real-money risk in any code path. AlgoVault returns analytics; your agent and risk policy decide what to execute. Exchange logos and names are trademarks of their respective owners. Used for nominative reference to integration tutorials. No partnership or endorsement implied.
+      </p>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   5. LIVE TRACK RECORD — stat dashboard
+   ================================================================ */
+function LiveTrackRecord({ mobile = false }) {
+  const top = [
+  { big: 'Every Trade Call', small: 'Tracked & Measured' },
+  { big: 'Crypto + TradFi', small: 'Asset Coverage' },
+  { big: '11 Timeframes', small: '1m – 1d' },
+  { big: '5 Exchanges', small: 'Analyzed' }];
+
+  const mid = [
+  { big: '1m – 1d', small: 'All HL intervals' },
+  { big: '≥ 60%', small: 'Confidence filter' },
+  { big: 'PFE Win Rate', small: 'Peak Favorable Excursion' },
+  { big: 'Per-TF Evaluation', small: '5m/1hr · 1hr/8hr · 4hr/24hr' }];
+
+  const live = [
+  { big: '90.2%', small: 'PFE Win Rate', live: true },
+  { big: '80,059+', small: 'Verified Calls', live: true },
+  { big: '29', small: 'Merkle batches on-chain', live: true }];
+
+  const StatCard = ({ big, small, live, accent, large }) =>
+  <div style={{
+    padding: mobile ? '18px 18px' : '22px 22px',
+    border: live ? '1px solid oklch(0.7 0.14 165 / 0.45)' : '1px solid var(--line)',
+    borderRadius: 12,
+    background: live ?
+    'linear-gradient(180deg, oklch(0.32 0.08 170 / 0.22), oklch(0.18 0.014 265 / 0.55))' :
+    'oklch(0.18 0.014 265 / 0.55)',
+    display: 'flex', flexDirection: 'column', gap: 6,
+    boxShadow: live ? '0 0 0 1px oklch(0.86 0.16 165 / 0.08), 0 12px 30px -18px oklch(0.86 0.16 165 / 0.4)' : 'none',
+    position: 'relative', overflow: 'hidden'
+  }}>
+      {live &&
+    <span style={{
+      position: 'absolute', top: 12, right: 14,
+      fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--green)',
+      letterSpacing: '0.16em', display: 'inline-flex', alignItems: 'center', gap: 5
+    }}>
+          <span className="live-pulse" style={{ width: 5, height: 5 }} />LIVE
+        </span>
+    }
+      <div style={{
+      fontFamily: 'var(--font-display)',
+      fontSize: large ? mobile ? 28 : 38 : mobile ? 19 : 22,
+      fontWeight: large ? 600 : 500,
+      letterSpacing: '-0.018em',
+      color: live ? 'var(--accent, var(--mint))' : 'var(--fg)',
+      textShadow: live ? '0 0 18px oklch(0.86 0.16 165 / 0.35)' : 'none'
+    }}>
+        {big}
+      </div>
+      <div style={{
+      fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--fg-3)',
+      letterSpacing: '0.08em', textTransform: 'uppercase'
+    }}>
+        {small}
+      </div>
+    </div>;
+
+  return (
+    <LRBlock id="track-record" mobile={mobile}>
+      <LREyebrow>· live track record</LREyebrow>
+      <LRH2 mobile={mobile}>Every qualifying call, on the record.</LRH2>
+      <LRLead mobile={mobile} max={780}>
+        Every qualifying trade call (confidence ≥ 60%) is tracked. PFE directional accuracy and excursion analysis. All public.
+      </LRLead>
+
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: mobile ? 10 : 14, marginBottom: mobile ? 12 : 14 }}>
+        {top.map((t, i) => <StatCard key={i} {...t} />)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: mobile ? 10 : 14, marginBottom: mobile ? 18 : 22 }}>
+        {mid.map((t, i) => <StatCard key={i} {...t} />)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3, 1fr)', gap: mobile ? 10 : 14 }}>
+        {live.map((t, i) => <StatCard key={i} {...t} large />)}
+      </div>
+
+      <div style={{ marginTop: mobile ? 26 : 36, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+        <a href="#track" className="btn btn-primary accent-cyan" style={{ background: 'var(--accent, var(--mint))', color: 'oklch(0.16 0.05 165)', boxShadow: 'inset 0 1px 0 oklch(1 0 0 / 0.3), 0 0 0 1px oklch(0.96 0.05 165 / 0.25), 0 8px 30px -10px oklch(0.86 0.16 165 / 0.55)' }}>
+          View Live Track Record →
+        </a>
+        <span style={{ fontSize: 12.5, color: 'var(--fg-3)', maxWidth: 520, lineHeight: 1.5 }}>
+          Updated live. Also queryable via{' '}
+          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>performance://signal-performance</span>{' '}
+          MCP resource.
+        </span>
+      </div>
+      {/* DESIGN-W7 fix-forward ROUND 8 (Mr.1 directive 2026-05-11): On-chain verified P
+          REMOVED per visual review — duplicates content of the Tamper-Proof Track Record
+          callout immediately below; Verify-any-call CTA now lives on that callout. */}
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   6. TAMPER-PROOF TRACK RECORD — mint-bordered callout
+   ================================================================ */
+function TamperProof({ mobile = false }) {
+  return (
+    <section style={{ padding: mobile ? '0 22px 56px' : '0 80px 96px' }}>
+      <div style={{
+        position: 'relative',
+        padding: mobile ? '22px 22px' : '28px 32px',
+        border: '1px solid var(--accent, var(--mint))',
+        borderRadius: 14,
+        background: 'linear-gradient(180deg, oklch(0.32 0.08 170 / 0.18), oklch(0.18 0.014 265 / 0.55))',
+        boxShadow: '0 0 0 1px oklch(0.86 0.16 165 / 0.1), 0 18px 40px -22px oklch(0.86 0.16 165 / 0.4)',
+        display: mobile ? 'block' : 'grid',
+        gridTemplateColumns: '1fr auto', gap: 24, alignItems: 'center'
+      }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 20 : 22, fontWeight: 500, letterSpacing: '-0.014em', color: 'var(--fg)', marginBottom: 6 }}>
+            🔗 Tamper-Proof Track Record
+          </div>
+          <p style={{ margin: 0, fontSize: mobile ? 14 : 14.5, color: 'var(--fg-2)', lineHeight: 1.55, maxWidth: 720 }}>
+            Every call hashed on-chain (Base L2). Daily Merkle batches.<br/>Inspect the contract on Basescan — we can&rsquo;t edit history.
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: mobile ? 16 : 0 }}>
+          <a href="#verify-call" style={{ fontSize: 13.5, color: 'var(--accent, var(--mint))', textDecoration: 'none', padding: '10px 14px', border: '1px solid oklch(0.5 0.14 165 / 0.5)', borderRadius: 8, fontFamily: 'var(--font-mono)' }}>Verify a Call →</a>
+          <a href="#contract" style={{ fontSize: 13.5, color: 'var(--accent, var(--mint))', textDecoration: 'none', padding: '10px 14px', border: '1px solid oklch(0.5 0.14 165 / 0.5)', borderRadius: 8, fontFamily: 'var(--font-mono)' }}>View Contract →</a>
+        </div>
+      </div>
+    </section>);
+
+}
+
+/* ================================================================
+   6b. TRUST BAND - verifiable track record at the buy decision
+   (LANDING-CONVERSION-TRUST-W1) - additive; live-bound spans, no hero/card change.
+   ================================================================ */
+function TrustBand({ mobile = false }) {
+  const badge = {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    fontSize: mobile ? 11.5 : 12, fontFamily: 'var(--font-mono)',
+    color: 'var(--accent, var(--mint))', textDecoration: 'none',
+    padding: '7px 12px', borderRadius: 999,
+    border: '1px solid oklch(0.5 0.14 165 / 0.5)',
+    background: 'oklch(0.18 0.014 265 / 0.5)', whiteSpace: 'nowrap'
+  };
+  return (
+    <section style={{ padding: mobile ? '0 22px 6px' : '0 80px 8px' }}>
+      <div style={{
+        padding: mobile ? '18px 18px' : '22px 26px',
+        border: '1px solid oklch(0.5 0.14 165 / 0.45)', borderRadius: 14,
+        background: 'linear-gradient(90deg, oklch(0.32 0.08 170 / 0.25), oklch(0.18 0.014 265 / 0.55))',
+        display: 'flex', flexDirection: 'column', gap: mobile ? 14 : 16
+      }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: mobile ? 8 : 18, justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 15 : 17.5, color: 'var(--fg)', fontWeight: 500, lineHeight: 1.5, maxWidth: 770 }}>
+            <strong style={{ color: 'var(--accent, var(--mint))' }}>Don&rsquo;t trust — verify.</strong>{' '}
+            <span data-tr-field="pfe_wr">91.5%</span> PFE win rate across <span data-tr-field="call_count">246,980</span>+ calls, every one Merkle-anchored on Base.
+          </span>
+          <a href="/track-record?from=landing" style={{ fontSize: mobile ? 13 : 13.5, color: 'var(--accent, var(--mint))', textDecoration: 'none', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+            See the live track record →
+          </a>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: mobile ? 10 : 12 }}>
+          <a href="https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81" target="_blank" rel="noopener noreferrer" style={badge}>
+            🔗 On-Chain Verified
+          </a>
+          <a href="https://basescan.org/token/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432?a=44544" target="_blank" rel="noopener noreferrer" style={badge}>
+            ERC-8004 Verified Agent · #<span data-tr-field="erc8004_agent_id">44544</span>
+          </a>
+          <span style={{ flexGrow: 1 }} />
+          <a href="#quickstart" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: mobile ? 12.5 : 13, fontWeight: 500,
+            fontFamily: 'var(--font-text)', color: 'oklch(0.16 0.05 165)',
+            background: 'var(--accent, var(--mint))', textDecoration: 'none',
+            padding: '9px 16px', borderRadius: 9,
+            boxShadow: '0 8px 24px -10px oklch(0.86 0.16 165 / 0.5)'
+          }}>
+            Start free — 100 calls/month, no card. Get your first BTC verdict in 30 seconds →
+          </a>
+        </div>
+      </div>
+    </section>);
+
+}
+
+/* ================================================================
+   7. SIMPLE PRICING — 5 tier row
+   ================================================================ */
+function SimplePricing({ mobile = false }) {
+  const tiers = [
+  { id: 'free', name: 'FREE', price: '$0', sub: 'No signup needed',
+    bullets: ['All crypto + TradFi assets', 'All 11 timeframes (1m–1d)', 'Top 5 funding arbs', '100 calls/month', 'HOLD calls always free'],
+    cta: 'Start Free', href: '#quickstart', meta: 'Try the free Telegram bot →',
+    stripe: 'oklch(0.78 0.18 145)', ctaStyle: 'ghost' },
+  { id: 'starter', name: 'STARTER', price: '$9.99', period: '/mo', sub: 'For indie builders',
+    bullets: ['All crypto + TradFi assets', 'All 11 timeframes', '3,000 calls/month', '$0.015/call overage', 'HOLD calls always free'],
+    cta: 'Subscribe to Starter', href: 'https://api.algovault.com/signup?plan=starter&upgrade_from=landing_pricing', stripe: 'oklch(0.78 0.13 175)', ctaStyle: 'mint' },
+  { id: 'pro', name: 'PRO', price: '$49', period: '/mo', sub: 'For serious agent builders', popular: true,
+    bullets: ['All crypto + TradFi assets', 'All 11 timeframes (1m–1d)', '15,000 calls/month', '$0.01/call overage', 'HOLD calls always free'],
+    cta: 'Subscribe to Pro', href: 'https://api.algovault.com/signup?plan=pro&upgrade_from=landing_pricing', stripe: 'oklch(0.86 0.16 165)', ctaStyle: 'mint-strong' },
+  { id: 'enterprise', name: 'ENTERPRISE', price: '$299', period: '/mo', sub: 'For production trading desks',
+    bullets: ['All crypto + TradFi assets', 'All 11 timeframes (1m–1d)', '100,000 calls/month', '$0.005/call overage', 'SLA + priority support', 'Unlimited funding arbs', 'HOLD calls always free'],
+    cta: 'Subscribe to Enterprise', href: 'https://api.algovault.com/signup?plan=enterprise&upgrade_from=landing_pricing', stripe: 'oklch(0.7 0.16 290)', ctaStyle: 'violet' },
+  { id: 'x402', name: 'x402 · Pay-per-call', price: 'USDC', sub: 'On Base · no signup, no key',
+    bullets: ['scan_funding_arb — $0.01/call', 'get_trade_call — $0.02/call', 'get_market_regime — $0.02/call', 'HOLD trade calls — free', '100 free calls/mo first, then pay-per-call'],
+    cta: "Pay per call with your agent's wallet →", href: '/docs.html#x402', stripe: 'oklch(0.78 0.13 240)', ctaStyle: 'azure' }];
+
+
+  const ctaForStyle = (s) => {
+    if (s === 'mint-strong') return { background: 'var(--accent, var(--mint))', color: 'oklch(0.16 0.05 165)', boxShadow: '0 8px 24px -8px oklch(0.86 0.16 165 / 0.55)' };
+    if (s === 'mint') return { background: 'oklch(0.4 0.1 170 / 0.4)', color: 'var(--accent, var(--mint))', border: '1px solid oklch(0.5 0.12 170 / 0.55)' };
+    if (s === 'violet') return { background: 'var(--violet)', color: 'oklch(0.18 0.04 290)' };
+    if (s === 'azure') return { background: 'oklch(0.42 0.16 240 / 0.4)', color: 'oklch(0.86 0.13 240)', border: '1px solid oklch(0.5 0.14 240 / 0.55)' };
+    return { background: 'oklch(0.22 0.012 265 / 0.7)', color: 'var(--fg)', border: '1px solid var(--line-2)' };
+  };
+
+  return (
+    <LRBlock id="pricing" mobile={mobile} dim>
+      <LREyebrow>· pricing</LREyebrow>
+      <LRH2 mobile={mobile}>Simple pricing.</LRH2>
+      <p style={{ fontSize: mobile ? 15 : 17, color: 'var(--fg-2)', maxWidth: 700,
+        margin: mobile ? '14px 0 18px' : '20px 0 24px', lineHeight: 1.6 }}>
+        Start free. Pay when you need more.
+      </p>
+      <a href="/track-record?from=pricing" style={{ display: 'inline-block', fontSize: mobile ? 12.5 : 13, color: 'var(--accent, var(--mint))', textDecoration: 'none', fontFamily: 'var(--font-mono)', margin: mobile ? '0 0 14px' : '0 0 18px' }}>
+        Verify our track record →
+      </a>
+
+      <div style={{
+        padding: mobile ? '14px 16px' : '16px 22px', marginBottom: mobile ? 24 : 36,
+        border: '1px solid oklch(0.5 0.14 165 / 0.45)', borderRadius: 12,
+        background: 'linear-gradient(90deg, oklch(0.32 0.08 170 / 0.25), oklch(0.18 0.014 265 / 0.55))',
+        display: 'flex', alignItems: 'flex-start', gap: 14, maxWidth: 920
+      }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 19 : 22, fontWeight: 600, color: 'var(--accent, var(--mint))', lineHeight: 1.1, flexShrink: 0 }}>
+          98.8%
+        </div>
+        <div style={{ fontSize: mobile ? 12.5 : 13.5, color: 'var(--fg-2)', lineHeight: 1.5 }}>
+          <span style={{ color: 'var(--fg)', fontWeight: 500 }}>HOLD rate — we only fire when we mean it.</span> Most signal tools always emit a verdict.<br/>We reject 98.8% of scans as HOLD — and HOLDs are always free.<br/>That selectivity is why we have 90.2%+ Merkle-verified accuracy on 80,059+ signals.
+        </div>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: mobile ? '1fr' : 'repeat(5, 1fr)',
+        gap: mobile ? 14 : 12,
+        alignItems: 'stretch'
+      }}>
+        {tiers.map((t) =>
+        <article key={t.id} style={{
+          position: 'relative',
+          padding: mobile ? '20px 18px' : '22px 18px 22px',
+          border: t.popular ? '1px solid var(--accent, var(--mint))' : '1px solid var(--line)',
+          borderRadius: 14,
+          background: t.popular ?
+          'linear-gradient(180deg, oklch(0.3 0.08 170 / 0.22), oklch(0.18 0.014 265 / 0.6))' :
+          'oklch(0.18 0.014 265 / 0.55)',
+          boxShadow: t.popular ? '0 0 0 1px oklch(0.86 0.16 165 / 0.12), 0 22px 50px -22px oklch(0.86 0.16 165 / 0.5)' : 'none',
+          display: 'flex', flexDirection: 'column', gap: 14,
+          transform: !mobile && t.popular ? 'translateY(-8px)' : 'none'
+        }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: t.stripe, opacity: 0.85 }} />
+            {t.popular &&
+          <div style={{ position: 'absolute', top: -11, left: 18, padding: '3px 10px', borderRadius: 999,
+            background: 'var(--accent, var(--mint))', color: 'oklch(0.16 0.05 165)',
+            fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.16em' }}>
+                POPULAR
+              </div>
+          }
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', letterSpacing: '0.16em', marginBottom: 8 }}>
+                {t.name}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 28 : 30, fontWeight: 600, letterSpacing: '-0.018em', color: 'var(--fg)' }}>
+                  {t.price}
+                </span>
+                {t.period && <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>{t.period}</span>}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 5 }}>{t.sub}</div>
+            </div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {t.bullets.map((b, j) => <Bullet key={j} mobile={mobile}>{b}</Bullet>)}
+            </ul>
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <a href={t.href || `#${t.id}`} style={{
+              display: 'inline-flex', justifyContent: 'center', alignItems: 'center',
+              padding: '10px 14px', borderRadius: 9,
+              fontFamily: 'var(--font-text)', fontSize: 13, fontWeight: 500,
+              textDecoration: 'none', textAlign: 'center',
+              ...ctaForStyle(t.ctaStyle)
+            }}>
+                {t.cta}
+              </a>
+              {t.meta &&
+            <a href="https://t.me/algovaultofficialbot" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, textDecoration: 'none', textAlign: 'center', color: "rgb(0, 136, 204)" }}>
+                  {t.meta}
+                </a>
+            }
+            </div>
+          </article>
+        )}
+      </div>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   8. FOR DEVELOPERS — 3 code snippet cards
+   ================================================================ */
+function ForDevelopers({ mobile = false }) {
+  const cards = [
+  {
+    title: 'MCP / HTTP API',
+    sub: 'For AI agents & production',
+    code: <><span className="tk-com">// Remote — Streamable HTTP</span>{'\n'}https://api.algovault.com/mcp{'\n'}<span className="tk-com">// Local — stdio</span>{'\n'}$ npx -y crypto-quant-signal-mcp</>,
+    foot: <>Add{' '}<span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent, var(--mint))' }}>Authorization: Bearer av_live_…</span> — the same endpoint + key is the HTTP API.</>
+  },
+  {
+    title: 'Webhooks',
+    sub: 'Push delivery — no polling',
+    code: <><span className="tk-com">// POST /api/webhooks  · needs your av_live_ key</span>{'\n'}events: trade_call · regime_shift · scan_digest{'\n'}filter: timeframe · exchange · cadence · top-N</>,
+    foot: <>Subscribe once; every matching call is POSTed to your endpoint.{' '}<a href="/docs.html#webhooks" style={{ color: 'var(--accent, var(--mint))', textDecoration: 'none' }}>Webhooks docs →</a></>
+  },
+  {
+    title: 'x402',
+    sub: 'Pay-per-call · no signup',
+    code: <><span className="tk-com">// Agent pays per call — USDC on Base</span>{'\n'}402 Payment Required → settle → 200 OK</>,
+    foot: <>No key, no subscription — your agent's wallet pays per call.{' '}<a href="/docs.html#x402" style={{ color: 'var(--accent, var(--mint))', textDecoration: 'none' }}>x402 setup →</a></>
+  }];
+
+  return (
+    <LRBlock id="developers" mobile={mobile}>
+      <LREyebrow>· connect</LREyebrow>
+      <LRH2 mobile={mobile}>Connect.</LRH2>
+      <LRLead mobile={mobile} max={620}>
+        MCP, HTTP API, webhooks, x402 — same tools, same verdict shape.<br/>Pick the transport that fits your stack.
+      </LRLead>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: mobile ? '1fr' : 'repeat(3, 1fr)',
+        gap: mobile ? 14 : 18
+      }}>
+        {cards.map((c, i) =>
+        <article key={i} style={{
+          padding: mobile ? '20px 20px' : '24px 22px 22px',
+          border: '1px solid var(--line)', borderRadius: 14,
+          background: 'oklch(0.18 0.014 265 / 0.55)',
+          display: 'flex', flexDirection: 'column', gap: 14,
+          minHeight: mobile ? 'auto' : 240
+        }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 17 : 18, fontWeight: 500, color: 'var(--accent, var(--mint))', letterSpacing: '-0.012em' }}>
+                {c.title}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>{c.sub}</div>
+            </div>
+            <pre style={{
+            margin: 0, padding: '12px 14px', borderRadius: 10,
+            border: '1px solid var(--line)', background: 'oklch(0.13 0.01 265)',
+            fontFamily: 'var(--font-mono)', fontSize: mobile ? 11 : 11.5,
+            lineHeight: 1.55, color: 'var(--fg-2)',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            overflowX: 'auto',
+            flex: 1
+          }}>
+              {c.code}
+            </pre>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.5 }}>
+              {c.foot}
+            </div>
+          </article>
+        )}
+      </div>
+      <div style={{ marginTop: mobile ? 22 : 28, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {['npm', 'GitHub', 'MCP Registry'].map((b, i) =>
+        <a key={i} href={`#${b}`} style={{
+          padding: '6px 12px', borderRadius: 999, border: '1px solid var(--line)',
+          fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg-2)',
+          textDecoration: 'none', background: 'oklch(0.2 0.012 265 / 0.6)',
+          display: 'inline-flex', alignItems: 'center', gap: 6
+        }}>
+            <span style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--accent, var(--mint))' }} />
+            {b}
+          </a>
+        )}
+      </div>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   9. FAQ — accordion
+   ================================================================ */
+function FAQItem({ q, a, defaultOpen = false, mobile }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <article style={{
+      border: open ? '1px solid var(--accent, var(--mint))' : '1px solid var(--line)',
+      borderRadius: 12,
+      background: open ? 'linear-gradient(180deg, oklch(0.3 0.08 170 / 0.18), oklch(0.18 0.014 265 / 0.55))' : 'oklch(0.18 0.014 265 / 0.55)',
+      boxShadow: open ? '0 0 0 1px oklch(0.86 0.16 165 / 0.08)' : 'none',
+      transition: 'background 0.2s, border-color 0.2s',
+      overflow: 'hidden'
+    }}>
+      <button onClick={() => setOpen(!open)} style={{
+        all: 'unset',
+        cursor: 'pointer',
+        width: '100%',
+        boxSizing: 'border-box',
+        padding: mobile ? '18px 20px' : '22px 26px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-display)', fontSize: mobile ? 16 : 18, fontWeight: 500,
+          letterSpacing: '-0.012em', color: 'var(--fg)', textWrap: 'balance', flex: 1
+        }}>
+          {q}
+        </span>
+        <svg width="18" height="18" viewBox="0 0 18 18" style={{
+          flexShrink: 0,
+          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s',
+          color: open ? 'var(--accent, var(--mint))' : 'var(--fg-3)'
+        }} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+          <path d="M5 7l4 4 4-4" />
+        </svg>
+      </button>
+      {open &&
+      <div style={{
+        padding: mobile ? '0 20px 20px' : '0 26px 24px',
+        fontSize: mobile ? 14 : 15, color: 'var(--fg-2)', lineHeight: 1.65,
+        textWrap: 'pretty'
+      }}>
+          {a}
+        </div>
+      }
+    </article>);
+
+}
+
+function FAQ({ mobile = false }) {
+  const items = [
+  { q: 'What is AlgoVault?', a: 'AlgoVault is an MCP server that provides AI trading agents with composite BUY/SELL/HOLD trade calls, cross-venue funding rate arbitrage scanning, and market regime detection across 5 exchanges — Hyperliquid, Binance, Bybit, OKX, and Bitget. It works with any MCP-compatible client including Claude, Cursor, and custom agents.', open: true },
+  { q: 'How does the trade call scoring work?', a: 'Each call is a multi-factor composite of trend persistence, breakout pressure, funding state, and volatility regime — scored on the same scale across crypto and TradFi. We only fire BUY/SELL when conviction clears the threshold; otherwise the call is HOLD (and HOLDs are free).' },
+  { q: 'What exchanges does AlgoVault support?', a: 'Hyperliquid, Binance, Bybit, OKX, and Bitget. Hyperliquid is the source for TradFi perpetuals (TSLA, GOLD, SP500, etc.) via its xyz dex. Funding-rate arb covers Hyperliquid · Binance · Bybit.' },
+  { q: 'Is AlgoVault free to use?', a: 'Yes — the Free tier covers all assets, all 11 timeframes, and 100 calls/month with no signup. HOLD calls are always free across every tier.' },
+  { q: 'What is MCP (Model Context Protocol)?', a: 'MCP is an open protocol for connecting AI assistants to external tools and data sources. AlgoVault implements MCP so any compliant client (Claude, Cursor, Windsurf, custom agents) can call get_trade_call / scan_funding_arb / get_market_regime directly without bespoke integration.' }];
+
+  return (
+    <LRBlock id="faq" mobile={mobile}>
+      <LREyebrow>· faq</LREyebrow>
+      <LRH2 mobile={mobile}>Frequently asked.</LRH2>
+      <div style={{ marginTop: mobile ? 24 : 40, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 920 }}>
+        {items.map((it, i) =>
+        <FAQItem key={i} q={it.q} a={it.a} defaultOpen={!!it.open} mobile={mobile} />
+        )}
+      </div>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   10. FOOTER
+   ================================================================ */
+function LandingFooter({ mobile = false }) {
+  return (
+    <footer style={{
+      padding: mobile ? '32px 22px 36px' : '44px 80px 56px',
+      borderTop: '1px solid var(--line)',
+      background: 'oklch(0.13 0.012 265)',
+      display: mobile ? 'flex' : 'flex',
+      flexDirection: mobile ? 'column' : 'row',
+      alignItems: mobile ? 'flex-start' : 'center',
+      justifyContent: 'space-between',
+      gap: mobile ? 18 : 24,
+      fontSize: 13, color: 'var(--fg-3)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <img src="/logo.png" alt="AlgoVault" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'contain', flexShrink: 0 }} />
+        <span style={{ color: 'var(--fg-2)' }}>Built by AlgoVault Labs</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 18 : 28, flexWrap: 'wrap' }}>
+        {['GitHub', 'X / Twitter', 'Signup', 'Refer & Earn', 'Privacy'].map((l, i) =>
+        <a key={i} href={`#${l}`} style={{ color: 'var(--fg-3)', textDecoration: 'none' }}>{l}</a>
+        )}
+      </div>
+    </footer>);
+
+}
+
+/* ================================================================
+   4b. LIVE VERDICT — styled "verdict-with-receipts" example card
+   (P2-LANDING-VERDICT-CARD-W1). DEMONSTRATIVE-FROM-REAL-EVENT: a REAL
+   captured get_trade_call snapshot (AXS · 1h · BUY 60, 2026-06-20; see
+   audits/p2-example-call-2026-06-20.json) baked STATIC + labeled
+   "Example output". The Proof-line PFE WR + call count are LIVE-bound via
+   the EXISTING data-tr-field hydration (track-record-proxy.js) — never
+   hardcoded. Field set + tooltip/disclaimer copy mirror the P0
+   src/lib/receipts.ts Receipts contract + RECEIPTS_* constants (verbatim;
+   asserted byte-equal by tests/unit/landing-verdict-card.test.ts). Card
+   chrome reuses .glow / .card-hover / .fade-in (NO new CSS).
+   ================================================================ */
+// Verbatim P0 RECEIPTS_* SoT (src/lib/receipts.ts) — kept byte-identical (test-asserted).
+const RECEIPTS_BADGE_TOOLTIP = 'Every call is logged and Merkle-anchored on Base. Check it yourself.';
+const RECEIPTS_CONVICTION_TOOLTIP = "Conviction is our model's confidence in an actionable setup — not a probability of profit.";
+const RECEIPTS_DISCLAIMER = 'Informational analytics, not investment advice. Past performance does not guarantee future results.';
+
+function LiveVerdict({ mobile = false }) {
+  // Top factors from the captured _receipts (faithful enum values, mono "Example output" styling).
+  const factors = [
+    { label: 'Trend persistence', value: 'HIGH', dir: 'neutral' },
+    { label: 'Funding', value: 'ELEVATED', dir: 'bullish' },
+    { label: 'Open interest', value: '+18.1%', dir: 'bullish' }];
+
+  const dirColor = (d) => d === 'bullish' ? 'var(--accent, var(--mint))' : d === 'bearish' ? 'oklch(0.65 0.2 18)' : 'var(--fg-3)';
+  const dirGlyph = (d) => d === 'bullish' ? '↑' : d === 'bearish' ? '↓' : '·';
+  // VERBATIM reasoning string from the captured call (Q-P2-2: no placeholder).
+  const why = 'Trending regime, upward bias. Funding pressure elevated; one-sided crowd forming. Volatility neither expanding nor compressed. Trend persistence elevated; momentum structure. Moderate conviction from blended signals.';
+
+  return (
+    <LRBlock id="live-verdict" mobile={mobile}>
+      <LREyebrow>· live verdict</LREyebrow>
+      <LRH2 mobile={mobile}>One call. One verdict. <span style={{ color: 'var(--accent, var(--mint))' }}>Verifiable.</span></LRH2>
+      <LRLead mobile={mobile} max={760}>Direction, conviction, and the drivers behind it — with a track record you can verify yourself.</LRLead>
+
+      <div className="glow card-hover fade-in" style={{
+        position: 'relative', maxWidth: mobile ? '100%' : 580,
+        padding: mobile ? '22px 20px' : '28px 30px',
+        border: '1px solid oklch(0.5 0.14 165 / 0.5)', borderRadius: 16,
+        background: 'linear-gradient(180deg, oklch(0.22 0.04 168 / 0.32), oklch(0.18 0.014 265 / 0.62))',
+        display: 'flex', flexDirection: 'column', gap: mobile ? 15 : 17
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: mobile ? 11.5 : 12.5, color: 'var(--fg-3)', letterSpacing: '0.04em' }}>AXS · 1h · Binance</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--fg-3)', letterSpacing: '0.16em', textTransform: 'uppercase', padding: '4px 10px', border: '1px solid var(--line)', borderRadius: 999, background: 'oklch(0.13 0.012 265 / 0.7)', whiteSpace: 'nowrap' }}>Example output</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: mobile ? 7 : 11 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 32 : 40, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--accent, var(--mint))', textShadow: '0 0 22px oklch(0.86 0.16 165 / 0.35)', lineHeight: 1 }}>BUY</span>
+          <span title={RECEIPTS_CONVICTION_TOOLTIP} style={{ fontFamily: 'var(--font-display)', fontSize: mobile ? 17 : 20, fontWeight: 500, color: 'var(--fg-2)', cursor: 'help' }}>· 60% conviction</span>
+          <span style={{ fontSize: mobile ? 13.5 : 15, color: 'var(--fg-3)' }}>— Trending up</span>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: mobile ? 8 : 10 }}>
+          {factors.map((f, i) =>
+          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 8, border: '1px solid var(--line)', background: 'oklch(0.2 0.012 265 / 0.6)', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg-2)' }}>
+              {f.label} <span style={{ color: dirColor(f.dir), fontWeight: 600 }}>{f.value} {dirGlyph(f.dir)}</span>
+            </span>
+          )}
+        </div>
+
+        <div style={{ fontSize: mobile ? 13 : 13.5, color: 'var(--fg-2)', lineHeight: 1.55 }}>
+          <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', marginRight: 8 }}>Why</span>
+          {why}
+        </div>
+
+        <div style={{ height: 1, background: 'var(--line)', margin: '2px 0' }} />
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: mobile ? 8 : 10, fontSize: mobile ? 12.5 : 13.5, color: 'var(--fg-2)', fontFamily: 'var(--font-mono)' }}>
+          <span title={RECEIPTS_BADGE_TOOLTIP} style={{ cursor: 'help' }}>
+            <span data-tr-field="pfe_wr" style={{ color: 'var(--accent, var(--mint))', fontWeight: 600 }}>91.5%</span> PFE win rate · <span data-tr-field="call_count">246,980</span> calls · Merkle-anchored on Base
+          </span>
+          <span style={{ flexGrow: 1 }} />
+          <a href="/track-record" style={{ color: 'var(--accent, var(--mint))', textDecoration: 'none', whiteSpace: 'nowrap' }}>Verify →</a>
+        </div>
+      </div>
+
+      <div style={{ marginTop: mobile ? 20 : 26, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <a href="/track-record" className="btn btn-primary accent-cyan" style={{ alignSelf: 'flex-start', background: 'var(--accent, var(--mint))', color: 'oklch(0.16 0.05 165)', boxShadow: 'inset 0 1px 0 oklch(1 0 0 / 0.3), 0 0 0 1px oklch(0.96 0.05 165 / 0.25), 0 8px 30px -10px oklch(0.86 0.16 165 / 0.55)' }}>
+          View Live Track Record →
+        </a>
+        <span style={{ fontSize: 11.5, color: 'var(--fg-3)', lineHeight: 1.5, maxWidth: 640 }}>{RECEIPTS_DISCLAIMER}</span>
+      </div>
+    </LRBlock>);
+
+}
+
+/* ================================================================
+   COMPOSED — full landing rest (sections 1-9 + footer)
+   ================================================================ */
+function AlgoVaultLandingRest({ mobile = false }) {
+  return (
+    <div style={{ position: 'relative', zIndex: 1 }}>
+      <TryIn30 mobile={mobile} />
+      <TradFiCallout mobile={mobile} />
+      <ThreeTools mobile={mobile} />
+      <UseCases mobile={mobile} />
+      <LiveVerdict mobile={mobile} />
+      <LiveTrackRecord mobile={mobile} />
+      <TamperProof mobile={mobile} />
+      <TrustBand mobile={mobile} />
+      <SimplePricing mobile={mobile} />
+      <ForDevelopers mobile={mobile} />
+      <FAQ mobile={mobile} />
+      <LandingFooter mobile={mobile} />
+    </div>);
+
+}
+
+Object.assign(window, {
+  AlgoVaultLandingRest,
+  TryIn30, TradFiCallout, ThreeTools, UseCases, LiveVerdict,
+  LiveTrackRecord, TamperProof, TrustBand, SimplePricing,
+  ForDevelopers, FAQ, LandingFooter
+});

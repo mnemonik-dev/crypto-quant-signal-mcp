@@ -256,14 +256,16 @@ test('landing/index.html: on-chain claim count ≥ 3 (Merkle/on-chain/Base L2)',
 });
 
 // ── Landing/index.html: CoreCapabilities Self-tuning ML model card present 2x ─
-test('landing/index.html: "Self-tuning ML model" card present 2x (desktop + mobile)', () => {
+test('LANDING-SECTION-REORDER-W1: "Self-tuning ML model" card REMOVED with CoreCapabilities', () => {
   const src = readFileSync(path.join(REPO_ROOT, 'landing/index.html'), 'utf-8');
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: the "Core capabilities" section (with the Self-tuning ML model card) was removed.
   const hits = (src.match(/Self-tuning ML model/g) || []).length;
-  assert.equal(hits, 2, `Expected 2x "Self-tuning ML model" cards (desktop + mobile), got ${hits}`);
+  assert.equal(hits, 0, `Expected 0 "Self-tuning ML model" (CoreCapabilities removed), got ${hits}`);
 });
 
-test('landing/index.html: CoreCapabilities subtitle "self-tuning model behind them" present 2x', () => {
+test('LANDING-SECTION-REORDER-W1: CoreCapabilities subtitle REMOVED', () => {
   const src = readFileSync(path.join(REPO_ROOT, 'landing/index.html'), 'utf-8');
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: CoreCapabilities section removed.
   const hits = (src.match(/plus the self-tuning model behind them/g) || []).length;
-  assert.equal(hits, 2, `Expected 2x updated subtitle, got ${hits}`);
+  assert.equal(hits, 0, `Expected 0 (CoreCapabilities subtitle removed), got ${hits}`);
 });

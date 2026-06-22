@@ -38,7 +38,7 @@ test('Q-A1+Q-A2 → W6-Q-W9: GEO-W1 anchors moved from H2 to <section> on belowf
   // sections re-surface the proper GEO-W1 semantics.
   const html = await read('landing/index.html');
   // Anchors now on <section> elements rendered from v1-belowfold.jsx
-  assert.match(html, /<section\s+id="core-capabilities"/, '#core-capabilities anchor on belowfold section');
+  assert.doesNotMatch(html, /<section\s+id="core-capabilities"/, '#core-capabilities removed — SUPERSEDED BY LANDING-SECTION-REORDER-W1 (Core capabilities section deleted)');
   assert.match(html, /<section\s+id="when-to-use"/, '#when-to-use anchor on belowfold section');
   // The W5-mapped H2s no longer carry these IDs (they exist as plain H2s now)
   assert.doesNotMatch(html, /<h2[^>]*id="core-capabilities"/, 'no #core-capabilities on H2 (relocated to section)');
@@ -62,7 +62,7 @@ test('Q-D3..Q-D9: 7 H2 texts adopted from JSX verbatim', async () => {
   // 7 H2 texts — at least one occurrence of each (some may appear in JSON-LD / description / OG meta too)
   const jsxHeadings = [
     'Try it in 30 seconds.',                       // Q-D3
-    '3 tools, One verdict.',                       // Q-D4
+    // '3 tools, One verdict.' SUPERSEDED BY LANDING-SECTION-REORDER-W1 (section removed)
     'Brain + execution pairing.',                  // Q-D5
     'Every qualifying call, on the record.',       // Q-D6
     'Simple pricing.',                             // Q-D7
@@ -143,7 +143,7 @@ test('D1-C+D2-C+W3+W4+W6 preservation regression-free (W7 hero shift acknowledge
   assert.match(html, /data-w7-recent-call/, 'W7 H-PR2 recent-call mount-point present');
   assert.match(html, /data-tr-field="total_calls_executed"/, 'W7 H-PR1 counter live-bind present');
   // W6 below-fold + landing-rest preserved BYTE-IDENTICAL
-  assert.match(html, /lp-belowfold-desktop/, 'W6 belowfold preserved');
+  assert.doesNotMatch(html, /lp-belowfold-desktop/, 'lp-belowfold artboard removed — SUPERSEDED BY LANDING-SECTION-REORDER-W1');
   assert.match(html, /lp-rest-desktop/, 'W6 landing-rest preserved');
   // GEO-W1 H1 + hero opening verbatim
   assert.match(html, /The Brain Layer/, 'H1 verbatim (V1Hero word-break: "The Brain Layer<br>for AI Trading Agents.")');

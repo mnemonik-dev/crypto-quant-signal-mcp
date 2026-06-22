@@ -164,17 +164,19 @@ test('Factuality LAW canary: 0 fictional placeholders in deployed hero', async (
 test('W6 below-fold + landing-rest preserved BYTE-IDENTICAL through W7', async () => {
   const html = await read('landing/index.html');
   // W6 dual-render wrappers
-  assert.match(html, /lp-belowfold-desktop/, 'W6 belowfold preserved');
-  assert.match(html, /lp-belowfold-mobile/, 'W6 belowfold-mobile preserved');
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: lp-belowfold artboards removed (sections merged into lp-rest).
+  assert.doesNotMatch(html, /lp-belowfold-desktop/, 'lp-belowfold removed');
+  assert.doesNotMatch(html, /lp-belowfold-mobile/, 'lp-belowfold-mobile removed');
   assert.match(html, /lp-rest-desktop/, 'W6 landing-rest preserved');
   assert.match(html, /lp-rest-mobile/, 'W6 landing-rest-mobile preserved');
   // W6 belowfold sections (3 from v1-belowfold.jsx)
-  for (const heading of ['Core capabilities', 'When to use AlgoVault', 'Why not just use exchange APIs?']) {
-    assert.ok(html.includes(heading), `W6 belowfold heading "${heading}" preserved`);
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: "Core capabilities" removed; other 2 moved into the rest sequence.
+  for (const heading of ['When to use AlgoVault', 'Why not just use exchange APIs?']) {
+    assert.ok(html.includes(heading), `section heading "${heading}" preserved`);
   }
   // W6 landing-rest sections (8, TradFiCallout SKIPPED)
   for (const heading of [
-    'Try it in 30 seconds.', '3 tools, One verdict.', 'Brain + execution pairing.',
+    'Try it in 30 seconds.', 'Brain + execution pairing.',  /* '3 tools, One verdict.' removed — LANDING-SECTION-REORDER-W1 */
     'Every qualifying call, on the record.', 'Simple pricing.', 'Connect.', 'Frequently asked.',
   ]) {
     assert.ok(html.includes(heading), `W6 landing-rest heading "${heading}" preserved`);
@@ -186,14 +188,15 @@ test('W6 below-fold + landing-rest preserved BYTE-IDENTICAL through W7', async (
   assert.doesNotMatch(html, /X402 PER CALL/, 'X402 5th tier still filtered (W6 Q-W10)');
   assert.doesNotMatch(html, /TradFi Perpetuals/, 'TradFiCallout still SKIPPED (W6 Q-W10)');
   // W6 Q-W16 subtitle factuality (Three MCP tools — applies to belowfold CoreCapabilities)
-  assert.match(html, /Three MCP tools your agent can call/, 'W6 Q-W16 CoreCapabilities subtitle preserved');
+  assert.doesNotMatch(html, /Three MCP tools your agent can call/, 'CoreCapabilities subtitle removed — SUPERSEDED BY LANDING-SECTION-REORDER-W1');
   assert.doesNotMatch(html, /Four MCP tools your agent can call/, 'no "Four MCP tools" (W6 Q-W16 factuality)');
 });
 
 test('GEO-W1 anchors + JSON-LD blocks preserved through W7', async () => {
   const html = await read('landing/index.html');
   // 3 W6 belowfold GEO-W1 anchors (Q-W9): #core-capabilities, #when-to-use, #vs-raw-exchange-apis
-  for (const id of ['core-capabilities', 'when-to-use', 'vs-raw-exchange-apis']) {
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: #core-capabilities removed; #when-to-use + #vs-raw-exchange-apis moved (ids preserved).
+  for (const id of ['when-to-use', 'vs-raw-exchange-apis']) {
     const re = new RegExp(`<section\\s+id="${id}"`);
     assert.match(html, re, `<section id="${id}"> preserved (W6 Q-W9)`);
   }

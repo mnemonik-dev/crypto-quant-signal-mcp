@@ -104,7 +104,7 @@ test('Q-W7 (UseCases): 4 logo <img> tags in UseCases card grid with WCAG alt att
 test('Q-W9: W6 supersedes W5 anchor mapping — 3 GEO-W1 anchors on belowfold <section> elements', async () => {
   const html = await read('landing/index.html');
   // Anchors on belowfold sections (NOT on landing-rest H2s as W5 had)
-  assert.match(html, /<section\s+id="core-capabilities"/, '#core-capabilities on belowfold section');
+  assert.doesNotMatch(html, /<section\s+id="core-capabilities"/, '#core-capabilities removed — SUPERSEDED BY LANDING-SECTION-REORDER-W1');
   assert.match(html, /<section\s+id="when-to-use"/, '#when-to-use on belowfold section');
   assert.match(html, /<section\s+id="vs-raw-exchange-apis"/, '#vs-raw-exchange-apis on belowfold section (W6 RESTORATION per Q-W5)');
 });
@@ -159,10 +159,12 @@ test('Q-W15: Footer placeholder hrefs → real URLs', async () => {
   assert.doesNotMatch(html, /href="#X \/ Twitter"/, 'no #X / Twitter placeholder');
 });
 
-test('Q-W16: CoreCapabilities subtitle REWRITE (factuality LAW: 3 MCP tools)', async () => {
+test('LANDING-SECTION-REORDER-W1: CoreCapabilities section REMOVED (SUPERSEDES W6 Q-W16)', async () => {
   const html = await read('landing/index.html');
-  assert.match(html, /Three MCP tools your agent can call/, 'subtitle says "Three MCP tools" (Q-W16 rewrite)');
-  assert.doesNotMatch(html, /Four MCP tools your agent can call/, 'no "Four MCP tools" (factuality LAW: 3 tools, not 4)');
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: the "Core capabilities" section was removed; its
+  // "Three MCP tools" subtitle is gone with it. Funding-arb + regime moat preserved by the verdict-card one-liner.
+  assert.doesNotMatch(html, /Three MCP tools your agent can call/, 'CoreCapabilities subtitle removed (section deleted)');
+  assert.doesNotMatch(html, />Core capabilities</, 'Core capabilities H2 removed');
 });
 
 test('Q-W18: pricing tier names Title Case (override JSX UPPERCASE)', async () => {
@@ -182,7 +184,8 @@ test('Q-W18: pricing tier names Title Case (override JSX UPPERCASE)', async () =
 
 test('C2+C3 dual-render wrapped in lp-belowfold-{desktop,mobile} + lp-rest-{desktop,mobile} (W7 also adds lp-hero-{desktop,mobile})', async () => {
   const html = await read('landing/index.html');
-  for (const cls of ['lp-belowfold-desktop', 'lp-belowfold-mobile', 'lp-rest-desktop', 'lp-rest-mobile']) {
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: lp-belowfold-* artboards removed (sections merged into lp-rest).
+  for (const cls of ['lp-rest-desktop', 'lp-rest-mobile']) {
     assert.match(html, new RegExp(`class="${cls}"`), `${cls} wrapper present`);
   }
   // CSS @media swap declared in algovault-design.css
@@ -196,13 +199,14 @@ test('C2+C3 dual-render wrapped in lp-belowfold-{desktop,mobile} + lp-rest-{desk
 test('Build-pipeline render output: JSX components present in SSR output', async () => {
   const html = await read('landing/index.html');
   // Belowfold sections (3 from v1-belowfold.jsx)
-  for (const heading of ['Core capabilities', 'When to use AlgoVault', 'Why not just use exchange APIs?']) {
-    assert.ok(html.includes(heading), `belowfold heading "${heading}" present`);
+  // SUPERSEDED BY LANDING-SECTION-REORDER-W1: "Core capabilities" removed; the other 2 moved into the rest sequence.
+  for (const heading of ['When to use AlgoVault', 'Why not just use exchange APIs?']) {
+    assert.ok(html.includes(heading), `section heading "${heading}" present`);
   }
   // Landing-rest sections (8 from v1-landing-rest.jsx, TradFiCallout SKIPPED)
   for (const heading of [
     'Try it in 30 seconds.',
-    '3 tools, One verdict.',
+    // '3 tools, One verdict.' SUPERSEDED BY LANDING-SECTION-REORDER-W1 (section removed)
     'Brain + execution pairing.',
     'Every qualifying call, on the record.',
     'Simple pricing.',
