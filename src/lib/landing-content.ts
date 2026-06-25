@@ -48,9 +48,19 @@ export interface CopyEntry {
  * first injector run is a no-op everywhere EXCEPT the stale mobile eyebrow it repairs.
  */
 export const LANDING_COPY: Readonly<Record<string, CopyEntry>> = {
-  'hero.eyebrow': {
-    desktop: 'Model Context Protocol server · 5 venues monitored',
-    mobile: 'MCP server · 5 venues monitored',
+  // The hero eyebrow is split so the venue COUNT can live-bind: only the words around it are
+  // parity-guarded copy. eyebrow_prefix carries the deliberate desktop/mobile abbreviation;
+  // eyebrow_suffix is identical on both viewports. The count "5" lives in a SIBLING
+  // <span data-tr-field="exchange_count"> (auto-tracks exchange_count when a 6th adapter lands),
+  // NOT here — so the data-av-copy ⟂ data-tr-field firewall holds by STRUCTURE, not by exception.
+  // — LANDING-EYEBROW-LIVEBIND-W1
+  'hero.eyebrow_prefix': {
+    desktop: 'Model Context Protocol server · ',
+    mobile: 'MCP server · ',
+  },
+  'hero.eyebrow_suffix': {
+    desktop: ' venues monitored',
+    mobile: ' venues monitored',
   },
   'hero.subhead': {
     desktop: 'One MCP call returns a composite verdict — direction, confidence, regime.<br/>Built for autonomous AI agents.',

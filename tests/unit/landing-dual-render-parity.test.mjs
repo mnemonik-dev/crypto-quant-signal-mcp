@@ -88,10 +88,18 @@ test('(b) marked fields are two-sided: every KEY.desktop has KEY.mobile and vice
   }
 });
 
-test('(c) hero.eyebrow is SoT-covered on both viewports in index.html', async () => {
+test('(c) hero eyebrow: parity-guarded words around a LIVE exchange_count count span', async () => {
   const html = await read('landing/index.html');
-  assert.ok(html.includes(`${MARKER}="hero.eyebrow.desktop"`), 'desktop eyebrow marker present');
-  assert.ok(html.includes(`${MARKER}="hero.eyebrow.mobile"`), 'mobile eyebrow marker present');
+  // LANDING-EYEBROW-LIVEBIND-W1: the eyebrow is prefix-span + live count span + suffix-span.
+  for (const v of ['desktop', 'mobile']) {
+    assert.ok(html.includes(`${MARKER}="hero.eyebrow_prefix.${v}"`), `${v} eyebrow prefix marker present`);
+    assert.ok(html.includes(`${MARKER}="hero.eyebrow_suffix.${v}"`), `${v} eyebrow suffix marker present`);
+  }
+  // the venue COUNT live-binds to exchange_count (auto-tracks the 6th adapter) as a SIBLING span.
+  assert.match(html, /<span data-tr-field="exchange_count">\d+<\/span>/, 'eyebrow count live-binds to exchange_count');
+  // firewall BY STRUCTURE: no node carries BOTH data-av-copy AND data-tr-field.
+  assert.doesNotMatch(html, /<[^>]*\bdata-av-copy="[^"]*"[^>]*\bdata-tr-field=/, 'no data-av-copy node also carries data-tr-field');
+  assert.doesNotMatch(html, /<[^>]*\bdata-tr-field="[^"]*"[^>]*\bdata-av-copy=/, 'no data-tr-field node also carries data-av-copy');
 });
 
 test('(d) no bare "· vN.N" version literal inside any lp-* dual-render twin (site-wide)', async () => {
