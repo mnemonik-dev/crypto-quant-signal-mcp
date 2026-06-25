@@ -88,19 +88,20 @@ test('/track-record: brand-mark wrap follows /account precedent (Q-W11-4: direct
   assert.strictEqual(brandMark, 1, `Expected exactly 1 canonical brand-mark wrap; got ${brandMark}`);
 });
 
-test('/track-record: canonical Footer present (desktop variant verbatim)', async () => {
+test('/track-record: footer renders from the single brand-footer SoT (FOOTER-UNIFY-W1)', async () => {
   const src = await read('src/index.ts');
   const func = scopeToPerfFunc(src);
-  const footerOpen = countOcc(func, '<footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265)');
-  const footerClose = countOcc(func, '</footer>');
-  assert.strictEqual(footerOpen, 1, `Expected exactly 1 canonical Footer open; got ${footerOpen}`);
-  assert.strictEqual(footerClose, 1, `Expected exactly 1 </footer>; got ${footerClose}`);
+  // FOOTER-UNIFY-W1: the inline footer literal is retired — the page renders the ONE SoT footer.
+  assert.strictEqual(countOcc(func, "renderBrandFooter('desktop')"), 1,
+    'track-record must render the canonical footer via renderBrandFooter (single source)');
+  assert.strictEqual(countOcc(func, '<footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265)'), 0,
+    'no inline brand-footer literal may survive in src/index.ts (drift retired)');
 });
 
-test('/track-record: Footer has "Built by AlgoVault Labs" attribution (preservation-LAW link)', async () => {
-  const src = await read('src/index.ts');
-  const func = scopeToPerfFunc(src);
-  assert.ok(/Built by AlgoVault Labs/.test(func), 'Footer must include Built by AlgoVault Labs attribution');
+test('FOOTER-UNIFY-W1: the brand-footer SoT carries the "Built by AlgoVault Labs" attribution (preservation-LAW)', async () => {
+  const sot = await read('src/lib/footer-content.ts');
+  assert.ok(/Built by AlgoVault Labs/.test(sot), 'footer-content SoT must include the Built by AlgoVault Labs attribution');
+  assert.ok(sot.includes('oklch(0.13 0.012 265)'), 'footer-content SoT must define the canonical brand-footer background');
 });
 
 test('/track-record: Tailwind CDN present in <head> (R-2 inline-fix per Q-W10-8 precedent)', async () => {

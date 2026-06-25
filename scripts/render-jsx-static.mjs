@@ -40,6 +40,10 @@ import { renderToString } from 'react-dom/server';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
+// FOOTER-UNIFY-W1: the brand footer comes from the single SoT (compiled
+// dist/lib/footer-content.js; run `npm run build` before this generator).
+const require = Module.createRequire(import.meta.url);
+const { renderBrandFooter } = require(path.join(REPO_ROOT, 'dist', 'lib', 'footer-content.js'));
 const VAULT_DESIGN = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault Landing Hero v1';
 // DESIGN-W9 (2026-05-11): verify.jsx canonical SoT lives in a sibling vault folder.
 const VAULT_TRACK_RECORD = '/Users/tank/My Drive/Obsidian Vault/AlgoVault MCP/Design/AlgoVault Track Record v1';
@@ -236,16 +240,9 @@ function applyFooterUrls(html) {
     .replace(/href="#contract"/g, 'href="https://basescan.org/address/0x6485396ac981fe0a58540dfbf3e730f6f7bcbf81" target="_blank" rel="noopener noreferrer"');
 }
 
-// PH-BADGE-COMPACT-W1: inject the social-proof badge slot (official PH "Follow" badge,
-// Dark + Small 86x32, count-free) as the last child of the LandingFooter, byte-matching the
-// manual edit in landing/index.html so a future `landing-rest` re-render reproduces it.
-// Replaces the W1 boxed image badge (count-free per Mr.1 2026-06-24; PH has no count-free
-// hosted variant of the larger badge). 1px var(--line) border for contrast (the dark badge bg
-// ~matches the near-black footer). Dual-render LAW (Design.md §4). Apex LandingFooter only.
-function injectFooterBadge(html) {
-  const slot = '<div data-slot="social-proof-badges" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><a href="https://www.producthunt.com/products/algovault?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-algovault" target="_blank" rel="noopener noreferrer" style="display:inline-flex;border:1px solid var(--line);border-radius:4px;line-height:0"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1254662&theme=dark&size=small" alt="Algovault - On-chain-verified trade calls for AI agents | Product Hunt" style="width: 86px; height: 32px;" width="86" height="32" /></a></div>';
-  return html.replace('</footer>', slot + '</footer>');
-}
+// FOOTER-UNIFY-W1: injectFooterBadge() RETIRED. The apex footer (badge included) now comes
+// whole from the single SoT renderBrandFooter() — see the `ft` render in the landing-rest
+// target. No separate badge injection / footer literal survives in this generator.
 
 function stripUseCasesDate(html) {
   // Q-W13: strip stale date placeholder
@@ -1913,8 +1910,11 @@ function wrapHowItWorksDualRender(desktopHtml, mobileHtml) {
 // Canonical Footer matching landing/index.html exactly. R4: Mr.1 directive "use the
 // same footer for all pages". Two variants (desktop row-flex, mobile column-flex) wrapped
 // in .lp-howit-{desktop,mobile} for @media swap.
-const HOW_IT_WORKS_FOOTER_HTML = `<div class="lp-howit-desktop"><footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)"><div style="display:flex;align-items:center;gap:10px"><img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0"><span style="color:var(--fg-2)">Built by AlgoVault Labs</span></div><div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap"><a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">GitHub</a><a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">X / Twitter</a><a href="https://algovault.com/#quickstart" style="color:var(--fg-3);text-decoration:none">Signup</a><a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a></div></footer></div>
-<div class="lp-howit-mobile"><footer style="padding:32px 22px 36px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:18px;font-size:13px;color:var(--fg-3)"><div style="display:flex;align-items:center;gap:10px"><img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0"><span style="color:var(--fg-2)">Built by AlgoVault Labs</span></div><div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap"><a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">GitHub</a><a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">X / Twitter</a><a href="https://algovault.com/#quickstart" style="color:var(--fg-3);text-decoration:none">Signup</a><a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a></div></footer></div>`;
+// FOOTER-UNIFY-W1: single-source brand footer in the how-it-works dual-render artboards
+// (was two inline literal copies → drift; how-it-works now also carries the Follow badge +
+// Refer&Earn via the canonical SoT). The lp-howit-{desktop,mobile} media-swap wrappers stay.
+const HOW_IT_WORKS_FOOTER_HTML = `<div class="lp-howit-desktop">${renderBrandFooter('desktop')}</div>
+<div class="lp-howit-mobile">${renderBrandFooter('mobile')}</div>`;
 
 // Canonical chrome contract head + nav. Mirrors VERIFY_HEAD_AND_NAV with /how-it-works-specific
 // title, description, canonical, and `How it works` active-link.
@@ -2107,7 +2107,9 @@ async function main() {
       ));
       const fd = applyFooterUrls(renderToString(React.createElement(exports.ForDevelopers, { mobile })));
       const fq = renderToString(React.createElement(exports.FAQ, { mobile })) + FAQ_ACCORDION_JS;
-      const ft = injectFooterBadge(applyFooterUrls(renderToString(React.createElement(exports.LandingFooter, { mobile }))));
+      // FOOTER-UNIFY-W1: the apex footer comes whole from the single SoT (badge + absolute
+      // links included), not the vault LandingFooter JSX → applyFooterUrls → injectFooterBadge.
+      const ft = renderBrandFooter(mobile ? 'mobile' : 'desktop');
       // Final pass: wrap "5 exchanges" / "11 timeframes" prose literals with proxy spans (copy-consistency canary).
       html = wrapCounterLiteralsInProse(lv + ltr + tp + tb + sp + wt + vs + uc + try30 + fd + fq + ft);
     } else if (target === 'hero') {

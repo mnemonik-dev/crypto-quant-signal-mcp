@@ -153,7 +153,9 @@ test('Q-W15: Footer placeholder hrefs → real URLs', async () => {
   // api.algovault.com; algovault.com/signup 404s — not in the apex Caddy allowlist, and /welcome
   // isn't either). Was a relative /signup (404). Matches design_w10 /account footer assertion.
   assert.match(html, /href="https:\/\/api\.algovault\.com\/signup"/, 'Signup real URL (api-canonical)');
-  assert.match(html, /href="\/privacy"/, 'Privacy real URL');
+  // FOOTER-UNIFY-W1 Q4: footer links normalized to ABSOLUTE so identical markup is correct on
+  // both algovault.com and api.algovault.com. Privacy was relative /privacy → now absolute.
+  assert.match(html, /href="https:\/\/algovault\.com\/privacy"/, 'Privacy real URL (absolute per FOOTER-UNIFY-W1)');
   // No placeholder hrefs in footer
   assert.doesNotMatch(html, /href="#GitHub"/, 'no #GitHub placeholder');
   assert.doesNotMatch(html, /href="#X \/ Twitter"/, 'no #X / Twitter placeholder');

@@ -22,10 +22,16 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
 import MarkdownIt from 'markdown-it';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+// FOOTER-UNIFY-W1: the brand footer comes from the single SoT (compiled
+// dist/lib/footer-content.js; run `npm run build` before this generator).
+// createRequire loads the tsc-emitted CJS module from this ESM script.
+const require = createRequire(import.meta.url);
+const { renderBrandFooter } = require(join(ROOT, 'dist', 'lib', 'footer-content.js'));
 // BROKER-PAIRING-CRYPTO-W1 (2026-06-05): +3 crypto agentic-trading kits
 // (Gemini self-hosted MCP / Kraken CLI / Alpaca crypto MCP) extend the
 // exchange-kit tutorial pattern; sources in algovault-skills/docs/integrations/.
@@ -120,18 +126,8 @@ function canonicalNavHtml(exchange) {
 // line 493 per chrome-extract §2). Per Q-W10-7: canonical Footer ships verbatim WITHOUT
 // utm-injection (no /track-record link in default Footer; utm preservation applies to
 // Nav-Footer-Body links, not Footer-only links).
-const CANONICAL_FOOTER_HTML = `<footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0">
-    <span style="color:var(--fg-2)">Built by AlgoVault Labs</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
-    <a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">GitHub</a>
-    <a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">X / Twitter</a>
-    <a href="/signup" style="color:var(--fg-3);text-decoration:none">Signup</a>
-    <a href="/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a>
-  </div>
-</footer>`;
+// FOOTER-UNIFY-W1: single-source brand footer (was an inline literal copy → drift). Desktop variant.
+const CANONICAL_FOOTER_HTML = renderBrandFooter('desktop');
 
 // DESIGN-W10-FF-2 (2026-05-12): strip the "TL;DR (3-line hook — MOAT-led)" h2 + bullet
 // list from rendered tutorial HTML per Mr.1 directive ("I means remove this section,

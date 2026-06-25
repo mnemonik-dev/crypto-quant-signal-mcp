@@ -114,13 +114,18 @@ test('/account: canonical hero scaffolding (artboard + 3 bg layers + VEyebrow) o
     'expected ≥3 placeholder-cap VEyebrow (one per page render)');
 });
 
-test('/account: canonical Footer (verbatim from live algovault.com desktop variant)', async () => {
+test('/account: footer renders from the single brand-footer SoT (FOOTER-UNIFY-W1)', async () => {
   const src = await read('src/lib/account-handlers.ts');
-  assert.ok(countOcc(src, '</footer>') >= 1, 'canonical Footer closing tag missing');
-  assert.ok(src.includes('Built by AlgoVault Labs'), 'Footer brand-mark missing');
-  assert.ok(src.includes('href="https://github.com/AlgoVaultLabs"'), 'Footer GitHub link missing');
-  assert.ok(src.includes('href="https://x.com/AlgoVaultLabs"'), 'Footer X / Twitter link missing');
-  assert.ok(src.includes('href="https://algovault.com/privacy"'), 'Footer Privacy link missing'); // absolute: /account is cross-subdomain (api.algovault.com)
+  // FOOTER-UNIFY-W1: ACCOUNT_FOOTER_HTML retired — the 3 account renders use the ONE SoT footer.
+  assert.strictEqual(countOcc(src, "renderBrandFooter('desktop')"), 3,
+    'all 3 account page renders must use renderBrandFooter (single source)');
+  assert.strictEqual(countOcc(src, '</footer>'), 0, 'no inline footer literal may survive in account-handlers');
+  // The SoT carries the canonical footer (brand-mark + GitHub/X/Privacy, absolute URLs per Q4).
+  const sot = await read('src/lib/footer-content.ts');
+  assert.ok(sot.includes('Built by AlgoVault Labs'), 'SoT Footer brand-mark missing');
+  assert.ok(sot.includes('https://github.com/AlgoVaultLabs'), 'SoT Footer GitHub link missing');
+  assert.ok(sot.includes('https://x.com/AlgoVaultLabs'), 'SoT Footer X / Twitter link missing');
+  assert.ok(sot.includes('https://algovault.com/privacy'), 'SoT Footer Privacy link missing (absolute)');
 });
 
 // ── /account preservation-LAW ───────────────────────────────────────────────
@@ -146,13 +151,13 @@ test('/account preservation-LAW: error + success page handlers also receive cano
   const errFn = src.indexOf('export function getAccountErrorPageHtml');
   const succFn = src.indexOf('export function getAccountRecoverySuccessHtml');
   assert.ok(errFn > 0 && succFn > 0, 'sister page-render functions present');
-  // Both reference ACCOUNT_NAV_HTML + ACCOUNT_FOOTER_HTML + tier-stat-card.
+  // Both reference ACCOUNT_NAV_HTML + the SoT renderBrandFooter (FOOTER-UNIFY-W1) + tier-stat-card.
   const errBlock = src.slice(errFn, succFn);
   const succBlock = src.slice(succFn);
-  assert.ok(errBlock.includes('ACCOUNT_NAV_HTML') && errBlock.includes('ACCOUNT_FOOTER_HTML'),
-    'error page must use shared Nav + Footer helpers');
-  assert.ok(succBlock.includes('ACCOUNT_NAV_HTML') && succBlock.includes('ACCOUNT_FOOTER_HTML'),
-    'success page must use shared Nav + Footer helpers');
+  assert.ok(errBlock.includes('ACCOUNT_NAV_HTML') && errBlock.includes("renderBrandFooter('desktop')"),
+    'error page must use shared Nav + the SoT renderBrandFooter');
+  assert.ok(succBlock.includes('ACCOUNT_NAV_HTML') && succBlock.includes("renderBrandFooter('desktop')"),
+    'success page must use shared Nav + the SoT renderBrandFooter');
 });
 
 // ── /integrations × 4 chrome assertions (parametrized) ───────────────────────

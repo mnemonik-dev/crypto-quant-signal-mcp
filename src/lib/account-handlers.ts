@@ -22,6 +22,7 @@ import type { Request, Response } from 'express';
 import { getCustomerByApiKey, getCustomerByEmail, createBillingPortalSession } from './stripe.js';
 import { sendKeyRecoveryEmail } from './email.js';
 import type { ReferralStatsView } from './referral-pages.js';
+import { renderBrandFooter } from './footer-content.js';
 
 // DESIGN-W10 / C2 / Q-W10-10: REPLACED body-flex-centering with var(--bg) layout.
 // Existing .tabs/.tab/.panel/.subtitle/.footer/.error/.success class blocks PRESERVED
@@ -103,21 +104,10 @@ const ACCOUNT_NAV_HTML = `<nav class="fixed top-0 w-full z-50 border-b border-wh
   </div>
 </nav>`;
 
-// DESIGN-W10 / C2: canonical Footer VERBATIM (desktop variant, /tmp/live-landing.html line 493).
-const ACCOUNT_FOOTER_HTML = `<footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0">
-    <span style="color:var(--fg-2)">Built by AlgoVault Labs</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
-    <a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">GitHub</a>
-    <a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">X / Twitter</a>
-    <a href="https://api.algovault.com/signup" style="color:var(--fg-3);text-decoration:none">Signup</a>
-    <a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a>
-  </div>
-  <!-- PH-BADGE-COMPACT-W1: official PH "Follow" badge, Dark + Small (86x32), count-free (replaced the boxed W1 image badge per Mr.1 2026-06-24; PH has no count-free hosted variant of the larger badge). 1px var(--line) border added for contrast — the dark badge bg (#221D21) ~matches the near-black footer, so its built-in same-color border is invisible without it. Reusable slot; byte-identical twin in src/index.ts footer; canonical PH element for ph-footer-unify. -->
-  <div data-slot="social-proof-badges" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><a href="https://www.producthunt.com/products/algovault?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-algovault" target="_blank" rel="noopener noreferrer" style="display:inline-flex;border:1px solid var(--line);border-radius:4px;line-height:0"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1254662&theme=dark&size=small" alt="Algovault - On-chain-verified trade calls for AI agents | Product Hunt" style="width: 86px; height: 32px;" width="86" height="32" /></a></div>
-</footer>`;
+// FOOTER-UNIFY-W1: the canonical brand footer now comes from the single SoT
+// (src/lib/footer-content.ts renderBrandFooter). The former inline ACCOUNT_FOOTER_HTML
+// literal (DESIGN-W10 → PH-BADGE-COMPACT-W1) is retired — see the renderBrandFooter usages
+// below. This collapses the apex/track-record/account brand-footer drift to one source.
 
 // DESIGN-W10 / C2: canonical artboard scaffolding wrapper.
 // Foreground content goes inside `<div style="position:relative;z-index:1">` so it
@@ -183,7 +173,7 @@ ${accountArtboardOpen()}
         <div class="help-line">Need help? <a href="mailto:support@algovault.com">support@algovault.com</a></div>
       </div>
 ${accountArtboardClose()}
-${ACCOUNT_FOOTER_HTML}
+${renderBrandFooter('desktop')}
 <script>
 function switchTab(which){
   ['key','email','referral'].forEach(function(t){
@@ -217,7 +207,7 @@ ${accountArtboardOpen()}
         <div class="help-line"><a href="/account">&larr; Back to /account</a> · <a href="mailto:support@algovault.com">support@algovault.com</a></div>
       </div>
 ${accountArtboardClose()}
-${ACCOUNT_FOOTER_HTML}
+${renderBrandFooter('desktop')}
 </body>
 </html>`;
 }
@@ -243,7 +233,7 @@ ${accountArtboardOpen()}
         <div class="help-line"><a href="/account">&larr; Back to /account</a> · <a href="mailto:support@algovault.com">support@algovault.com</a></div>
       </div>
 ${accountArtboardClose()}
-${ACCOUNT_FOOTER_HTML}
+${renderBrandFooter('desktop')}
 </body>
 </html>`;
 }

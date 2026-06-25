@@ -20,6 +20,7 @@ import { getMarketRegime } from './tools/get-market-regime.js';
 import { runScanTradeCall, SCAN_TRADE_CALLS_SCHEMA, SCAN_TRADE_CALLS_DESCRIPTION } from './tools/scan-trade-calls.js';
 import { getSignalPerformance, runBackfill } from './resources/signal-performance.js';
 import { refreshGridIfStale } from './lib/cross-asset-grid.js';
+import { renderBrandFooter } from './lib/footer-content.js';
 import { closeDb, getConfidenceBands, getHoldStats, getMerkleBatches, getSignalWithBatch, getSignalByHash, upsertAgentSession, getSampleSignalsFromLatestBatch, getRecentCallsAsync, type RecentCall } from './lib/performance-db.js';
 import { registerWebhookRoutes, resolveOwner, authRequired } from './lib/webhook-api.js';
 import { formatShadowVenuePublic, formatVenueForResource } from './lib/venue-public-formatter.js';
@@ -4081,21 +4082,8 @@ setInterval(updateNextBatchCountdown, 60000);
     </div>
   </div>
 </main>
-<!-- DESIGN-W11 / C2 / Q-W11-4: canonical Footer VERBATIM (desktop variant) from live algovault.com per audits/DESIGN-W11-canonical-chrome-extract.md §2. Matches /account ACCOUNT_FOOTER_HTML byte-identical. -->
-<footer style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0">
-    <span style="color:var(--fg-2)">Built by AlgoVault Labs</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
-    <a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">GitHub</a>
-    <a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener" style="color:var(--fg-3);text-decoration:none">X / Twitter</a>
-    <a href="/signup" style="color:var(--fg-3);text-decoration:none">Signup</a>
-    <a href="/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a>
-  </div>
-  <!-- PH-BADGE-COMPACT-W1: official PH "Follow" badge, Dark + Small (86x32), count-free (replaced the boxed W1 image badge per Mr.1 2026-06-24; PH has no count-free hosted variant of the larger badge). 1px var(--line) border added for contrast — the dark badge bg (#221D21) ~matches the near-black footer, so its built-in same-color border is invisible without it. Reusable slot; byte-identical twin in src/lib/account-handlers.ts ACCOUNT_FOOTER_HTML; canonical PH element for ph-footer-unify. -->
-  <div data-slot="social-proof-badges" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><a href="https://www.producthunt.com/products/algovault?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-algovault" target="_blank" rel="noopener noreferrer" style="display:inline-flex;border:1px solid var(--line);border-radius:4px;line-height:0"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1254662&theme=dark&size=small" alt="Algovault - On-chain-verified trade calls for AI agents | Product Hunt" style="width: 86px; height: 32px;" width="86" height="32" /></a></div>
-</footer>
+<!-- FOOTER-UNIFY-W1: canonical brand footer from the single SoT (src/lib/footer-content.ts renderBrandFooter). Was the inline DESIGN-W11 literal + PH-BADGE-COMPACT-W1 badge. -->
+${renderBrandFooter('desktop')}
 </body>
 </html>`;
 }
