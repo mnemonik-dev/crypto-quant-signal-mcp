@@ -56,13 +56,25 @@ describe('FEATURE-REGISTRY-SOT-W1 CH1 — registry == current reality', () => {
   it('(c2) projection lists all 9 callable names with public fields only', () => {
     const proj = projectCapabilities().tools;
     expect(proj.map((t) => t.name).sort()).toEqual(LIVE_TOOLS);
+    const BASE = ['canonical', 'channels', 'description', 'enabled', 'name', 'quota', 'x402'];
     for (const t of proj) {
-      expect(Object.keys(t).sort()).toEqual(
-        ['canonical', 'channels', 'description', 'enabled', 'name', 'quota', 'x402'].sort(),
-      );
+      for (const k of BASE) expect(t).toHaveProperty(k);
+      // `lenses` is the ONLY allowed additive public key (SCAN-RANKBY-W1); nothing else.
+      const extra = Object.keys(t).filter((k) => !BASE.includes(k));
+      expect(extra.every((k) => k === 'lenses')).toBe(true);
       expect(typeof t.description).toBe('string');
       expect(t.description.length).toBeGreaterThan(0);
     }
+  });
+
+  it('(c3) SCAN-RANKBY-W1: scan_trade_calls advertises the rankBy lens set; nothing else does', () => {
+    const proj = projectCapabilities().tools;
+    const scan = proj.find((t) => t.name === 'scan_trade_calls')!;
+    expect(scan.lenses?.param).toBe('rankBy');
+    expect(scan.lenses?.values).toEqual(['oi', 'volume', 'gainers', 'losers', 'movers', 'funding_positive', 'funding_negative']);
+    expect(scan.lenses?.default).toBe('oi');
+    expect(scan.lenses?.aliases.nfr).toBe('funding_negative');
+    expect(proj.filter((t) => t.lenses).map((t) => t.name)).toEqual(['scan_trade_calls']);
   });
 
   it('getFeature resolves the alias → canonical (closes the canonical-key gap)', () => {

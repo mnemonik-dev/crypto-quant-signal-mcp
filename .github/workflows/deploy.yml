@@ -63,6 +63,13 @@ jobs:
       - name: Feature-registry drift canary (check-feature-registry-drift --check)
         run: node scripts/check-feature-registry-drift.mjs --check
 
+      # SCAN-RANKBY-W1 CH2: cross-venue rank-field parity canary (STATIC). Fails the
+      # push if a venue stops returning a rank field, the funding APR unit drifts, or
+      # /capabilities stops advertising the rankBy lens set. Network-free (fixture-
+      # injected via the rank-metrics seam). The LIVE half runs as a weekly host cron.
+      - name: Rank-metrics parity canary (check-rank-metrics-parity --check)
+        run: node scripts/check-rank-metrics-parity.mjs --check
+
       # GEO-W1 C4: JSON-LD structural integrity test. Network-free unit tests
       # validate the SHAPE of JSON-LD blocks across landing/*.html (Product /
       # Organization / WebSite / Service / SoftwareApplication on every page;

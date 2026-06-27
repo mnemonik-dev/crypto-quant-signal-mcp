@@ -18,6 +18,10 @@ import {
   GET_EQUITY_CALL_DESCRIPTION,
   GET_EQUITY_REGIME_DESCRIPTION,
 } from '../tool-descriptions.js';
+// SCAN-RANKBY-W1: the rankBy lens set is advertised on /capabilities from the SINGLE
+// source (rank-constants.ts) — the bot derives valid lenses, never hardcodes. Pure leaf
+// import (no runtime handler) keeps this DATA+TYPES module cycle-free.
+import { RANK_BY_VALUES, RANK_BY_ALIASES } from './rank-constants.js';
 
 /**
  * How a feature consumes quota:
@@ -28,6 +32,23 @@ import {
  *                          rate-limited separately (limiter: src/lib/chat-rate-limit.ts).
  */
 export type QuotaUnit = 'per-call' | 'per-non-hold' | 'per-non-hold-min1' | 'rate-limited';
+
+/**
+ * SCAN-RANKBY-W1: a public, derive-not-hardcode advertisement of a tool's
+ * selection-lens param (e.g. scan_trade_calls.rankBy). Consumers (the TG bot)
+ * read the canonical `values` + `aliases` off /capabilities to validate + forward
+ * a raw token. ONE source — these come from rank-constants.ts.
+ */
+export interface CapabilityLenses {
+  /** The input param this lens set applies to (e.g. 'rankBy'). */
+  param: string;
+  /** Canonical values (the enum). */
+  values: string[];
+  /** alias → canonical (the bot forwards raw; the MCP resolves). */
+  aliases: Record<string, string>;
+  /** Default value when the param is omitted. */
+  default: string;
+}
 
 export interface FeatureSpec {
   /** Canonical MCP tool name. */
@@ -51,6 +72,8 @@ export interface FeatureSpec {
   x402: { basePriceUsd: number; perUnitUsd?: number } | null;
   /** Key into tool-descriptions.ts (resolved by DESCRIPTIONS below). */
   descriptionRef: string;
+  /** SCAN-RANKBY-W1: optional selection-lens advertisement (e.g. scan_trade_calls.rankBy). */
+  lenses?: CapabilityLenses;
   enabled: boolean;
 }
 
@@ -118,6 +141,8 @@ export const FEATURE_REGISTRY: FeatureSpec[] = [
     // max(1, non-HOLD) rule is the FREE-quota rail ONLY (supersedes the earlier per-unit proposal).
     x402: { basePriceUsd: 0.02 },
     descriptionRef: 'SCAN_TRADE_CALLS_DESCRIPTION',
+    // SCAN-RANKBY-W1: advertise the universe-selection lens set (single source).
+    lenses: { param: 'rankBy', values: [...RANK_BY_VALUES], aliases: { ...RANK_BY_ALIASES }, default: 'oi' },
     enabled: true,
   },
   {
@@ -191,6 +216,8 @@ export interface PublicCapability {
   quota: { unit: QuotaUnit; holdFree: boolean };
   x402: { basePriceUsd: number; perUnitUsd?: number } | null;
   description: string;
+  /** SCAN-RANKBY-W1: selection-lens set when the tool advertises one (e.g. rankBy). */
+  lenses?: CapabilityLenses;
   enabled: boolean;
 }
 
@@ -210,6 +237,8 @@ export function projectCapabilities(): { tools: PublicCapability[] } {
       quota: { unit: f.quota.unit, holdFree: f.quota.holdFree },
       x402: f.x402,
       description: DESCRIPTIONS[f.descriptionRef] ?? '',
+      // SCAN-RANKBY-W1: surface the lens set (omitted when the tool has none).
+      ...(f.lenses ? { lenses: f.lenses } : {}),
       enabled: f.enabled,
     };
     tools.push({ name: f.name, ...base });

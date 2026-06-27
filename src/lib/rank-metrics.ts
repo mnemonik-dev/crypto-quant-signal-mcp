@@ -163,12 +163,18 @@ function rankFunding(pool: ExchangeAsset[], rankBy: RankBy, topN: number): Ranke
  * this order and echoes the metric per call (except for the default `oi` lens).
  * Throws (via `fetchVenueUniverse`) on a non-promoted exchange.
  */
+/** Test/canary seam: override the live universe fetch with a fixture (CH2 parity canary). */
+let _universeFetcherOverride: ((exchange: ExchangeId) => Promise<ExchangeAsset[]>) | null = null;
+export function _setUniverseFetcherForTest(fn: ((exchange: ExchangeId) => Promise<ExchangeAsset[]>) | null): void {
+  _universeFetcherOverride = fn;
+}
+
 export async function getRankedUniverse(
   exchange: ExchangeId,
   rankBy: RankBy,
   topN: number,
 ): Promise<RankedAsset[]> {
-  const all = await fetchVenueUniverse(exchange);
+  const all = await (_universeFetcherOverride ?? fetchVenueUniverse)(exchange);
 
   if (rankBy === 'oi') {
     // Already OI-desc from the fetcher — byte-identical to the historical default.
@@ -206,11 +212,12 @@ export async function getRankedUniverse(
   return all.slice(0, topN).map((a) => ({ coin: a.coin, rankBy, rank_value: a.notionalOI_usd }));
 }
 
-/** Test seam: stop the OKX funding warmer + clear its cache between cases. */
+/** Test seam: stop the OKX funding warmer + clear its cache + override between cases. */
 export function _resetRankMetricsForTest(): void {
   if (okxFundingWarmer) {
     clearInterval(okxFundingWarmer);
     okxFundingWarmer = null;
   }
   okxFundingCache._clear();
+  _universeFetcherOverride = null;
 }
