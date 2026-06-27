@@ -11,6 +11,7 @@ import {
   projectCapabilities,
 } from '../src/lib/feature-registry.js';
 import { TOOL_PRICING } from '../src/lib/x402.js';
+import { RANK_BY_VALUES } from '../src/lib/rank-constants.js';
 
 // The live tools/list (3-step handshake, Step-0 2026-06-08): 8 canonical + the alias.
 const LIVE_TOOLS = [
@@ -71,9 +72,12 @@ describe('FEATURE-REGISTRY-SOT-W1 CH1 — registry == current reality', () => {
     const proj = projectCapabilities().tools;
     const scan = proj.find((t) => t.name === 'scan_trade_calls')!;
     expect(scan.lenses?.param).toBe('rankBy');
-    expect(scan.lenses?.values).toEqual(['oi', 'volume', 'gainers', 'losers', 'movers', 'funding_positive', 'funding_negative']);
+    // Drift-proof: the projection IS the registry's single source (W2 added 'volatility').
+    expect(scan.lenses?.values).toEqual([...RANK_BY_VALUES]);
+    expect(scan.lenses?.values).toContain('volatility');
     expect(scan.lenses?.default).toBe('oi');
     expect(scan.lenses?.aliases.nfr).toBe('funding_negative');
+    expect(scan.lenses?.aliases.atr).toBe('volatility'); // SCAN-RANKBY-W2
     expect(proj.filter((t) => t.lenses).map((t) => t.name)).toEqual(['scan_trade_calls']);
   });
 

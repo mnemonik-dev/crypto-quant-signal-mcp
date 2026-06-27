@@ -26,6 +26,9 @@ import { upstreamFetch, VENUE_FETCH_CONFIGS } from './adapters/_upstream-fetch.j
 import { coalescedCache } from './coalesced-cache.js';
 import { isShortLivedScript } from './runtime.js';
 import { annualizeFunding, isFundingRank, type RankBy } from './rank-constants.js';
+import { computeATRP } from './rank-atr.js';
+import { getAdapter } from './exchange-adapter.js';
+import { intervalMsFor } from './candle-guard.js';
 
 /**
  * The per-coin rank metric carried alongside the selected universe. `rank_value`
@@ -46,6 +49,8 @@ export interface RankedAsset {
   funding_rate?: number;
   /** funding_* — annualized APR, or null when the interval is unknown (never guessed). */
   funding_apr?: number | null;
+  /** volatility — ATRP (ATR(14) ÷ price × 100) on the scan timeframe. */
+  atrp?: number;
 }
 
 /**
@@ -157,6 +162,64 @@ function rankFunding(pool: ExchangeAsset[], rankBy: RankBy, topN: number): Ranke
   }));
 }
 
+// ── SCAN-RANKBY-W2: volatility (ATRP) — the heaviest lens (per-symbol klines) ──
+// Computed on the top-RANK_ATRP_POOL_SIZE-by-OI pool ONLY (sort-then-slice), via a
+// coalesced cache keyed `${exchange}:${timeframe}` with the SAME request-path-<1s
+// guarantees as the OKX funding cache (loadTimeoutMs cold-serves an empty fallback;
+// the load self-warms). No background warmer — the key space is exchange×timeframe
+// (too many combos to pre-warm); the load self-warms on first request + the TTL holds.
+const ATRP_POOL_SIZE = (() => {
+  const raw = process.env.RANK_ATRP_POOL_SIZE;
+  const n = raw == null || raw === '' ? NaN : Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 50; // tighter than funding's 150 — klines are heavy
+})();
+const ATRP_TTL_MS = 2 * 60 * 1000; // candle-derived; ATRP barely moves intra-candle
+const ATRP_CONCURRENCY = 6;
+const ATRP_CANDLE_COUNT = 50; // ATR(14) needs 15; 50 → a well-converged Wilder ATR + venue-count buffer
+
+/**
+ * `coin → ATRP` for the top-by-OI pool on `${exchange}:${timeframe}`. Per pool coin:
+ * `getAdapter(exchange).getCandles(coin, timeframe, …)` (the verdict-engine-proven
+ * accessor — no new per-venue kline mapping) → `computeATRP`. Coalesced + bounded.
+ */
+const atrpCache = coalescedCache<Map<string, number>>({
+  load: async (key) => {
+    const [exchange, timeframe] = key.split(':') as [ExchangeId, string];
+    const universe = await fetchVenueUniverse(exchange);
+    const pool = universe.slice(0, ATRP_POOL_SIZE);
+    const intervalMs = intervalMsFor(timeframe) ?? 900_000;
+    const startTime = Date.now() - ATRP_CANDLE_COUNT * intervalMs;
+    const adapter = getAdapter(exchange);
+    const limiter = pLimit(ATRP_CONCURRENCY);
+    const out = new Map<string, number>();
+    await Promise.all(
+      pool.map((a) =>
+        limiter(async () => {
+          try {
+            const candles = await adapter.getCandles(a.coin, timeframe, startTime);
+            const oldestFirst = [...candles].sort((c1, c2) => c1.time - c2.time);
+            const atrp = computeATRP(oldestFirst);
+            if (atrp !== null && Number.isFinite(atrp)) out.set(a.coin, atrp);
+          } catch {
+            /* skip — coin omitted from this round's ATRP rank */
+          }
+        }),
+      ),
+    );
+    return out;
+  },
+  ttlMs: ATRP_TTL_MS,
+  staleOk: true,
+  loadTimeoutMs: 900, // cold: serve empty fallback < 1s, load self-warms the cache
+  fallback: () => new Map<string, number>(),
+  negativeTtlMs: 30_000,
+  processGate: () => isShortLivedScript(process.argv[1]),
+});
+
+function getAtrpForPool(exchange: ExchangeId, timeframe: string): Promise<Map<string, number>> {
+  return atrpCache.get(`${exchange}:${timeframe}`);
+}
+
 /**
  * Select the top-`topN` perps on `exchange` by the `rankBy` lens. Returns the
  * ordered universe with each coin's rank metric. The scanner scores `coin`s in
@@ -173,7 +236,17 @@ export async function getRankedUniverse(
   exchange: ExchangeId,
   rankBy: RankBy,
   topN: number,
+  timeframe = '15m',
 ): Promise<RankedAsset[]> {
+  // SCAN-RANKBY-W2: volatility ranks the top-by-OI pool by ATRP on the scan timeframe,
+  // served from the coalesced ATRP cache (which owns the pool + candle fetch — no `all`
+  // fetch here). Echoed as `atrp` at output (never cached into the verdict cell).
+  if (rankBy === 'volatility') {
+    const atrpMap = await getAtrpForPool(exchange, timeframe);
+    const sorted = [...atrpMap.entries()].sort((a, b) => b[1] - a[1]); // ATRP desc
+    return sorted.slice(0, topN).map(([coin, atrp]) => ({ coin, rankBy, rank_value: atrp, atrp }));
+  }
+
   const all = await (_universeFetcherOverride ?? fetchVenueUniverse)(exchange);
 
   if (rankBy === 'oi') {
@@ -219,5 +292,6 @@ export function _resetRankMetricsForTest(): void {
     okxFundingWarmer = null;
   }
   okxFundingCache._clear();
+  atrpCache._clear();
   _universeFetcherOverride = null;
 }

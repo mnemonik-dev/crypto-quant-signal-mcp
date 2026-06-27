@@ -64,6 +64,8 @@ export interface ScanCallItem {
   funding_rate?: number;
   /** funding_* — annualized APR, or null when the interval is unknown. */
   funding_apr?: number | null;
+  /** volatility — ATRP (ATR(14) ÷ price × 100) on the scan timeframe. */
+  atrp?: number;
 }
 
 export interface ScanTradeCallsResult {
@@ -143,6 +145,7 @@ export function attachRank(item: ScanCallItem, ranked: RankedAsset | undefined):
   if (ranked.volume_24h !== undefined) base.volume_24h = ranked.volume_24h;
   if (ranked.funding_rate !== undefined) base.funding_rate = ranked.funding_rate;
   if (ranked.funding_apr !== undefined) base.funding_apr = ranked.funding_apr;
+  if (ranked.atrp !== undefined) base.atrp = ranked.atrp;
   return base;
 }
 
@@ -297,7 +300,8 @@ export async function scanTradeCalls(params: ScanTradeCallsParams): Promise<Scan
   if (rankBy === 'oi') {
     coins = await getTopCoinSet(exchange, topN);
   } else {
-    const ranked = await getRankedUniverse(exchange, rankBy, topN);
+    // SCAN-RANKBY-W2: pass timeframe (volatility/ATRP ranks on the scan timeframe).
+    const ranked = await getRankedUniverse(exchange, rankBy, topN, timeframe);
     coins = ranked.map((r) => r.coin);
     rankMap = new Map(ranked.map((r) => [r.coin, r]));
   }

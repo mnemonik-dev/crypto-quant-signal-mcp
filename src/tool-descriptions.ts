@@ -107,8 +107,8 @@ export const PARAM_DESC_SCAN_LIMIT =
 // SCAN-RANKBY-W1: universe-selection lens (default oi). funding_* rank among the
 // most-liquid perps. NB: not in the BM25 keyword canary (scan is not audited).
 export const PARAM_DESC_SCAN_RANK_BY =
-  'Universe lens: oi (default) volume gainers losers movers funding_positive funding_negative ' +
-  '(aliases vol gain lose move pfr nfr). funding_* rank among the most-liquid perps.';
+  'Universe lens: oi (default) volume gainers losers movers funding_positive funding_negative volatility ' +
+  '(aliases vol gain lose move pfr nfr atr). funding_*/volatility rank among the most-liquid perps.';
 
 // Top-20 keyword phrases the canary asserts each of the 3 BM25-audited tools'
 // combined-text contains ≥15 of (case-insensitive substring match). Sourced

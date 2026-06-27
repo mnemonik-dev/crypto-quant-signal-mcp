@@ -44,13 +44,13 @@ describe('resolveRankBy — the single alias map', () => {
 });
 
 describe('rankByTokens — advertised set (canonical + distinct aliases)', () => {
-  it('includes all 7 canonical + 6 distinct aliases (oi alias == canonical)', () => {
+  it('includes every canonical + each distinct alias (oi alias == canonical)', () => {
     const tokens = rankByTokens();
     for (const v of RANK_BY_VALUES) expect(tokens).toContain(v);
-    for (const alias of Object.keys(RANK_BY_ALIASES)) {
-      if (!RANK_BY_VALUES.includes(alias as never)) expect(tokens).toContain(alias);
-    }
-    expect(tokens.length).toBe(7 + 6); // 7 canonical + vol/gain/lose/move/pfr/nfr
+    const distinctAliases = Object.keys(RANK_BY_ALIASES).filter((a) => !RANK_BY_VALUES.includes(a as never));
+    for (const alias of distinctAliases) expect(tokens).toContain(alias);
+    // drift-proof: canonical + distinct aliases (W2 added volatility + atr → 8 + 7 = 15)
+    expect(tokens.length).toBe(RANK_BY_VALUES.length + distinctAliases.length);
     expect(new Set(tokens).size).toBe(tokens.length); // no dupes
   });
 

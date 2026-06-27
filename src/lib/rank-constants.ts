@@ -23,6 +23,7 @@ export const RANK_BY_VALUES = [
   'movers',
   'funding_positive',
   'funding_negative',
+  'volatility', // SCAN-RANKBY-W2: ATRP (ATR(14)÷price×100) on the scan timeframe
 ] as const;
 
 export type RankBy = (typeof RANK_BY_VALUES)[number];
@@ -36,6 +37,7 @@ export const RANK_BY_ALIASES: Readonly<Record<string, RankBy>> = {
   move: 'movers',
   pfr: 'funding_positive',
   nfr: 'funding_negative',
+  atr: 'volatility', // SCAN-RANKBY-W2
 };
 
 const CANONICAL_SET: ReadonlySet<string> = new Set<string>(RANK_BY_VALUES);

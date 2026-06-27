@@ -49,7 +49,7 @@ beforeEach(() => {
   mockRanked.mockReset();
 });
 
-const RANK_KEYS = ['rank_value', 'change_24h_pct', 'volume_24h', 'funding_rate', 'funding_apr'];
+const RANK_KEYS = ['rank_value', 'change_24h_pct', 'volume_24h', 'funding_rate', 'funding_apr', 'atrp'];
 
 describe('byte-identity — omitted/oi lens', () => {
   it('omitted rankBy: output carries NO rank fields; uses the OI path', async () => {
@@ -83,7 +83,7 @@ describe('non-oi lenses — rank echo threaded to output', () => {
     expect(sol.change_24h_pct).toBe(12);
     expect(sol).not.toHaveProperty('funding_rate');
     expect(sol).not.toHaveProperty('volume_24h');
-    expect(mockRanked).toHaveBeenCalledWith('BYBIT', 'gainers', 20);
+    expect(mockRanked).toHaveBeenCalledWith('BYBIT', 'gainers', 20, '15m');
   });
 
   it('funding_negative: carries funding_rate + funding_apr', async () => {
@@ -102,7 +102,7 @@ describe('non-oi lenses — rank echo threaded to output', () => {
       { coin: 'ETH', rankBy: 'funding_negative', rank_value: -0.001, funding_rate: -0.001, funding_apr: null },
     ] as RankedAsset[]);
     await scanTradeCalls({ exchange: 'BYBIT', rankBy: 'nfr', topN: 30 });
-    expect(mockRanked).toHaveBeenCalledWith('BYBIT', 'funding_negative', 30);
+    expect(mockRanked).toHaveBeenCalledWith('BYBIT', 'funding_negative', 30, '15m');
   });
 
   it('unknown token is LENIENT in the engine (→ oi, no rank selector)', async () => {
@@ -120,5 +120,29 @@ describe('non-oi lenses — rank echo threaded to output', () => {
     const r = await scanTradeCalls({ exchange: 'OKX', rankBy: 'funding_negative' });
     const json = JSON.stringify(r);
     expect(json).not.toMatch(/outcome_/);
+  });
+});
+
+describe('volatility (ATRP) + cache-isolation (SCAN-RANKBY-W2)', () => {
+  it('volatility echoes atrp; a later gainers scan of the SAME coin/tf has NO stale atrp', async () => {
+    // 1) volatility scan for SOL → atrp echoed; verdict cell cached (rank-FREE) for (BYBIT,15m,SOL).
+    mockRanked.mockResolvedValueOnce([{ coin: 'SOL', rankBy: 'volatility', rank_value: 5.5, atrp: 5.5 }] as RankedAsset[]);
+    const vol = await scanTradeCalls({ exchange: 'BYBIT', rankBy: 'volatility', timeframe: '15m' });
+    const solVol = vol.calls.find((c) => c.coin === 'SOL')!;
+    expect(solVol.atrp).toBeCloseTo(5.5, 6);
+    expect(mockRanked).toHaveBeenCalledWith('BYBIT', 'volatility', 20, '15m'); // timeframe forwarded
+    // 2) gainers scan SAME coin/tf reuses the cached verdict cell → attachRank adds ONLY
+    //    gainers fields; the atrp from scan 1 must NOT leak (output-only echo, cache-isolated).
+    mockRanked.mockResolvedValueOnce([{ coin: 'SOL', rankBy: 'gainers', rank_value: 12, change_24h_pct: 12 }] as RankedAsset[]);
+    const gain = await scanTradeCalls({ exchange: 'BYBIT', rankBy: 'gainers', timeframe: '15m' });
+    const solGain = gain.calls.find((c) => c.coin === 'SOL')!;
+    expect(solGain.change_24h_pct).toBe(12);
+    expect(solGain).not.toHaveProperty('atrp'); // ← the cache-isolation guarantee
+  });
+
+  it('atr alias resolves to volatility + forwards topN + timeframe', async () => {
+    mockRanked.mockResolvedValue([{ coin: 'ETH', rankBy: 'volatility', rank_value: 3, atrp: 3 }] as RankedAsset[]);
+    await scanTradeCalls({ exchange: 'OKX', rankBy: 'atr', topN: 25, timeframe: '1h' });
+    expect(mockRanked).toHaveBeenCalledWith('OKX', 'volatility', 25, '1h');
   });
 });

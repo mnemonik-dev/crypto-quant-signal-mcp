@@ -22,15 +22,22 @@ vi.mock('../../src/lib/adapters/_upstream-fetch.js', () => ({
   upstreamFetch: vi.fn(),
   VENUE_FETCH_CONFIGS: { OKX: {}, BINANCE: {}, BYBIT: {}, BITGET: {}, HL: {} },
 }));
+// SCAN-RANKBY-W2: volatility uses getAdapter(ex).getCandles for ATRP.
+vi.mock('../../src/lib/exchange-adapter.js', () => ({
+  getAdapter: vi.fn(),
+}));
 
 import { fetchVenueUniverse } from '../../src/lib/exchange-universe.js';
 import { getPremiumIndexBulkCoalesced } from '../../src/lib/adapters/binance.js';
 import { upstreamFetch } from '../../src/lib/adapters/_upstream-fetch.js';
+import { getAdapter } from '../../src/lib/exchange-adapter.js';
 import { getRankedUniverse, _resetRankMetricsForTest } from '../../src/lib/rank-metrics.js';
+import type { Candle } from '../../src/types.js';
 
 const mockUniverse = vi.mocked(fetchVenueUniverse);
 const mockPremium = vi.mocked(getPremiumIndexBulkCoalesced);
 const mockUpstream = vi.mocked(upstreamFetch);
+const mockGetAdapter = vi.mocked(getAdapter);
 
 function asset(
   coin: string,
@@ -55,6 +62,7 @@ beforeEach(() => {
   mockUniverse.mockReset();
   mockPremium.mockReset();
   mockUpstream.mockReset();
+  mockGetAdapter.mockReset();
 });
 afterEach(() => _resetRankMetricsForTest());
 
@@ -165,5 +173,36 @@ describe('getRankedUniverse — funding lenses (uniform shortlist)', () => {
     mockUniverse.mockResolvedValue(u);
     const r = await getRankedUniverse('BYBIT', 'funding_negative', 5);
     expect(r.map((a) => a.coin)).toEqual(['BTC']); // ETH dropped (no funding)
+  });
+});
+
+describe('getRankedUniverse — volatility (ATRP, SCAN-RANKBY-W2)', () => {
+  // Flat constant-range candles → ATRP == atrpTarget (see rank-atr.test.ts).
+  function flatCandles(atrpTarget: number, price = 100, n = 20): Candle[] {
+    const d = (atrpTarget * price) / 200;
+    return Array.from({ length: n }, (_, i) => ({ open: price, high: price + d, low: price - d, close: price, volume: 1, time: i }));
+  }
+  function setAtrpFixture(byCoin: Record<string, number>) {
+    mockUniverse.mockResolvedValue(Object.keys(byCoin).map((coin, i) => asset(coin, (100 - i) * 1e6, 1e6)));
+    mockGetAdapter.mockReturnValue({ getCandles: async (coin: string) => flatCandles(byCoin[coin]) } as never);
+  }
+
+  it('ranks the pool by ATRP desc + echoes atrp (not funding/change)', async () => {
+    setAtrpFixture({ AAA: 1, BBB: 3, CCC: 2 });
+    const r = await getRankedUniverse('BYBIT', 'volatility', 3, '15m');
+    expect(r.map((a) => a.coin)).toEqual(['BBB', 'CCC', 'AAA']); // ATRP 3, 2, 1
+    expect(r[0].atrp).toBeCloseTo(3, 6);
+    expect(r[0].rank_value).toBeCloseTo(3, 6);
+    expect(r[0]).not.toHaveProperty('funding_rate');
+    expect(r[0]).not.toHaveProperty('change_24h_pct');
+  });
+
+  it('excludes coins with insufficient candles (null ATRP)', async () => {
+    mockUniverse.mockResolvedValue([asset('AAA', 9e9, 1e6), asset('BBB', 8e9, 1e6)]);
+    mockGetAdapter.mockReturnValue({
+      getCandles: async (coin: string) => (coin === 'AAA' ? flatCandles(2) : flatCandles(2, 100, 5)),
+    } as never);
+    const r = await getRankedUniverse('BYBIT', 'volatility', 5, '15m');
+    expect(r.map((a) => a.coin)).toEqual(['AAA']); // BBB dropped (5 candles < 15)
   });
 });
