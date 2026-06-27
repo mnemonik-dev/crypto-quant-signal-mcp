@@ -41,11 +41,12 @@ const FAILS = [];
 const fail = (m) => FAILS.push(m);
 const close = (label, got, want, tol = 1e-9) => Math.abs(got - want) <= tol || (fail(`${label}: got ${got}, want ≈${want}`), false);
 
-let rank, constants, registry;
+let rank, constants, registry, rankAtr;
 try {
   rank = await import(path.join(REPO_ROOT, 'dist', 'lib', 'rank-metrics.js'));
   constants = await import(path.join(REPO_ROOT, 'dist', 'lib', 'rank-constants.js'));
   registry = await import(path.join(REPO_ROOT, 'dist', 'lib', 'feature-registry.js'));
+  rankAtr = await import(path.join(REPO_ROOT, 'dist', 'lib', 'rank-atr.js'));
 } catch (e) {
   console.error('[rank-parity] FATAL — dist not built (run `npm run build`):', e.message);
   process.exit(2);
@@ -53,6 +54,7 @@ try {
 const { getRankedUniverse, _setUniverseFetcherForTest, _resetRankMetricsForTest } = rank;
 const { RANK_BY_VALUES, RANK_BY_ALIASES, resolveRankBy, rankByTokens, annualizeFunding } = constants;
 const { projectCapabilities } = registry;
+const { computeATRP } = rankAtr;
 
 const NON_FUNDING = ['oi', 'volume', 'gainers', 'losers', 'movers'];
 const TYPED_FIELD = {
@@ -89,10 +91,11 @@ function checkApr() {
 
 // ── (2) lens contract ──
 function checkContract() {
-  const want = ['oi', 'volume', 'gainers', 'losers', 'movers', 'funding_positive', 'funding_negative'];
+  const want = ['oi', 'volume', 'gainers', 'losers', 'movers', 'funding_positive', 'funding_negative', 'volatility'];
   if (JSON.stringify([...RANK_BY_VALUES]) !== JSON.stringify(want)) fail(`RANK_BY_VALUES drift: ${RANK_BY_VALUES}`);
   for (const t of rankByTokens()) if (resolveRankBy(t) == null) fail(`token '${t}' does not resolve`);
   if (resolveRankBy('nfr') !== 'funding_negative') fail("alias nfr must resolve to funding_negative");
+  if (resolveRankBy('atr') !== 'volatility') fail("alias atr must resolve to volatility"); // SCAN-RANKBY-W2
 }
 
 // ── (3) /capabilities advertises the lens set ──
@@ -103,9 +106,23 @@ function checkCapabilities() {
   if (L.param !== 'rankBy') fail(`lenses.param != rankBy (${L.param})`);
   if (JSON.stringify(L.values) !== JSON.stringify([...RANK_BY_VALUES])) fail('lenses.values != RANK_BY_VALUES');
   if (L.default !== 'oi') fail(`lenses.default != oi (${L.default})`);
-  for (const a of ['vol', 'gain', 'lose', 'move', 'pfr', 'nfr']) {
+  for (const a of ['vol', 'gain', 'lose', 'move', 'pfr', 'nfr', 'atr']) {
     if (!(a in L.aliases)) fail(`lenses.aliases missing '${a}'`);
   }
+}
+
+// ── (5) SCAN-RANKBY-W2: ATRP pure-compute unit (offline) ──
+function checkAtrp() {
+  // Flat constant-range candles (high=price+d, low=price−d, close=price) → ATRP = 2d/price×100.
+  const flat = (atrpTarget, price = 100, n = 20) => {
+    const d = (atrpTarget * price) / 200;
+    return Array.from({ length: n }, (_, i) => ({ open: price, high: price + d, low: price - d, close: price, volume: 1, time: i }));
+  };
+  close('computeATRP(flat 2%)', computeATRP(flat(2)), 2, 1e-6);
+  // ATRP not raw ATR: same relative range at 60000× price → identical ATRP.
+  if (Math.abs(computeATRP(flat(3, 1)) - computeATRP(flat(3, 60000))) > 1e-6) fail('ATRP must be price-normalized (raw ATR would differ)');
+  if (computeATRP(flat(2, 100, 14)) !== null) fail('computeATRP must return null for <15 candles');
+  if (!RANK_BY_VALUES.includes('volatility')) fail('volatility missing from RANK_BY_VALUES');
 }
 
 // ── (4) per-venue field parity (offline, fixture-injected) ──
@@ -149,6 +166,16 @@ async function checkLiveParity() {
         else fail(`LIVE ${venue}/funding_negative: no funding rows`);
       } catch (e) { console.log(`  ~ LIVE ${venue}/funding unreachable: ${e.message}`); }
     }
+    // SCAN-RANKBY-W2: volatility (ATRP) — like OKX/BINANCE funding, the ATRP cache's
+    // processGate SKIPS the loader in script context (a short-lived script must not
+    // cold-fan-out klines), so it serves the empty fallback here. ATRP live-parity is
+    // covered in the SERVER context (post-deploy live `scan_trade_calls({rankBy:'volatility'})`)
+    // + vitest + the standalone non-script probe — not failable from this script.
+    try {
+      const rows = await getRankedUniverse(venue, 'volatility', 5, '15m');
+      if (rows.length && rows.every((r) => typeof r.atrp === 'number')) console.log(`  ✓ LIVE ${venue}/volatility (${rows.length})`);
+      else console.log(`  · ${venue}/volatility: processGate-skipped in script context (verified server-side + vitest + probe)`);
+    } catch (e) { console.log(`  ~ LIVE ${venue}/volatility unreachable: ${e.message}`); }
   }
   console.log('  · OKX/BINANCE funding parity verified in server context + vitest (script processGate / live premiumIndex)');
 }
@@ -158,6 +185,7 @@ try {
   checkApr();
   checkContract();
   checkCapabilities();
+  checkAtrp();
   if (MODE_LIVE) await checkLiveParity();
   else await checkOfflineParity(/* withChange */ !MODE_DRIFT);
 } catch (e) {

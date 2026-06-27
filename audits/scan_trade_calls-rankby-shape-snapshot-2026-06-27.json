@@ -1,8 +1,8 @@
 {
   "endpoint": "scan_trade_calls",
-  "wave": "SCAN-RANKBY-W1",
+  "wave": "SCAN-RANKBY-W1 + W2 (volatility)",
   "date": "2026-06-27",
-  "summary": "Additive rankBy lens + per-call rank echo. rankBy omitted/'oi' ⇒ byte-identical to the pre-wave shape (no rank_* keys). tools/list unchanged (9); rankBy is a param.",
+  "summary": "Additive rankBy lens + per-call rank echo. W2 added the `volatility` lens (echo `atrp`). rankBy omitted/'oi' ⇒ byte-identical to the pre-wave shape (no rank_* keys). tools/list unchanged (9); rankBy is a param. oi_change deferred to W3.",
   "calls_item": {
     "allowed_keys": [
       "coin",
@@ -15,7 +15,8 @@
       "change_24h_pct",
       "volume_24h",
       "funding_rate",
-      "funding_apr"
+      "funding_apr",
+      "atrp"
     ],
     "always_present": ["coin", "timeframe", "exchange", "call", "confidence", "regime"],
     "present_only_for_non_oi_lens": ["rank_value"],
@@ -26,6 +27,7 @@
       "movers": ["change_24h_pct"],
       "funding_positive": ["funding_rate", "funding_apr"],
       "funding_negative": ["funding_rate", "funding_apr"],
+      "volatility": ["atrp"],
       "oi": []
     },
     "forbidden_keys": ["outcome_return_pct", "outcome_price", "price", "indicators", "reasoning"],
@@ -33,7 +35,7 @@
   },
   "envelope_keys": ["scanned", "eligible_non_hold", "holds", "errors", "partial", "calls", "_algovault", "_receipts"],
   "input_schema_additive": {
-    "rankBy": "string, optional, default 'oi'. Canonical: oi|volume|gainers|losers|movers|funding_positive|funding_negative. Aliases (resolved by the MCP, the bot forwards raw): vol|gain|lose|move|pfr|nfr. Raw string (not a Zod enum) so the bot can forward an alias verbatim; resolveRankBy validates."
+    "rankBy": "string, optional, default 'oi'. Canonical: oi|volume|gainers|losers|movers|funding_positive|funding_negative|volatility. Aliases (resolved by the MCP, the bot forwards raw): vol|gain|lose|move|pfr|nfr|atr. Raw string (not a Zod enum) so the bot can forward an alias verbatim; resolveRankBy validates."
   },
   "error_contract": {
     "quota_exhausted": { "error": "quota_exhausted", "code": "tier_limit_reached" },
@@ -47,7 +49,8 @@
   "cache_contract": {
     "okx_funding": "OKX has no bulk funding endpoint (50014). funding_* on OKX ranks the top-RANK_FUNDING_POOL_SIZE-by-OI pool (default 150) via per-instId fetches in a coalesced cache: ttl 3min, loadTimeout 900ms (cold serves empty fallback, load self-warms), negativeTtl 30s, lazy background warmer (long-lived server only). Request path never fans out (<1s).",
     "binance_funding": "joined from the 60s-coalesced bulk premiumIndex (getPremiumIndexBulkCoalesced).",
-    "same_call_funding": "BYBIT/BITGET/HL carry funding (+ Bybit fundingIntervalHour) on the bulk ticker — no extra call."
+    "same_call_funding": "BYBIT/BITGET/HL carry funding (+ Bybit fundingIntervalHour) on the bulk ticker — no extra call.",
+    "atrp_volatility": "volatility ranks the top-RANK_ATRP_POOL_SIZE-by-OI pool (default 50) by ATRP = ATR(14 Wilder)÷price×100, via getAdapter(ex).getCandles per pool coin (no new kline mapping). Coalesced cache keyed exchange:timeframe: ttl 2min, loadTimeout 900ms (cold serves empty fallback <1s, self-warms), no background warmer (key space exchange×timeframe). atrp echoed at OUTPUT (never cached into the verdict cell)."
   },
   "consumers": [
     "src/index.ts (MCP server.tool scan_trade_calls handler)",
