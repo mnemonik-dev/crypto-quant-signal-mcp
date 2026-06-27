@@ -29,6 +29,7 @@ import { annualizeFunding, isFundingRank, type RankBy } from './rank-constants.j
 import { computeATRP } from './rank-atr.js';
 import { getAdapter } from './exchange-adapter.js';
 import { intervalMsFor } from './candle-guard.js';
+import { computeOiDeltaForPool, DEFAULT_OI_WINDOW_MS, type OiDelta } from './oi-snapshots.js';
 
 /**
  * The per-coin rank metric carried alongside the selected universe. `rank_value`
@@ -51,6 +52,10 @@ export interface RankedAsset {
   funding_apr?: number | null;
   /** volatility — ATRP (ATR(14) ÷ price × 100) on the scan timeframe. */
   atrp?: number;
+  /** oi_change — REAL OI % delta over the window (computeOiDelta over oi_snapshots). */
+  oi_change_pct?: number;
+  /** oi_change — the OI-delta window label, e.g. "24h". */
+  oi_change_window?: string;
 }
 
 /**
@@ -220,6 +225,26 @@ function getAtrpForPool(exchange: ExchangeId, timeframe: string): Promise<Map<st
   return atrpCache.get(`${exchange}:${timeframe}`);
 }
 
+// ── SCAN-RANKBY-W3: oi_change — REAL OI delta over the self-maintained oi_snapshots store ──
+// The hourly sampler (oi-snapshot-sampler.ts) is the warmer; this cache only memoizes the
+// per-venue delta read (ONE DB query → computeOiDeltaForPool) for ~60s so a scan burst doesn't
+// re-query. NO background warmer (the cron warms the store, not this). Request-path-<1s via
+// loadTimeoutMs (cold-serves an empty map; the store is the source so the load is just a query).
+const OI_CHANGE_TTL_MS = 60 * 1000;
+const oiChangeCache = coalescedCache<Map<string, OiDelta>>({
+  load: async (exchange) => computeOiDeltaForPool(exchange as ExchangeId, DEFAULT_OI_WINDOW_MS),
+  ttlMs: OI_CHANGE_TTL_MS,
+  staleOk: true,
+  loadTimeoutMs: 900,
+  fallback: () => new Map<string, OiDelta>(),
+  negativeTtlMs: 30_000,
+  processGate: () => isShortLivedScript(process.argv[1]),
+});
+
+function getOiChangeForPool(exchange: ExchangeId): Promise<Map<string, OiDelta>> {
+  return oiChangeCache.get(exchange);
+}
+
 /**
  * Select the top-`topN` perps on `exchange` by the `rankBy` lens. Returns the
  * ordered universe with each coin's rank metric. The scanner scores `coin`s in
@@ -245,6 +270,22 @@ export async function getRankedUniverse(
     const atrpMap = await getAtrpForPool(exchange, timeframe);
     const sorted = [...atrpMap.entries()].sort((a, b) => b[1] - a[1]); // ATRP desc
     return sorted.slice(0, topN).map(([coin, atrp]) => ({ coin, rankBy, rank_value: atrp, atrp }));
+  }
+
+  // SCAN-RANKBY-W3: oi_change ranks the sampled pool by REAL OI delta from the oi_snapshots
+  // store (computeOiDelta — the SAME source the get_trade_call factor reads, single-derivation).
+  // Symbols still "warming" (< 2 snapshots spanning the window) are omitted. Echoed at output
+  // (never cached into the verdict cell). The store IS the universe → no `all` fetch here.
+  if (rankBy === 'oi_change') {
+    const deltaMap = await getOiChangeForPool(exchange);
+    const sorted = [...deltaMap.entries()].sort((a, b) => b[1].oi_change_pct - a[1].oi_change_pct); // OI %Δ desc
+    return sorted.slice(0, topN).map(([coin, d]) => ({
+      coin,
+      rankBy,
+      rank_value: d.oi_change_pct,
+      oi_change_pct: d.oi_change_pct,
+      oi_change_window: d.oi_change_window,
+    }));
   }
 
   const all = await (_universeFetcherOverride ?? fetchVenueUniverse)(exchange);
@@ -293,5 +334,6 @@ export function _resetRankMetricsForTest(): void {
   }
   okxFundingCache._clear();
   atrpCache._clear();
+  oiChangeCache._clear();
   _universeFetcherOverride = null;
 }

@@ -27,17 +27,25 @@ vi.mock('../../src/lib/exchange-adapter.js', () => ({
   getAdapter: vi.fn(),
 }));
 
+// SCAN-RANKBY-W3: oi_change reads computeOiDeltaForPool over the oi_snapshots store.
+vi.mock('../../src/lib/oi-snapshots.js', () => ({
+  computeOiDeltaForPool: vi.fn(),
+  DEFAULT_OI_WINDOW_MS: 86_400_000,
+}));
+
 import { fetchVenueUniverse } from '../../src/lib/exchange-universe.js';
 import { getPremiumIndexBulkCoalesced } from '../../src/lib/adapters/binance.js';
 import { upstreamFetch } from '../../src/lib/adapters/_upstream-fetch.js';
 import { getAdapter } from '../../src/lib/exchange-adapter.js';
 import { getRankedUniverse, _resetRankMetricsForTest } from '../../src/lib/rank-metrics.js';
+import { computeOiDeltaForPool } from '../../src/lib/oi-snapshots.js';
 import type { Candle } from '../../src/types.js';
 
 const mockUniverse = vi.mocked(fetchVenueUniverse);
 const mockPremium = vi.mocked(getPremiumIndexBulkCoalesced);
 const mockUpstream = vi.mocked(upstreamFetch);
 const mockGetAdapter = vi.mocked(getAdapter);
+const mockOiDelta = vi.mocked(computeOiDeltaForPool);
 
 function asset(
   coin: string,
@@ -204,5 +212,29 @@ describe('getRankedUniverse — volatility (ATRP, SCAN-RANKBY-W2)', () => {
     } as never);
     const r = await getRankedUniverse('BYBIT', 'volatility', 5, '15m');
     expect(r.map((a) => a.coin)).toEqual(['AAA']); // BBB dropped (5 candles < 15)
+  });
+});
+
+describe('getRankedUniverse — oi_change (real OI delta, SCAN-RANKBY-W3)', () => {
+  it('ranks the pool by OI %Δ desc + echoes oi_change_pct/window (the store is the universe — no fetch)', async () => {
+    mockOiDelta.mockResolvedValue(
+      new Map([
+        ['BTC', { oi_change_pct: 2.1, oi_change_window: '24h' }],
+        ['SOL', { oi_change_pct: 9.4, oi_change_window: '24h' }],
+        ['ETH', { oi_change_pct: -3.0, oi_change_window: '24h' }],
+      ]),
+    );
+    const r = await getRankedUniverse('BYBIT', 'oi_change', 2);
+    expect(r.map((a) => a.coin)).toEqual(['SOL', 'BTC']); // desc by OI %Δ, top-2
+    expect(r[0]).toMatchObject({ coin: 'SOL', rankBy: 'oi_change', rank_value: 9.4, oi_change_pct: 9.4, oi_change_window: '24h' });
+    expect(r[0]).not.toHaveProperty('atrp');
+    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000);
+    expect(mockUniverse).not.toHaveBeenCalled(); // the store is the universe — no venue fetch
+  });
+
+  it('warming: an empty store → empty result (never blocks the scan)', async () => {
+    mockOiDelta.mockResolvedValue(new Map());
+    const r = await getRankedUniverse('OKX', 'oi_change', 20);
+    expect(r).toEqual([]);
   });
 });

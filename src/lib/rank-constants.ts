@@ -24,6 +24,7 @@ export const RANK_BY_VALUES = [
   'funding_positive',
   'funding_negative',
   'volatility', // SCAN-RANKBY-W2: ATRP (ATR(14)÷price×100) on the scan timeframe
+  'oi_change', // SCAN-RANKBY-W3: REAL OI delta (computeOiDelta over the oi_snapshots store)
 ] as const;
 
 export type RankBy = (typeof RANK_BY_VALUES)[number];
@@ -38,6 +39,7 @@ export const RANK_BY_ALIASES: Readonly<Record<string, RankBy>> = {
   pfr: 'funding_positive',
   nfr: 'funding_negative',
   atr: 'volatility', // SCAN-RANKBY-W2
+  oid: 'oi_change', // SCAN-RANKBY-W3
 };
 
 const CANONICAL_SET: ReadonlySet<string> = new Set<string>(RANK_BY_VALUES);

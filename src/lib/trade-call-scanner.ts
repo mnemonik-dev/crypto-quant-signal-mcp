@@ -66,6 +66,10 @@ export interface ScanCallItem {
   funding_apr?: number | null;
   /** volatility — ATRP (ATR(14) ÷ price × 100) on the scan timeframe. */
   atrp?: number;
+  /** oi_change — REAL OI % delta over the window (computeOiDelta over oi_snapshots). */
+  oi_change_pct?: number;
+  /** oi_change — the OI-delta window label, e.g. "24h". */
+  oi_change_window?: string;
 }
 
 export interface ScanTradeCallsResult {
@@ -146,6 +150,8 @@ export function attachRank(item: ScanCallItem, ranked: RankedAsset | undefined):
   if (ranked.funding_rate !== undefined) base.funding_rate = ranked.funding_rate;
   if (ranked.funding_apr !== undefined) base.funding_apr = ranked.funding_apr;
   if (ranked.atrp !== undefined) base.atrp = ranked.atrp;
+  if (ranked.oi_change_pct !== undefined) base.oi_change_pct = ranked.oi_change_pct;
+  if (ranked.oi_change_window !== undefined) base.oi_change_window = ranked.oi_change_window;
   return base;
 }
 

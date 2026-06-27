@@ -49,7 +49,7 @@ beforeEach(() => {
   mockRanked.mockReset();
 });
 
-const RANK_KEYS = ['rank_value', 'change_24h_pct', 'volume_24h', 'funding_rate', 'funding_apr', 'atrp'];
+const RANK_KEYS = ['rank_value', 'change_24h_pct', 'volume_24h', 'funding_rate', 'funding_apr', 'atrp', 'oi_change_pct', 'oi_change_window'];
 
 describe('byte-identity — omitted/oi lens', () => {
   it('omitted rankBy: output carries NO rank fields; uses the OI path', async () => {
@@ -144,5 +144,41 @@ describe('volatility (ATRP) + cache-isolation (SCAN-RANKBY-W2)', () => {
     mockRanked.mockResolvedValue([{ coin: 'ETH', rankBy: 'volatility', rank_value: 3, atrp: 3 }] as RankedAsset[]);
     await scanTradeCalls({ exchange: 'OKX', rankBy: 'atr', topN: 25, timeframe: '1h' });
     expect(mockRanked).toHaveBeenCalledWith('OKX', 'volatility', 25, '1h');
+  });
+});
+
+describe('oi_change (real OI delta) + cache-isolation (SCAN-RANKBY-W3)', () => {
+  it('oi_change echoes oi_change_pct + window; a later gainers scan of the SAME coin/tf has NO stale oi_change', async () => {
+    // 1) oi_change scan for SOL → real OI delta echoed; verdict cell cached (rank-FREE) for (BYBIT,15m,SOL).
+    mockRanked.mockResolvedValueOnce([
+      { coin: 'SOL', rankBy: 'oi_change', rank_value: 8.2, oi_change_pct: 8.2, oi_change_window: '24h' },
+    ] as RankedAsset[]);
+    const oi = await scanTradeCalls({ exchange: 'BYBIT', rankBy: 'oi_change', timeframe: '15m' });
+    const sol = oi.calls.find((c) => c.coin === 'SOL')!;
+    expect(sol.oi_change_pct).toBeCloseTo(8.2, 6);
+    expect(sol.oi_change_window).toBe('24h');
+    expect(mockRanked).toHaveBeenCalledWith('BYBIT', 'oi_change', 20, '15m'); // timeframe forwarded
+    // 2) gainers scan SAME coin/tf reuses the cached verdict cell → attachRank adds ONLY gainers
+    //    fields; the oi_change_pct/window from scan 1 must NOT leak (output-only echo, cache-isolated).
+    mockRanked.mockResolvedValueOnce([{ coin: 'SOL', rankBy: 'gainers', rank_value: 12, change_24h_pct: 12 }] as RankedAsset[]);
+    const gain = await scanTradeCalls({ exchange: 'BYBIT', rankBy: 'gainers', timeframe: '15m' });
+    const solGain = gain.calls.find((c) => c.coin === 'SOL')!;
+    expect(solGain.change_24h_pct).toBe(12);
+    expect(solGain).not.toHaveProperty('oi_change_pct'); // ← cache-isolation guarantee
+    expect(solGain).not.toHaveProperty('oi_change_window');
+  });
+
+  it('oid alias resolves to oi_change + forwards topN + timeframe', async () => {
+    mockRanked.mockResolvedValue([
+      { coin: 'ETH', rankBy: 'oi_change', rank_value: 3, oi_change_pct: 3, oi_change_window: '24h' },
+    ] as RankedAsset[]);
+    await scanTradeCalls({ exchange: 'OKX', rankBy: 'oid', topN: 25, timeframe: '1h' });
+    expect(mockRanked).toHaveBeenCalledWith('OKX', 'oi_change', 25, '1h');
+  });
+
+  it('warming: an empty ranked set → no calls, graceful (the store never blocks the scan)', async () => {
+    mockRanked.mockResolvedValue([] as RankedAsset[]);
+    const r = await scanTradeCalls({ exchange: 'BYBIT', rankBy: 'oi_change', timeframe: '15m' });
+    expect(r.calls).toEqual([]);
   });
 });
