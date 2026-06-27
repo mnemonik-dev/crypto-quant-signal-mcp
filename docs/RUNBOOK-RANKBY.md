@@ -29,10 +29,20 @@ scan_trade_calls (index.ts handler + x402 route)
 | `movers` | `move` | abs(24h %) desc | `change_24h_pct` (signed) |
 | `funding_positive` | `pfr` | funding desc | `funding_rate` + `funding_apr` |
 | `funding_negative` | `nfr` | funding asc | `funding_rate` + `funding_apr` |
+| `volatility` | `atr` | ATRP desc | `atrp` |
 
 `oi`/`volume`/`gainers`/`losers`/`movers` rank the **full universe**. `funding_*` rank within the
-**top-`RANK_FUNDING_POOL_SIZE`-by-OI candidate pool** (default 150, env-overridable) on ALL venues
-— *"funding ranks among the most-liquid perps."*
+**top-`RANK_FUNDING_POOL_SIZE`-by-OI candidate pool** (default 150, env-overridable); `volatility`
+within the **top-`RANK_ATRP_POOL_SIZE`-by-OI pool** (default 50, tighter — klines are heavy) — both
+*"among the most-liquid perps."*
+
+**ATRP (`volatility`, SCAN-RANKBY-W2):** `ATRP = ATR(14 Wilder) ÷ last close × 100` on the scan
+timeframe (`computeATRP` in `rank-atr.ts`). **ATRP, not raw ATR** — raw ATR is price-scaled (BTC
+dwarfs a sub-$1 alt), so a mixed-price basket is ranked by relative range. Candles come from the
+verdict-engine-proven `getAdapter(exchange).getCandles` (no new per-venue kline mapping), fetched
+for the pool only, cached in a `coalescedCache` keyed `${exchange}:${timeframe}` (ttl 2min,
+`loadTimeoutMs` 900 cold-serves empty <1s + self-warms; no background warmer — the key space is
+exchange×timeframe). `<15` candles → coin dropped (never guessed). `atrp` echoed at OUTPUT only.
 
 ## Per-venue field map (live-verified 2026-06-27)
 
@@ -58,14 +68,17 @@ serves an empty fallback < 1s while the load self-warms), negative-TTL 30s, lazy
 - `--live` — real-venue parity (weekly host cron); `--simulate-drift` proves detection (rc=1).
 - Shape snapshot: `audits/scan_trade_calls-rankby-shape-snapshot-2026-06-27.json`.
 
-## W2 handoff — `SCAN-RANKBY-W2` (Tier-2, heavier cost class; NOT built here)
-1. **`volatility` (`atr`/ATRP)** — needs per-symbol candle download + compute. Pattern: sort-then-slice a
-   cheap candidate set (top-K by OI/volume from `fetchVenueUniverse`) then ATRP the shortlist (bounded
-   per-symbol kline fetches, coalesced). Slots in as a new `RANK_BY_VALUES` key + a `getRankedUniverse` branch.
-2. **`oi_change` (`oid`)** — needs an OI time-series snapshot store (periodic OI capture per venue) to diff
-   current vs N-ago OI. New persistence; not derivable from a single market-wide call.
-3. **Full-universe OKX funding** — optional: a background poller over ALL OKX instId funding (vs the
-   current top-150 pool), if cross-venue full-universe funding parity becomes a requirement.
+## Status / remaining lenses
+- **`volatility` (`atr`/ATRP) — ✅ SHIPPED (SCAN-RANKBY-W2).** See the ATRP note above.
+- **`oi_change` (`oid`) — → `SCAN-RANKBY-W3` (Path B).** A true OI-delta rank needs an OI time-series
+  snapshot store (`oi_snapshots(exchange,symbol,ts,oi)` + an idempotent sampler on the scan/seed
+  cadence; `oi_change` = current vs window-ago snapshot; `null`+`"warming"` until ≥2 snapshots span the
+  window; never blocks the scan). NOT derivable cheaply: the engine's `indicators.oi_change_pct`
+  (get-trade-call.ts) is `priceChange×100` — a PRICE-change proxy, NOT an OI delta (W2 Step-0 finding;
+  do not reuse it for an OI-delta lens), and per-venue OI-history endpoints are uneven (Bybit only;
+  Binance/OKX need new fetchers; HL has none). Data-flywheel moat — its own wave.
+- **Full-universe OKX funding** — optional: a background poller over ALL OKX instId funding (vs the
+  current top-`RANK_FUNDING_POOL_SIZE` pool), if cross-venue full-universe funding parity is ever required.
 
-Each is a new metric key + a `getRankedUniverse` branch (+ its data source) — the generalized FETCHERS
-path means no new code path per lens.
+Each remaining lens is a new `RANK_BY_VALUES` key + a `getRankedUniverse` branch (+ its data source) —
+the generalized FETCHERS path means no new code path per lens.
