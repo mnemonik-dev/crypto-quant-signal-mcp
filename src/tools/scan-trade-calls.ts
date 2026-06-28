@@ -45,6 +45,7 @@ import {
   PARAM_DESC_SCAN_INCLUDE_HOLDS,
   PARAM_DESC_SCAN_LIMIT,
   PARAM_DESC_SCAN_RANK_BY,
+  PARAM_DESC_SCAN_INCLUDE_REASONING,
 } from '../tool-descriptions.js';
 import type { LicenseInfo } from '../types.js';
 
@@ -69,6 +70,10 @@ export const SCAN_TRADE_CALLS_SCHEMA = {
   // Raw string so the bot can forward an alias (nfr/pfr/…) verbatim; the MCP resolves
   // it via resolveRankBy (the single alias map). Default 'oi' ⇒ byte-identical output.
   rankBy: z.string().optional().default('oi').describe(PARAM_DESC_SCAN_RANK_BY),
+  // SCAN-DIGEST-MCP-PARITY-W1 CH1: opt-in per-call enrichment. Default false ⇒ bare
+  // output, byte-identical to today. Mirrors get_trade_call's param name (NB:
+  // get_trade_call defaults TRUE; scan defaults FALSE — bare back-compat is the firewall).
+  includeReasoning: z.boolean().default(false).describe(PARAM_DESC_SCAN_INCLUDE_REASONING),
 };
 
 export interface ScanAlgovaultMeta {

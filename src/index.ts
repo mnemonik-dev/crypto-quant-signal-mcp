@@ -57,6 +57,7 @@ import { referralCodeForKey } from './lib/referral-store.js'; // REFERRAL-INPROD
 import { buildAhaHint, buildAhaReferral, buildReferralHint, AHA_HIGH_CONVICTION_CONFIDENCE, type ReferralHint, type AhaReferralFrom } from './lib/nudge-copy.js';
 import { getTrackRecord, startTrackRecordWarmer } from './lib/track-record-snapshot.js';
 import { renderReceiptText, renderScanReceiptText } from './lib/receipts.js';
+import { renderScanDigest } from './lib/scan-digest.js';
 import { startReceiptTrackRecordWarmer } from './lib/receipts-track-record.js';
 import { getPqlCandidates } from './lib/pql.js';
 import {
@@ -666,12 +667,12 @@ function createServer(): McpServer {
     SCAN_TRADE_CALLS_DESCRIPTION,
     SCAN_TRADE_CALLS_SCHEMA,
     { title: 'Market Scanner', ...PUBLIC_READONLY_TOOL_ANNOTATIONS },
-    async ({ topN, timeframe, exchange, minConfidence, includeHolds, limit, rankBy }) => {
+    async ({ topN, timeframe, exchange, minConfidence, includeHolds, limit, rankBy, includeReasoning }) => {
       const startMs = Date.now();
       try {
         const license = getRequestLicense();
         const result = await runAsCaller('scan_trade_calls', () => runScanTradeCall(
-          { topN, timeframe, exchange, minConfidence, includeHolds, limit, rankBy },
+          { topN, timeframe, exchange, minConfidence, includeHolds, limit, rankBy, includeReasoning },
           license,
         ));
         logRequest({
@@ -692,16 +693,30 @@ function createServer(): McpServer {
             ipHash: getRequestIpHash() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
-        // P0 VERDICT-WITH-RECEIPTS-W1: content[0] is the JSON envelope (with the
-        // shared `_receipts` block); content[1] is the proof footer so a scan
-        // screenshot carries the proof beside the per-row verdicts. Omitted on the
-        // quota-exhausted envelope (no `_receipts`) and when the source is down.
+        // content[0] = the JSON envelope (with the shared `_receipts` block).
         const content: { type: 'text'; text: string }[] = [
           { type: 'text' as const, text: JSON.stringify(result, null, 2) },
         ];
-        const scanRcpt = result as { _receipts?: Parameters<typeof renderScanReceiptText>[0] };
-        const footer = scanRcpt._receipts ? renderScanReceiptText(scanRcpt._receipts) : '';
-        if (footer) content.push({ type: 'text' as const, text: footer });
+        const scanRes = result as {
+          calls?: unknown[];
+          _receipts?: Parameters<typeof renderScanReceiptText>[0];
+        };
+        if (includeReasoning && Array.isArray(scanRes.calls)) {
+          // SCAN-DIGEST-MCP-PARITY-W1 CH1 — digest mode: content[1] = the enriched
+          // digest (header + renderScanDigestLine per actionable call), NO Proof
+          // footer (parity with OPS-SCANWATCH-ROCKET-NO-PROOF). The structured
+          // `_receipts` envelope still rides in content[0].
+          const digest = renderScanDigest(
+            scanRes.calls as Parameters<typeof renderScanDigest>[0],
+            { topN, timeframe, exchange, rankBy },
+          );
+          if (digest) content.push({ type: 'text' as const, text: digest });
+        } else {
+          // P0 VERDICT-WITH-RECEIPTS-W1: bare mode keeps the proof footer so a scan
+          // screenshot carries the proof beside the per-row verdicts (byte-identical).
+          const footer = scanRes._receipts ? renderScanReceiptText(scanRes._receipts) : '';
+          if (footer) content.push({ type: 'text' as const, text: footer });
+        }
         return { content };
       } catch (err: unknown) {
         return toolErrorContent(err);

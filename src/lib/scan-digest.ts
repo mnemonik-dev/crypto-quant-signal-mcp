@@ -11,7 +11,19 @@
  * shared-logic candidate flagged for extraction-via-/capabilities at the 3rd
  * consumer (CLAUDE.md 3-example rule); until then the test suites on both sides pin
  * the identical map.
+ *
+ * SCAN-DIGEST-MCP-PARITY-W1 CH1 extends this leaf with the digest PROJECTORS:
+ * `enrichScanCall` (the ONE allow-listed projection every channel — MCP content[1],
+ * the webhook scan_digest, the bot /scan + /scanwatch — derives the digest from)
+ * and `renderScanDigestLine` (the per-call digest line whose format the bot's
+ * Python rendering MIRRORS; the CH4 canary pins them byte-identical).
  */
+
+import type { SignalVerdict, RegimeType } from '../types.js';
+import { formatReceipts, type ReceiptFactor, type VerdictContext } from './receipts.js';
+// Type-only import — erased at compile, so NO runtime cycle even though
+// trade-call-scanner.ts imports enrichScanCall/renderScanDigestLine from here as values.
+import type { ScanExchangeId } from './trade-call-scanner.js';
 
 export const VALID_CADENCES = ['1h', '4h', '1d'] as const;
 export type Cadence = (typeof VALID_CADENCES)[number];
@@ -92,4 +104,195 @@ export function repeatsPerTimeframe(cadence: Cadence, timeframe: string): number
  */
 export function scanDigestEventId(subscriptionId: number, cadence: Cadence, nowSec: number): string {
   return `scan_digest:${subscriptionId}:${cadenceBucketEpoch(cadence, nowSec)}`;
+}
+
+// ── SCAN-DIGEST-MCP-PARITY-W1 CH1 — the digest projectors ─────────────────────
+
+/**
+ * The canonical per-coin engine detail `enrichScanCall` projects from — a
+ * structural subset of the get_trade_call engine output (`TradeCallResult`),
+ * RETAINED by the scanner on the (coin,exchange,timeframe) cell (Option A,
+ * architect-ratified 2026-06-28: cache-key-DETERMINED detail is correctly cached;
+ * only the lens-VARYING rank echo stays output-only via attachRank). Every
+ * enrichment field is optional so a bare / test score is handled gracefully.
+ */
+export interface ScanCallSource {
+  coin: string;
+  timeframe: string;
+  call: SignalVerdict;
+  confidence: number;
+  regime: RegimeType;
+  /** Live price at scan time. */
+  price?: number;
+  /** Engine reasoning (deterministic bucket-prose; no LLM). */
+  reasoning?: string;
+  /** Engine indicators (superset of VerdictContext['indicators']); buildFactors reads the named fields. */
+  indicators?: VerdictContext['indicators'] & { oi_change_window?: string };
+}
+
+/**
+ * The allow-listed enriched scan call — the FROZEN digest projection shape
+ * (CH1 freezes it for CH2 webhook + CH3 bot + CH4 canary). Carries ONLY public
+ * fields; raw `indicators` and any `outcome_*` are structurally unreachable
+ * (enrichScanCall is an explicit-copy allow-list, never a spread).
+ */
+export interface EnrichedScanCall {
+  coin: string;
+  timeframe: string;
+  exchange: ScanExchangeId;
+  call: SignalVerdict;
+  confidence: number;
+  regime: RegimeType;
+  /** Live price (raw; consumers format). Omitted only for a degenerate detail-less source. */
+  price?: number;
+  /** Top 2–3 salient drivers — byte-identical to formatReceipts(detail).factors. */
+  factors: ReceiptFactor[];
+  /** Engine reasoning (`''` when absent). */
+  reasoning: string;
+  /** OI-delta window label (e.g. "24h") for the digest "(24h)" — Q2, architect-ratified.
+   *  Mirrors the engine `indicators.oi_change_window`; omitted while the store is warming. */
+  oi_change_window?: string;
+}
+
+/**
+ * Project the canonical per-coin engine detail onto the allow-listed enriched
+ * scan-call shape. Explicit field copy (allow-list LAW — never a spread), so a
+ * wider engine object can never leak `outcome_*` / raw `indicators`. `factors`
+ * reuses `formatReceipts` — the SINGLE source of the factor mapping get_trade_call
+ * emits (so a new engine factor propagates to every channel's digest for free).
+ * Pure: no I/O, no clock, no re-derivation of the verdict.
+ */
+export function enrichScanCall(source: ScanCallSource, exchange: ScanExchangeId): EnrichedScanCall {
+  const factors = source.indicators
+    ? formatReceipts({
+        call: source.call,
+        confidence: source.confidence,
+        regime: source.regime,
+        indicators: source.indicators,
+      }).factors
+    : [];
+  const out: EnrichedScanCall = {
+    coin: source.coin,
+    timeframe: source.timeframe,
+    exchange,
+    call: source.call,
+    confidence: source.confidence,
+    regime: source.regime,
+    factors,
+    reasoning: typeof source.reasoning === 'string' ? source.reasoning : '',
+  };
+  if (source.price !== undefined) out.price = source.price;
+  const window = source.indicators?.oi_change_window;
+  if (window !== undefined) out.oi_change_window = window;
+  return out;
+}
+
+// ── Per-call digest-line rendering (the SoT the bot mirrors; CH4 pins parity) ──
+
+/** Short labels for the receipt factor names (the 📊 drivers line). MIRRORS the
+ *  bot's `_FACTOR_LABELS`. Unknown factors fall back to their raw name. */
+const FACTOR_LABELS: Record<string, string> = {
+  oi_change_pct: 'OI',
+  trend_persistence: 'trend persistence',
+  funding_state: 'funding',
+  funding_24h_avg: 'funding',
+  breakout_pending: 'breakout',
+  volume_24h: 'vol',
+};
+/** Direction → arrow. MIRRORS the bot's `_DIR_ARROW` (neutral → no arrow). */
+const DIR_ARROW: Record<string, string> = { bullish: ' ↑', bearish: ' ↓' };
+
+/** Price format — MIRRORS the bot `_fmt_price`: ≥1000 no-dec (comma), ≥1 2-dec, <1 stripped. */
+function fmtScanPrice(p: number): string {
+  if (!Number.isFinite(p)) return '';
+  if (p >= 1000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (p >= 1) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return String(parseFloat(p.toFixed(4)));
+}
+
+/** First sentence of the reasoning, capped — MIRRORS the bot `_trim_reasoning`. */
+function trimReasoning(text: string, maxLen = 110): string {
+  const t = text.trim();
+  if (!t) return '';
+  const first = t.split('. ')[0].replace(/\.+$/, '');
+  return first.length > maxLen ? `${first.slice(0, maxLen - 1).trimEnd()}…` : first;
+}
+
+/** The ≤3 drivers line — MIRRORS the bot `_render_drivers` + the (window) on the OI driver. */
+function renderDrivers(factors: ReceiptFactor[], oiWindow?: string): string {
+  const parts: string[] = [];
+  for (const f of factors.slice(0, 3)) {
+    const label = FACTOR_LABELS[f.factor] ?? f.factor;
+    let val = f.value;
+    if ((f.factor === 'funding_state' || f.factor === 'breakout_pending') && typeof val === 'string') {
+      val = val.toLowerCase();
+    }
+    if (f.factor === 'oi_change_pct' && oiWindow) val = `${val} (${oiWindow})`;
+    const arrow = DIR_ARROW[f.direction] ?? '';
+    const piece = `${label} ${val}${arrow}`.trim();
+    if (piece) parts.push(piece);
+  }
+  return parts.join(' · ');
+}
+
+/** The fields renderScanDigestLine reads — satisfied by EnrichedScanCall AND by a
+ *  scanner `ScanCallItem` in enriched mode (the enrichment fields are then populated),
+ *  so the handler passes `result.calls` straight through (no cast). */
+export type RenderableScanCall = Pick<EnrichedScanCall, 'coin' | 'call' | 'confidence' | 'regime'> & {
+  price?: number;
+  factors?: ReceiptFactor[];
+  reasoning?: string;
+  oi_change_window?: string;
+};
+
+/**
+ * Render ONE actionable scan call as the digest block — the SoT the bot's Python
+ * rendering MIRRORS (CH3) and the CH4 canary pins byte-identical:
+ *
+ *     🟢 CL — BUY @ $71.49 · 60% conviction · TRENDING_UP
+ *        📊 trend persistence HIGH · funding elevated ↑ · OI +10.0% (24h) ↑
+ *        💡 Trending regime, upward bias
+ *
+ * 🟢 BUY / 🔴 SELL. The 📊 line is omitted with no drivers, 💡 omitted with no
+ * reasoning, the price clause omitted when price is absent.
+ */
+export function renderScanDigestLine(call: RenderableScanCall): string {
+  const mark = call.call === 'BUY' ? '🟢' : '🔴';
+  const price = call.price !== undefined ? fmtScanPrice(call.price) : '';
+  const priceStr = price ? ` @ $${price}` : '';
+  const lines = [`${mark} ${call.coin} — ${call.call}${priceStr} · ${call.confidence}% conviction · ${call.regime}`];
+  const drivers = renderDrivers(call.factors ?? [], call.oi_change_window);
+  if (drivers) lines.push(`   📊 ${drivers}`);
+  const why = trimReasoning(call.reasoning ?? '');
+  if (why) lines.push(`   💡 ${why}`);
+  return lines.join('\n');
+}
+
+/** Header scope for the MCP `content[1]` digest (the one-call PULL — no cadence). */
+export interface ScanDigestMeta {
+  topN?: number;
+  timeframe?: string;
+  exchange?: string;
+  rankBy?: string;
+}
+
+/**
+ * Build the MCP `content[1]` digest text: a header + one renderScanDigestLine per
+ * ACTIONABLE (non-HOLD) call. NO Proof footer (parity with the rocket scanwatch
+ * digest — OPS-SCANWATCH-ROCKET-NO-PROOF); the structured `_receipts` envelope
+ * stays in `content[0]`. Returns '' when there is nothing actionable.
+ */
+export function renderScanDigest(calls: RenderableScanCall[], meta: ScanDigestMeta = {}): string {
+  const actionable = calls.filter((c) => c.call !== 'HOLD');
+  if (actionable.length === 0) return '';
+  const lens = meta.rankBy && meta.rankBy !== 'oi' ? ` by ${meta.rankBy}` : '';
+  const scope = [
+    meta.topN ? `top ${meta.topN} perps${lens}` : 'scan',
+    meta.exchange ? `on ${meta.exchange}` : '',
+    meta.timeframe ? `@ ${meta.timeframe}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const header = `🚀 Scan digest — ${scope} — ${actionable.length} actionable:`;
+  return [header, '', actionable.map(renderScanDigestLine).join('\n\n')].join('\n');
 }
