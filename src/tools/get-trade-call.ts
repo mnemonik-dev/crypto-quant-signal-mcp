@@ -26,6 +26,8 @@ import {
 } from '../lib/indicator-buckets.js';
 import { getThresholdForTF } from '../lib/pertf-thresholds.js';
 import { getR4Thresholds } from '../lib/r4-relax-flag.js';
+import { recordOiScoreShadow } from '../lib/oiscore-shadow.js';
+import { getOiScoreSource } from '../lib/oiscore-source-flag.js';
 
 interface TradeSignalInput {
   coin: string;
@@ -83,6 +85,102 @@ const MAX_RAW_SCORE = 89;
 // experiments/quant-trading-server/phase-c-results.md.
 const MIN_TRACKABLE_CONFIDENCE = 52;
 
+
+// ── SCAN-RANKBY-REFINEMENTS-W1 CH4: the score→verdict tail as a PURE function ──
+// Extracted VERBATIM from the inline tail so the live verdict + the oiScore shadow both
+// project from ONE derivation (single-derivation LAW). The live path (default
+// OISCORE_SOURCE='price') is BYTE-IDENTICAL to the pre-extraction behaviour — guarded by
+// the existing get-trade-signal tests + the deriveVerdict golden table (oiscore-shadow.test).
+export interface VerdictScoreInputs {
+  rsiScore: number;
+  emaScore: number;
+  fundingScore: number;
+  oiScore: number;
+  volumeScore: number;
+}
+export interface VerdictGateInputs {
+  fundingZScore: number | null;
+  fundingRateAnnualized: number;
+  hurstVal: number | null;
+  squeezeActive: boolean;
+  r4Thresholds: ReturnType<typeof getR4Thresholds>;
+  buyThreshold: number;
+  sellThreshold: number;
+}
+export interface VerdictOutcome {
+  signal: SignalVerdict;
+  confidence: number;
+  rawScore: number;
+  scoreAdjustments: string[];
+}
+export function deriveVerdict(s: VerdictScoreInputs, g: VerdictGateInputs): VerdictOutcome {
+  let rawScore =
+    s.rsiScore * WEIGHTS.rsi +
+    s.emaScore * WEIGHTS.ema +
+    s.fundingScore * WEIGHTS.funding +
+    s.oiScore * WEIGHTS.oi +
+    s.volumeScore * WEIGHTS.volume;
+  const scoreAdjustments: string[] = [];
+  if (g.fundingZScore !== null) {
+    if (rawScore > 0 && g.fundingZScore > g.r4Thresholds.buyPenaltyZ) {
+      rawScore -= 20;
+      scoreAdjustments.push(`Funding Z-Score ${g.fundingZScore.toFixed(2)} (>+${g.r4Thresholds.buyPenaltyZ}) — extreme crowded longs. BUY penalized 20 pts.`);
+    }
+    if (rawScore < 0 && g.fundingZScore < g.r4Thresholds.sellSofteningZ) {
+      rawScore += 20;
+      scoreAdjustments.push(`Funding Z-Score ${g.fundingZScore.toFixed(2)} (<${g.r4Thresholds.sellSofteningZ}) — extreme short crowding. SELL softened 20 pts.`);
+    }
+    if (rawScore > 0 && g.fundingZScore < -1.5) {
+      rawScore += 10;
+      scoreAdjustments.push(`Funding Z-Score ${g.fundingZScore.toFixed(2)} (<-1.5) — contrarian bullish. BUY bonus +10 pts.`);
+    }
+  } else {
+    if (rawScore < 0 && g.fundingRateAnnualized > 4.38) {
+      rawScore += 15;
+      scoreAdjustments.push(`Funding annualized +${g.fundingRateAnnualized.toFixed(2)} — longs crowded, squeeze risk. SELL softened 15 pts (raw fallback, R4 inverted).`);
+    }
+    if (rawScore > 0 && g.fundingRateAnnualized < -4.38) {
+      rawScore += 10;
+      scoreAdjustments.push(`Funding annualized ${g.fundingRateAnnualized.toFixed(2)} (<-4.38) — contrarian BUY bonus +10 pts (raw fallback).`);
+    }
+  }
+  if (g.hurstVal !== null) {
+    if (g.hurstVal < 0.45) {
+      rawScore = rawScore > 0 ? rawScore - 25 : rawScore + 25;
+      scoreAdjustments.push(`Hurst ${g.hurstVal.toFixed(3)} (<0.45) — mean-reverting/choppy regime. Directional signal penalized 25 pts.`);
+    } else if (g.hurstVal > 0.55) {
+      rawScore = rawScore > 0 ? rawScore + 10 : rawScore - 10;
+      scoreAdjustments.push(`Hurst ${g.hurstVal.toFixed(3)} (>0.55) — trending/persistent. Directional signal boosted 10 pts.`);
+    }
+  }
+  if (g.squeezeActive && Math.abs(rawScore) > 10) {
+    rawScore = rawScore > 0 ? rawScore + 12 : rawScore - 12;
+    scoreAdjustments.push(`Volatility squeeze detected (BB inside KC). Breakout setup — directional signal boosted 12 pts.`);
+  }
+  let signal: SignalVerdict;
+  const absScore = Math.abs(rawScore);
+  if (rawScore > 0) {
+    signal = rawScore > g.buyThreshold ? 'BUY' : 'HOLD';
+  } else {
+    signal = absScore > g.sellThreshold ? 'SELL' : 'HOLD';
+  }
+  const confidence = Math.min(Math.round((absScore / MAX_RAW_SCORE) * 100), 100);
+  return { signal, confidence, rawScore, scoreAdjustments };
+}
+
+/**
+ * CH4 SHADOW candidate: map a real OI %Δ (contracts basis) → an OI-momentum score,
+ * mirroring the priceChange oiScore thresholds onto the OI %Δ (percent). PROVISIONAL —
+ * the FLIP wave (SCAN-OISCORE-FLIP-W1) ratifies the final mapping after matured-outcome
+ * WR measurement. Same shape/scale as the priceChange oiScore so divergence is meaningful.
+ */
+export function oiScoreFromOiDelta(oiChangePct: number): number {
+  if (oiChangePct > 5) return 60;
+  if (oiChangePct > 0) return 20;
+  if (oiChangePct < -5) return -60;
+  if (oiChangePct < 0) return -20;
+  return 0;
+}
 
 export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCallResult> {
   const coin = input.coin.toUpperCase();
@@ -324,95 +422,65 @@ export async function getTradeSignal(input: TradeSignalInput): Promise<TradeCall
     else volumeScore = -70;
   }
 
-  // ── Weighted composite score ──
-  let rawScore =
-    rsiScore * WEIGHTS.rsi +
-    emaScore * WEIGHTS.ema +
-    fundingScore * WEIGHTS.funding +
-    oiScore * WEIGHTS.oi +
-    volumeScore * WEIGHTS.volume;
-
-  // ── Funding Z-Score gate (v1.4 — replaces raw funding confirmation gate) ──
-  // OPS-TRADE-CALL-CLUSTER-W1 CH2 — R4 RELAX 2-flag firewall (ENABLE_R4_RELAX + R4_RELAX_DIRECTION).
-  // Both unset → fallback to current R4-on thresholds {buyPenaltyZ: 2.5, sellSofteningZ: -2.0}.
-  // Architect flips via follow-up OPS-TRADE-CALL-R4-ROLLOUT-W<N> wave.
+  // ── SCAN-RANKBY-REFINEMENTS-W1 CH4: the score→verdict tail is now the PURE deriveVerdict
+  //    (single-derivation — the live verdict + the oiScore shadow both project from it). The
+  //    oiScore re-base is SHADOW-ONLY: OISCORE_SOURCE defaults to 'price' ⇒ the live
+  //    call/confidence are BYTE-IDENTICAL to the priceChange-derived behaviour. ──
+  // OPS-TRADE-CALL-CLUSTER-W1: R4-relax + per-TF thresholds resolved here (pure env reads;
+  // order vs the score is irrelevant) and passed into deriveVerdict.
   const r4Thresholds = getR4Thresholds();
-  const scoreAdjustments: string[] = [];
-  if (fundingZScore !== null) {
-    // Z-Score available: use statistical extremity for crowd-positioning gate
-    // R4: inverted per audit — BUY edge +10-14pp WR. BUY penalty threshold made stricter
-    // (2.0 → 2.5) so BUY is penalized less often, while SELL softening threshold is made
-    // looser (-2.5 → -2.0) so SELL is softened more often. Net: favors BUY direction.
-    if (rawScore > 0 && fundingZScore > r4Thresholds.buyPenaltyZ) {  // R4 firewall: penalty threshold from getR4Thresholds()
-      rawScore -= 20;
-      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (>+${r4Thresholds.buyPenaltyZ}) — extreme crowded longs. BUY penalized 20 pts.`);
-    }
-    if (rawScore < 0 && fundingZScore < r4Thresholds.sellSofteningZ) {  // R4 firewall: softening threshold from getR4Thresholds()
-      rawScore += 20;
-      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (<${r4Thresholds.sellSofteningZ}) — extreme short crowding. SELL softened 20 pts.`);
-    }
-    if (rawScore > 0 && fundingZScore < -1.5) {
-      rawScore += 10;
-      scoreAdjustments.push(`Funding Z-Score ${fundingZScore.toFixed(2)} (<-1.5) — contrarian bullish. BUY bonus +10 pts.`);
-    }
-  } else {
-    // Fallback: raw funding gate (pre-Z-Score history)
-    // R4: inverted per audit — BUY edge +10-14pp WR. Original rule penalized BUY at
-    // crowded-long funding (no symmetric SELL rule = compounding SELL bias). Flipped:
-    // crowded longs now soften SELL (squeeze risk), and the BUY contrarian bonus stays.
-    if (rawScore < 0 && fundingRateAnnualized > 4.38) {  // R4: inverted per audit — BUY edge +10-14pp WR
-      rawScore += 15;
-      scoreAdjustments.push(`Funding annualized +${fundingRateAnnualized.toFixed(2)} — longs crowded, squeeze risk. SELL softened 15 pts (raw fallback, R4 inverted).`);
-    }
-    if (rawScore > 0 && fundingRateAnnualized < -4.38) {
-      rawScore += 10;
-      scoreAdjustments.push(`Funding annualized ${fundingRateAnnualized.toFixed(2)} (<-4.38) — contrarian BUY bonus +10 pts (raw fallback).`);
-    }
-  }
-
-  // ── Hurst filter (v1.4 — penalize choppy markets, reward trending) ──
-  if (hurstVal !== null) {
-    if (hurstVal < 0.45) {
-      rawScore = rawScore > 0 ? rawScore - 25 : rawScore + 25;
-      scoreAdjustments.push(`Hurst ${hurstVal.toFixed(3)} (<0.45) — mean-reverting/choppy regime. Directional signal penalized 25 pts.`);
-    } else if (hurstVal > 0.55) {
-      rawScore = rawScore > 0 ? rawScore + 10 : rawScore - 10;
-      scoreAdjustments.push(`Hurst ${hurstVal.toFixed(3)} (>0.55) — trending/persistent. Directional signal boosted 10 pts.`);
-    }
-  }
-
-  // ── Squeeze detection (v1.4 — boost conviction when volatility is compressed) ──
-  if (squeezeActive && Math.abs(rawScore) > 10) {
-    rawScore = rawScore > 0 ? rawScore + 12 : rawScore - 12;
-    scoreAdjustments.push(`Volatility squeeze detected (BB inside KC). Breakout setup — directional signal boosted 12 pts.`);
-  }
-
-  // ── R4: inverted per audit — BUY edge +10-14pp WR ──
-  // v1.5 had BUY gated in {TRENDING_DOWN} and SELL gated in {TRENDING_UP, RANGING}.
-  // Audit showed the BUY edge is real market structure (short squeezes), so we lean in:
-  //   BUY always uses BUY_BASE_THRESHOLD (never gated, any regime)
-  //   SELL always uses SELL_THRESHOLD_GATED (always gated, any regime)
-  // This gives BUY a consistent 15-point structural advantage (40 vs 55).
-  let signal: SignalVerdict;
-  const absScore = Math.abs(rawScore);
-
-  // OPS-TRADE-CALL-CLUSTER-W1 CH1 — per-TF threshold lookup behind 2-flag firewall.
-  // Outer ENABLE_PERTF_THRESHOLDS + per-TF inner ENABLE_PERTF_<TF>. Both unset →
-  // fallback to BUY_BASE_THRESHOLD=40 / SELL_THRESHOLD_GATED=55 (zero behavioral change).
-  // Architect flips per-TF via follow-up OPS-TRADE-CALL-PERTF-ROLLOUT-W<N> wave.
   const buyThreshold = getThresholdForTF(timeframe, 'buy', BUY_BASE_THRESHOLD);
   const sellThreshold = getThresholdForTF(timeframe, 'sell', SELL_THRESHOLD_GATED);
+  const verdictGates: VerdictGateInputs = {
+    fundingZScore, fundingRateAnnualized, hurstVal, squeezeActive, r4Thresholds, buyThreshold, sellThreshold,
+  };
 
-  if (rawScore > 0) {
-    // R4: inverted per audit — BUY edge +10-14pp WR. BUY never gated.
-    signal = rawScore > buyThreshold ? 'BUY' : 'HOLD';
-  } else {
-    // R4: inverted per audit — BUY edge +10-14pp WR. SELL always gated (stricter).
-    signal = absScore > sellThreshold ? 'SELL' : 'HOLD';
+  // oiScore_price = the priceChange-derived score computed above (gated on openInterest>0).
+  const oiScorePrice = oiScore;
+  // oiScore_oi (SHADOW) = real OI momentum from the CONTRACTS-basis delta (CH3), same OI>0
+  // guard. try/catch-isolated: a store error → no shadow this signal, NEVER the live verdict.
+  let oiScoreOi: number | null = null;
+  try {
+    if (assetCtx.openInterest > 0) {
+      const oiDeltaContracts = await computeOiDelta(coin, exchange, DEFAULT_OI_WINDOW_MS, 'contracts');
+      if (oiDeltaContracts !== null) oiScoreOi = oiScoreFromOiDelta(oiDeltaContracts.oi_change_pct);
+    }
+  } catch {
+    /* shadow source unavailable → no shadow; the live verdict is untouched */
   }
 
-  // ── Confidence: scale rawScore to 0-100 range properly ──
-  const confidence = Math.min(Math.round((absScore / MAX_RAW_SCORE) * 100), 100);
+  const priceVerdict = deriveVerdict(
+    { rsiScore, emaScore, fundingScore, oiScore: oiScorePrice, volumeScore },
+    verdictGates,
+  );
+  const oiVerdict =
+    oiScoreOi !== null
+      ? deriveVerdict({ rsiScore, emaScore, fundingScore, oiScore: oiScoreOi, volumeScore }, verdictGates)
+      : null;
+  // LIVE verdict: default OISCORE_SOURCE='price' ⇒ priceVerdict (byte-identical). The FLIP
+  // wave (SCAN-OISCORE-FLIP-W1) sets OISCORE_SOURCE='oi' once matured-outcome WR
+  // non-regression is proven; it flips back instantly by unsetting the env.
+  const liveVerdict = getOiScoreSource() === 'oi' && oiVerdict ? oiVerdict : priceVerdict;
+  const signal: SignalVerdict = liveVerdict.signal;
+  const confidence = liveVerdict.confidence;
+
+  // SHADOW divergence log — fire-and-forget + try/catch-isolated (NEVER blocks/fails the
+  // verdict — Data Integrity). Real signals only (skip internal scan cells; they don't
+  // mature into Phase-E outcomes). The read-only harness (oiscore-shadow-measure) + the
+  // FLIP wave consume this.
+  if (!input.internal && oiVerdict && oiScoreOi !== null) {
+    void recordOiScoreShadow({
+      coin,
+      exchange,
+      timeframe,
+      oiScorePrice,
+      oiScoreOi,
+      callPrice: priceVerdict.signal,
+      callOi: oiVerdict.signal,
+      confPrice: priceVerdict.confidence,
+      confOi: oiVerdict.confidence,
+    }).catch(() => {});
+  }
 
   // OPS-TRADE-CALL-CLUSTER-W1 CH5 (2026-05-28) — OPS-TRADE-CALL-CALIBRATION-AUDIT-W1
   // R3 confidence-bucket logger RETIRED. Code-side strip lands today; Hetzner-side

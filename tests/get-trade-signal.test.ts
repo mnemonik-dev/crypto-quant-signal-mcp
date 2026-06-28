@@ -14,7 +14,7 @@ vi.mock('../src/lib/performance-db.js', () => ({
   isShortLivedScript: () => false,
 }));
 
-import { getTradeSignal } from '../src/tools/get-trade-call.js';
+import { getTradeSignal, deriveVerdict, oiScoreFromOiDelta } from '../src/tools/get-trade-call.js';
 import { getAdapter } from '../src/lib/exchange-adapter.js';
 import { resetLicenseCache } from '../src/lib/license.js';
 import { InsufficientCandlesError } from '../src/lib/errors.js';
@@ -163,5 +163,61 @@ describe('getTradeSignal', () => {
 
     const result = await getTradeSignal({ coin: 'ETH' });
     expect(['BUY', 'HOLD']).toContain(result.call);
+  });
+});
+
+// ── SCAN-RANKBY-REFINEMENTS-W1 CH4: deriveVerdict golden table ──
+// The pure score→verdict tail extracted from getTradeSignal. This is the comprehensive
+// byte-identity golden set (BUY/SELL/HOLD across the gates + the oiScore swing + edges).
+// WEIGHTS = rsi .30 / ema .10 / funding .25 / oi .15 / volume .20; MAX_RAW_SCORE = 89;
+// buyThreshold 40 / sellThreshold 55; r4 default {buyPenaltyZ 2.5, sellSofteningZ -2.0}.
+describe('deriveVerdict (CH4 — pure score→verdict tail; golden table)', () => {
+  const G = {
+    fundingZScore: null as number | null,
+    fundingRateAnnualized: 0,
+    hurstVal: null as number | null,
+    squeezeActive: false,
+    r4Thresholds: { buyPenaltyZ: 2.5, sellSofteningZ: -2.0 },
+    buyThreshold: 40,
+    sellThreshold: 55,
+  };
+  const sc = (rsi: number, ema: number, funding: number, oi: number, volume: number) =>
+    ({ rsiScore: rsi, emaScore: ema, fundingScore: funding, oiScore: oi, volumeScore: volume });
+
+  it('strong bullish → BUY @ 100 (rawScore 89 = MAX)', () => {
+    expect(deriveVerdict(sc(100, 100, 80, 60, 100), G)).toMatchObject({ signal: 'BUY', confidence: 100 });
+  });
+  it('weak bullish below the 40 gate → HOLD @ 19 (rawScore 17)', () => {
+    expect(deriveVerdict(sc(40, 0, 0, 20, 10), G)).toMatchObject({ signal: 'HOLD', confidence: 19 });
+  });
+  it('strong bearish → SELL @ 93 (rawScore -83)', () => {
+    expect(deriveVerdict(sc(-100, -100, -80, -60, -70), G)).toMatchObject({ signal: 'SELL', confidence: 93 });
+  });
+  it('all-zero → HOLD @ 0', () => {
+    expect(deriveVerdict(sc(0, 0, 0, 0, 0), G)).toMatchObject({ signal: 'HOLD', confidence: 0 });
+  });
+  it('oiScore is the swing factor: oi=0 → BUY@49 vs oi=-60 → HOLD@39 (the CH4 sensitivity)', () => {
+    expect(deriveVerdict(sc(80, 0, 40, 0, 50), G)).toMatchObject({ signal: 'BUY', confidence: 49 });
+    expect(deriveVerdict(sc(80, 0, 40, -60, 50), G)).toMatchObject({ signal: 'HOLD', confidence: 39 });
+  });
+  it('Hurst <0.45 penalizes a directional signal 25 pts (89→64 → BUY@72)', () => {
+    expect(deriveVerdict(sc(100, 100, 80, 60, 100), { ...G, hurstVal: 0.4 })).toMatchObject({ signal: 'BUY', confidence: 72 });
+  });
+  it('squeeze boost flips HOLD→BUY (30→42 over the 40 gate)', () => {
+    expect(deriveVerdict(sc(100, 0, 0, 0, 0), G)).toMatchObject({ signal: 'HOLD', confidence: 34 });
+    expect(deriveVerdict(sc(100, 0, 0, 0, 0), { ...G, squeezeActive: true })).toMatchObject({ signal: 'BUY', confidence: 47 });
+  });
+  it('funding Z > buyPenaltyZ penalizes BUY 20 pts (89→69 → BUY@78)', () => {
+    expect(deriveVerdict(sc(100, 100, 80, 60, 100), { ...G, fundingZScore: 3.0 })).toMatchObject({ signal: 'BUY', confidence: 78 });
+  });
+});
+
+describe('oiScoreFromOiDelta (CH4 shadow mapping — provisional)', () => {
+  it('mirrors the priceChange oiScore thresholds onto the OI %Δ', () => {
+    expect(oiScoreFromOiDelta(6)).toBe(60);
+    expect(oiScoreFromOiDelta(2)).toBe(20);
+    expect(oiScoreFromOiDelta(0)).toBe(0);
+    expect(oiScoreFromOiDelta(-2)).toBe(-20);
+    expect(oiScoreFromOiDelta(-6)).toBe(-60);
   });
 });
