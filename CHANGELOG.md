@@ -5,6 +5,25 @@ All notable changes to `crypto-quant-signal-mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-06-28
+
+### Added
+- `scan_trade_calls` ranking lenses: new `rankBy` parameter (9 modes + aliases — funding, gainers/losers, volume, open interest, volatility/ATRP, 24h OI change) with per-row rank values.
+- `_receipts` field on `get_trade_call` / `get_trade_signal` / `scan_trade_calls` — inline conviction, top factors, live track record, and a verify link.
+- Gemini, Kraken & Alpaca exchange pairings (tutorials + keyless demos) at algovault.com/integrations. (Folds in the v1.20.1 pairings, which were staged but never published while the GitHub account was flagged.)
+- Live track-record leaderboard + public referral program (free email-to-key signup, /referral page).
+- x402 pay-per-call coverage extended to the trade-call and scanner routes.
+
+### Security
+- x402 per-route price binding + replay idempotency (closes payment downgrade/bypass).
+- Webhook delivery: egress-IP pinning (IPv6/NAT64 bypass closed) + timestamped HMAC signatures.
+- Invalid Stripe keys now default-deny to the Free tier (no prefix-based escalation).
+- Defense-in-depth: signed-value floor, per-IP quota keying, upstream row-identity assertions.
+- **Breaking (webhook subscribers only):** the payload signature scheme changed — update your verification per docs/WEBHOOKS.md.
+
+### Internal
+- Rate-limit unification, seed orchestration, host/PG rightsizing, attribution, and registry/SEO hardening. No MCP tool-count change (tools/list = 9).
+
 ## [1.20.1] - 2026-06-05
 
 ### Added — Exchange pairings: Gemini, Kraken, Alpaca
