@@ -29,6 +29,9 @@ export interface CurrentOi {
   coin: string;
   /** USD notional open interest. */
   oi: number;
+  /** SCAN-RANKBY-REFINEMENTS-W1 CH3: base-coin-unit OI (price-independent). undefined
+   *  when the venue doesn't expose it for this coin (→ NULL contracts_oi, warms forward). */
+  contracts?: number;
 }
 
 /** Concurrency-limited map (no external dep) — for the per-symbol Binance fan-out. */
@@ -45,21 +48,26 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out;
 }
 
-/** Binance per-symbol OI history → [{ ts, oi(USD) }] via sumOpenInterestValue. */
+/** Binance per-symbol OI history → [{ ts, oi(USD), contracts(base) }] via
+ *  sumOpenInterestValue (USD) + sumOpenInterest (base-coin; CH3). */
 async function binanceOiHistUsd(
   coin: string,
   period: string,
   limit: number,
-): Promise<Array<{ ts: number; oi: number }>> {
+): Promise<Array<{ ts: number; oi: number; contracts: number }>> {
   const url =
     `https://fapi.binance.com/futures/data/openInterestHist?symbol=${coin}USDT&period=${period}&limit=${limit}`;
-  const data = await upstreamFetch<Array<{ sumOpenInterestValue?: string; timestamp?: number }>>(
+  const data = await upstreamFetch<Array<{ sumOpenInterestValue?: string; sumOpenInterest?: string; timestamp?: number }>>(
     VENUE_FETCH_CONFIGS.BINANCE,
     { url, method: 'GET', cls: 'batch' },
   );
   if (!Array.isArray(data)) return [];
   return data
-    .map((d) => ({ ts: Number(d.timestamp), oi: parseFloat(d.sumOpenInterestValue ?? 'NaN') }))
+    .map((d) => ({
+      ts: Number(d.timestamp),
+      oi: parseFloat(d.sumOpenInterestValue ?? 'NaN'),
+      contracts: parseFloat(d.sumOpenInterest ?? 'NaN'), // CH3: base-coin OI
+    }))
     .filter((d) => Number.isFinite(d.ts) && Number.isFinite(d.oi) && d.oi > 0);
 }
 
@@ -74,17 +82,27 @@ export async function fetchCurrentOiUsd(exchange: ExchangeId, poolSize: number):
     const results = await mapLimit(pool, 6, async (a) => {
       try {
         const hist = await binanceOiHistUsd(a.coin, '5m', 1);
-        const oi = hist.length ? hist[hist.length - 1].oi : NaN;
-        return Number.isFinite(oi) && oi > 0 ? { coin: a.coin, oi } : null;
+        const last = hist.length ? hist[hist.length - 1] : null;
+        const oi = last ? last.oi : NaN;
+        // CH3: base-coin OI from sumOpenInterest (omitted if absent → NULL contracts_oi).
+        const contracts = last && Number.isFinite(last.contracts) && last.contracts > 0 ? last.contracts : undefined;
+        return Number.isFinite(oi) && oi > 0
+          ? { coin: a.coin, oi, ...(contracts !== undefined ? { contracts } : {}) }
+          : null;
       } catch {
         return null;
       }
     });
     return results.filter((x): x is CurrentOi => x !== null);
   }
+  // CH3: the 4 universe-OI venues carry base-coin OI on `baseOI` (HL/Bybit/OKX/Bitget).
   return pool
     .filter((a) => Number.isFinite(a.notionalOI_usd) && a.notionalOI_usd > 0)
-    .map((a) => ({ coin: a.coin, oi: a.notionalOI_usd }));
+    .map((a) => ({
+      coin: a.coin,
+      oi: a.notionalOI_usd,
+      ...(Number.isFinite(a.baseOI) && (a.baseOI as number) > 0 ? { contracts: a.baseOI } : {}),
+    }));
 }
 
 /**
@@ -98,7 +116,8 @@ export async function fetchOiHistoryUsd(
 ): Promise<Array<{ ts: number; oi: number }> | null> {
   if (exchange === 'BINANCE') {
     const hist = await binanceOiHistUsd(coin, '1h', hours);
-    return hist.length ? hist : null;
+    // Backfill is notional-only ({ts,oi}); contracts WARM FORWARD (not backfilled — CH3).
+    return hist.length ? hist.map((h) => ({ ts: h.ts, oi: h.oi })) : null;
   }
   if (exchange === 'BYBIT') {
     const resp = await upstreamFetch<{ result?: { list?: Array<{ openInterest?: string; timestamp?: string }> } }>(

@@ -48,23 +48,38 @@ export function oiWindowLabelForMs(windowMs: number): string {
   return OI_WINDOW_LABEL;
 }
 
+/**
+ * SCAN-RANKBY-REFINEMENTS-W1 CH3 — the OI-delta basis. 'notional' = USD notional
+ * (the existing default; carries a price component). 'contracts' = base-coin-unit
+ * OI (price-INDEPENDENT; "is this NEW money?"). 'notional' ⇒ byte-identical to W3.
+ */
+export type OiBasis = 'notional' | 'contracts';
+export const DEFAULT_OI_BASIS: OiBasis = 'notional';
+
 const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS oi_snapshots (
-  exchange  TEXT             NOT NULL,
-  symbol    TEXT             NOT NULL,
-  ts        BIGINT           NOT NULL,
-  oi        DOUBLE PRECISION NOT NULL,
+  exchange      TEXT             NOT NULL,
+  symbol        TEXT             NOT NULL,
+  ts            BIGINT           NOT NULL,
+  oi            DOUBLE PRECISION NOT NULL,
+  contracts_oi  DOUBLE PRECISION,
   PRIMARY KEY (exchange, symbol, ts)
 )`;
 const CREATE_INDEX_SQL =
   `CREATE INDEX IF NOT EXISTS idx_oi_snapshots_exch_sym_ts ON oi_snapshots (exchange, symbol, ts)`;
+// SCAN-RANKBY-REFINEMENTS-W1 CH3: base-coin OI column (price-independent). Idempotent
+// ADD COLUMN IF NOT EXISTS (Postgres 9.6+, the prod backend) mirrors migrations/020 for
+// the lazily-ensured fresh-box path; a no-op against the SSH-preapplied prod table.
+const ADD_CONTRACTS_COL_SQL =
+  `ALTER TABLE oi_snapshots ADD COLUMN IF NOT EXISTS contracts_oi DOUBLE PRECISION`;
 
 let _ensured = false;
 
-/** Idempotent table+index ensure (matches the SSH-preapplied DDL); once per process. */
+/** Idempotent table+column+index ensure (matches the SSH-preapplied DDL); once per process. */
 async function ensureTable(): Promise<void> {
   if (_ensured) return;
   await dbQuery(CREATE_TABLE_SQL);
   await dbQuery(CREATE_INDEX_SQL);
+  await dbQuery(ADD_CONTRACTS_COL_SQL);
   _ensured = true;
 }
 
@@ -82,6 +97,9 @@ export interface OiSnapshotInput {
   symbol: string;
   /** USD notional open interest (oi × price). Must be finite and > 0. */
   oi: number;
+  /** SCAN-RANKBY-REFINEMENTS-W1 CH3: base-coin-unit OI (price-independent). Optional —
+   *  omitted/non-finite/≤0 ⇒ NULL contracts_oi ("warming" for the contracts basis). */
+  contracts?: number;
   /** Epoch ms (the caller floors to the hour bucket). */
   ts: number;
 }
@@ -104,12 +122,14 @@ export async function recordOiSnapshots(exchange: string, rows: OiSnapshotInput[
     const tuples: string[] = [];
     const params: unknown[] = [];
     chunk.forEach((r, j) => {
-      const b = j * 4;
-      tuples.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4})`);
-      params.push(exchange, r.symbol.toUpperCase(), r.ts, r.oi);
+      const b = j * 5;
+      tuples.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5})`);
+      // CH3: NULL contracts_oi when absent/non-finite/≤0 → "warming" for the contracts basis.
+      const contracts = Number.isFinite(r.contracts) && (r.contracts as number) > 0 ? r.contracts : null;
+      params.push(exchange, r.symbol.toUpperCase(), r.ts, r.oi, contracts);
     });
     await dbQuery(
-      `INSERT INTO oi_snapshots (exchange, symbol, ts, oi) VALUES ${tuples.join(', ')} ` +
+      `INSERT INTO oi_snapshots (exchange, symbol, ts, oi, contracts_oi) VALUES ${tuples.join(', ')} ` +
         `ON CONFLICT (exchange, symbol, ts) DO NOTHING`,
       params,
     );
@@ -158,15 +178,23 @@ function sinceMsFor(windowMs: number, nowMs: number): number {
   return nowMs - windowMs - OI_BUCKET_MS * 2;
 }
 
-/** Single-coin OI delta from the store (the get_trade_call factor). null = warming. */
+/**
+ * Single-coin OI delta from the store (the get_trade_call factor + the CH4 oiScore
+ * shadow). `null` = warming. SCAN-RANKBY-REFINEMENTS-W1 CH3: `basis:'contracts'`
+ * reads the price-independent `contracts_oi` column (NULL rows omitted → warming);
+ * 'notional' is the default and byte-identical to W3 (the SQL is unchanged).
+ */
 export async function computeOiDelta(
   coin: string,
   exchange: string,
   windowMs: number = DEFAULT_OI_WINDOW_MS,
+  basis: OiBasis = DEFAULT_OI_BASIS,
   nowMs: number = Date.now(),
 ): Promise<OiDelta | null> {
+  const sel = basis === 'contracts' ? 'contracts_oi AS oi' : 'oi';
+  const nullGuard = basis === 'contracts' ? ' AND contracts_oi IS NOT NULL' : '';
   const rows = await dbQuery<{ ts: number | string; oi: number | string }>(
-    `SELECT ts, oi FROM oi_snapshots WHERE exchange = $1 AND symbol = $2 AND ts >= $3 ORDER BY ts ASC`,
+    `SELECT ts, ${sel} FROM oi_snapshots WHERE exchange = $1 AND symbol = $2 AND ts >= $3${nullGuard} ORDER BY ts ASC`,
     [exchange, coin.toUpperCase(), sinceMsFor(windowMs, nowMs)],
   );
   return oiDeltaFromSnapshots(
@@ -181,10 +209,15 @@ export async function computeOiDelta(
 export async function computeOiDeltaForPool(
   exchange: string,
   windowMs: number = DEFAULT_OI_WINDOW_MS,
+  basis: OiBasis = DEFAULT_OI_BASIS,
   nowMs: number = Date.now(),
 ): Promise<Map<string, OiDelta>> {
+  // CH3: 'contracts' reads the price-independent base-coin column (NULL rows omitted);
+  // 'notional' SELECTs `oi` unchanged → the default query is byte-identical to W3.
+  const sel = basis === 'contracts' ? 'contracts_oi AS oi' : 'oi';
+  const nullGuard = basis === 'contracts' ? ' AND contracts_oi IS NOT NULL' : '';
   const rows = await dbQuery<{ symbol: string; ts: number | string; oi: number | string }>(
-    `SELECT symbol, ts, oi FROM oi_snapshots WHERE exchange = $1 AND ts >= $2 ORDER BY symbol ASC, ts ASC`,
+    `SELECT symbol, ts, ${sel} FROM oi_snapshots WHERE exchange = $1 AND ts >= $2${nullGuard} ORDER BY symbol ASC, ts ASC`,
     [exchange, sinceMsFor(windowMs, nowMs)],
   );
   const bySym = new Map<string, Array<{ ts: number; oi: number }>>();

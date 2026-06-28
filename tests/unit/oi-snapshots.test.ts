@@ -138,10 +138,22 @@ describe('recordOiSnapshots (SQL/param contract)', () => {
     expect(n).toBe(2);
     expect(dbQuery.mock.calls[0][0]).toMatch(/CREATE TABLE IF NOT EXISTS oi_snapshots/);
     expect(dbQuery.mock.calls[1][0]).toMatch(/CREATE INDEX IF NOT EXISTS/);
-    const [sql, params] = dbQuery.mock.calls[2];
-    expect(sql).toMatch(/INSERT INTO oi_snapshots \(exchange, symbol, ts, oi\)/);
+    expect(dbQuery.mock.calls[2][0]).toMatch(/ALTER TABLE oi_snapshots ADD COLUMN IF NOT EXISTS contracts_oi/); // CH3
+    const [sql, params] = dbQuery.mock.calls[3];
+    expect(sql).toMatch(/INSERT INTO oi_snapshots \(exchange, symbol, ts, oi, contracts_oi\)/);
     expect(sql).toMatch(/ON CONFLICT \(exchange, symbol, ts\) DO NOTHING/);
-    expect(params).toEqual(['BYBIT', 'BTC', NOW, 1000, 'BYBIT', 'ETH', NOW, 2000]);
+    // CH3: 5 cols/row; contracts NULL when absent on the input.
+    expect(params).toEqual(['BYBIT', 'BTC', NOW, 1000, null, 'BYBIT', 'ETH', NOW, 2000, null]);
+  });
+
+  it('CH3: carries contracts_oi (base-coin OI) in the insert; NULL when absent', async () => {
+    await recordOiSnapshots('OKX', [
+      { symbol: 'BTC', oi: 1000, contracts: 7.5, ts: NOW },
+      { symbol: 'ETH', oi: 2000, ts: NOW }, // no contracts → NULL
+    ]);
+    const insert = dbQuery.mock.calls.find((c) => /INSERT INTO oi_snapshots/.test(c[0] as string))!;
+    expect(insert[0]).toMatch(/\(exchange, symbol, ts, oi, contracts_oi\)/);
+    expect(insert[1]).toEqual(['OKX', 'BTC', NOW, 1000, 7.5, 'OKX', 'ETH', NOW, 2000, null]);
   });
 
   it('skips non-finite / non-positive OI and no-ops on an empty set', async () => {
@@ -166,7 +178,7 @@ describe('computeOiDelta / computeOiDeltaForPool (query contract)', () => {
       { ts: NOW - 24 * HOUR, oi: '100' },
       { ts: NOW, oi: '125' },
     ]);
-    const d = await computeOiDelta('btc', 'BINANCE', DEFAULT_OI_WINDOW_MS, NOW);
+    const d = await computeOiDelta('btc', 'BINANCE', DEFAULT_OI_WINDOW_MS, 'notional', NOW);
     const [sql, params] = dbQuery.mock.calls[0];
     expect(sql).toMatch(/SELECT ts, oi FROM oi_snapshots WHERE exchange = \$1 AND symbol = \$2 AND ts >= \$3/);
     expect(params[0]).toBe('BINANCE');
@@ -182,7 +194,7 @@ describe('computeOiDelta / computeOiDeltaForPool (query contract)', () => {
       { symbol: 'SOL', ts: NOW - HOUR, oi: '50' }, // only one recent point → warming
       { symbol: 'SOL', ts: NOW, oi: '60' },
     ]);
-    const m = await computeOiDeltaForPool('BYBIT', DEFAULT_OI_WINDOW_MS, NOW);
+    const m = await computeOiDeltaForPool('BYBIT', DEFAULT_OI_WINDOW_MS, 'notional', NOW);
     expect(m.get('BTC')?.oi_change_pct).toBe(20);
     expect(m.has('SOL')).toBe(false); // warming → not in the map
     const [sql] = dbQuery.mock.calls[0];
@@ -194,8 +206,32 @@ describe('computeOiDelta / computeOiDeltaForPool (query contract)', () => {
       { symbol: 'BTC', ts: NOW - 4 * HOUR, oi: '100' },
       { symbol: 'BTC', ts: NOW, oi: '105' },
     ]);
-    const m = await computeOiDeltaForPool('BYBIT', OI_WINDOWS['4h'], NOW);
+    const m = await computeOiDeltaForPool('BYBIT', OI_WINDOWS['4h'], 'notional', NOW);
     expect(m.get('BTC')).toEqual({ oi_change_pct: 5, oi_change_window: '4h' });
+  });
+
+  it('computeOiDeltaForPool basis="contracts" selects contracts_oi + NOT NULL guard (CH3)', async () => {
+    dbQuery.mockResolvedValue([
+      { symbol: 'BTC', ts: NOW - 24 * HOUR, oi: '10' },
+      { symbol: 'BTC', ts: NOW, oi: '12' },
+    ]);
+    const m = await computeOiDeltaForPool('OKX', DEFAULT_OI_WINDOW_MS, 'contracts', NOW);
+    expect(m.get('BTC')?.oi_change_pct).toBe(20); // base-coin %Δ (price-independent)
+    const [sql] = dbQuery.mock.calls[0];
+    expect(sql).toMatch(/SELECT symbol, ts, contracts_oi AS oi FROM oi_snapshots/);
+    expect(sql).toMatch(/AND contracts_oi IS NOT NULL/);
+  });
+
+  it('computeOiDelta basis="contracts" selects contracts_oi for one coin (CH4 shadow source)', async () => {
+    dbQuery.mockResolvedValue([
+      { ts: NOW - 24 * HOUR, oi: '100' },
+      { ts: NOW, oi: '90' },
+    ]);
+    const d = await computeOiDelta('eth', 'OKX', DEFAULT_OI_WINDOW_MS, 'contracts', NOW);
+    expect(d?.oi_change_pct).toBe(-10);
+    const [sql] = dbQuery.mock.calls[0];
+    expect(sql).toMatch(/SELECT ts, contracts_oi AS oi FROM oi_snapshots/);
+    expect(sql).toMatch(/AND contracts_oi IS NOT NULL/);
   });
 });
 

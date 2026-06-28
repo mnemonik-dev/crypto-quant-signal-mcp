@@ -26,6 +26,11 @@ export interface ExchangeAsset {
   coin: string;
   /** USD-notional 24h open interest. Computed `oi × markPx` per exchange's native fields. */
   notionalOI_usd: number;
+  /** SCAN-RANKBY-REFINEMENTS-W1 CH3: base-coin-unit open interest (price-independent),
+   *  i.e. the native OI BEFORE `× markPx`. undefined when the venue has no real bulk OI
+   *  (Binance — `notionalOI_usd` is a volume proxy; its base-contracts come per-symbol via
+   *  oi-sources). Captured by the OI sampler into `oi_snapshots.contracts_oi`. */
+  baseOI?: number;
   /** USD-equivalent 24h trading volume. Computed per-exchange — see per-branch comments. */
   volume24h_usd: number;
   // ── SCAN-RANKBY-W1: additive rank-metric fields (back-compat — `oi`/`volume`
@@ -88,6 +93,7 @@ async function fetchHL(limit: number): Promise<ExchangeAsset[]> {
       return {
         coin: a.name.toUpperCase(),
         notionalOI_usd: oi * px,
+        baseOI: oi, // CH3: base-coin OI (HL openInterest)
         volume24h_usd: vol, // HL natively reports USD-notional volume
         // SCAN-RANKBY-W1: % from prevDayPx; funding is HOURLY (interval = 1h).
         changePct24h: pctChange24h(px, parseFloat(ctxs[i]?.prevDayPx || '0')),
@@ -152,6 +158,7 @@ async function fetchBybit(limit: number): Promise<ExchangeAsset[]> {
       return {
         coin: t.symbol.replace(/USDT$/, '').toUpperCase(),
         notionalOI_usd: oi * px,
+        baseOI: oi, // CH3: base-coin OI (Bybit openInterest)
         volume24h_usd: parseFloat(t.turnover24h || '0'), // turnover24h is USDT-denominated
         changePct24h: pctChange24h(px, parseFloat(t.prevPrice24h || '0')),
         fundingRate: parseFunding(t.fundingRate),
@@ -190,6 +197,7 @@ async function fetchOKX(limit: number): Promise<ExchangeAsset[]> {
       return {
         coin: o.instId.replace(/-USDT-SWAP$/, '').toUpperCase(),
         notionalOI_usd: oiBase * px,
+        baseOI: oiBase, // CH3: base-coin OI (OKX oiCcy)
         volume24h_usd: volBase * px, // Q-OKX-VOL-DENOMINATION: volCcy24h is base-denominated; multiply by markPx
         // SCAN-RANKBY-W1: % from open24h. OKX has NO bulk funding endpoint (live 50014) →
         // funding filled by rank-metrics.ts per-instId over the bounded pool; interval default 8h.
@@ -221,6 +229,7 @@ async function fetchBitget(limit: number): Promise<ExchangeAsset[]> {
       return {
         coin: t.symbol.replace(/USDT$/, '').toUpperCase(),
         notionalOI_usd: oi * px,
+        baseOI: oi, // CH3: base-coin OI (Bitget holdingAmount)
         volume24h_usd: parseFloat(t.quoteVolume || '0'), // quoteVolume is USDT-denominated
         changePct24h: pctChange24h(last, parseFloat(t.open24h || '0')),
         fundingRate: parseFunding(t.fundingRate),

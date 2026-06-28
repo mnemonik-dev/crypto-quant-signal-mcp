@@ -35,6 +35,7 @@ vi.mock('../../src/lib/oi-snapshots.js', () => ({
   // mock MUST list them or they resolve `undefined` (incomplete-partial-mock trap).
   OI_WINDOWS: { '1h': 3_600_000, '4h': 14_400_000, '24h': 86_400_000 },
   DEFAULT_OI_WINDOW: '24h',
+  DEFAULT_OI_BASIS: 'notional', // CH3
 }));
 // SCAN-RANKBY-REFINEMENTS-W1 CH2: the full-universe OKX funding cache gates the funding branch.
 vi.mock('../../src/lib/okx-funding-poller.js', () => ({ getOkxFullFundingIfWarm: vi.fn() }));
@@ -258,7 +259,7 @@ describe('getRankedUniverse — oi_change (real OI delta, SCAN-RANKBY-W3)', () =
     expect(r.map((a) => a.coin)).toEqual(['SOL', 'BTC']); // desc by OI %Δ, top-2
     expect(r[0]).toMatchObject({ coin: 'SOL', rankBy: 'oi_change', rank_value: 9.4, oi_change_pct: 9.4, oi_change_window: '24h' });
     expect(r[0]).not.toHaveProperty('atrp');
-    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000);
+    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000, 'notional');
     expect(mockUniverse).not.toHaveBeenCalled(); // the store is the universe — no venue fetch
   });
 
@@ -273,13 +274,13 @@ describe('getRankedUniverse — oi_change (real OI delta, SCAN-RANKBY-W3)', () =
     mockOiDelta.mockResolvedValue(new Map([['BTC', { oi_change_pct: 1.2, oi_change_window: '4h' }]]));
     const r = await getRankedUniverse('BYBIT', 'oi_change', 5, '15m', { oiChangeWindow: '4h' });
     expect(r[0]).toMatchObject({ coin: 'BTC', oi_change_pct: 1.2, oi_change_window: '4h' });
-    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 14_400_000); // 4h in ms
+    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 14_400_000, 'notional'); // 4h in ms
   });
 
   it('CH1: omitted oiChangeWindow defaults to 24h (byte-identical)', async () => {
     mockOiDelta.mockResolvedValue(new Map([['BTC', { oi_change_pct: 2.1, oi_change_window: '24h' }]]));
     await getRankedUniverse('BYBIT', 'oi_change', 5);
-    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000); // 24h default
+    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000, 'notional'); // 24h default
   });
 
   it('CH1: distinct windows resolve to distinct store reads (no cross-serve)', async () => {
@@ -294,7 +295,22 @@ describe('getRankedUniverse — oi_change (real OI delta, SCAN-RANKBY-W3)', () =
     const b = await getRankedUniverse('BYBIT', 'oi_change', 5, '15m', { oiChangeWindow: '24h' });
     expect(a[0].oi_change_window).toBe('1h');
     expect(b[0].oi_change_window).toBe('24h'); // distinct cache keys never cross-serve
-    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 3_600_000); // the 1h window-ms
-    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000); // the 24h window-ms
+    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 3_600_000, 'notional'); // the 1h window-ms
+    expect(mockOiDelta).toHaveBeenCalledWith('BYBIT', 86_400_000, 'notional'); // the 24h window-ms
+  });
+
+  // ── SCAN-RANKBY-REFINEMENTS-W1 CH3: price-independent contracts basis ──
+  it('CH3: oiBasis="contracts" threads the basis + echoes oi_change_basis', async () => {
+    mockOiDelta.mockResolvedValue(new Map([['BTC', { oi_change_pct: 4.0, oi_change_window: '24h' }]]));
+    const r = await getRankedUniverse('OKX', 'oi_change', 5, '15m', { oiBasis: 'contracts' });
+    expect(r[0]).toMatchObject({ coin: 'BTC', oi_change_pct: 4.0, oi_change_basis: 'contracts' });
+    expect(mockOiDelta).toHaveBeenCalledWith('OKX', 86_400_000, 'contracts');
+  });
+
+  it('CH3: default (notional) does NOT echo oi_change_basis (byte-identical)', async () => {
+    mockOiDelta.mockResolvedValue(new Map([['BTC', { oi_change_pct: 2.1, oi_change_window: '24h' }]]));
+    const r = await getRankedUniverse('OKX', 'oi_change', 5);
+    expect(r[0]).not.toHaveProperty('oi_change_basis');
+    expect(mockOiDelta).toHaveBeenCalledWith('OKX', 86_400_000, 'notional');
   });
 });

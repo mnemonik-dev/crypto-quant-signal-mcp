@@ -1,0 +1,21 @@
+-- 020_oi_snapshots_contracts.sql — SCAN-RANKBY-REFINEMENTS-W1 CH3
+--
+-- Adds base-coin-unit open interest alongside the existing USD-notional `oi`, for a
+-- PRICE-INDEPENDENT OI delta ("is this NEW money?"). Notional %Δ carries a price
+-- component (notional = base-OI × price); the contracts (base-coin) %Δ isolates
+-- position growth from price moves.
+--
+-- All 5 PROMOTED venues expose base-coin OI directly (live-probed 2026-06-28):
+--   Binance sumOpenInterest · Bybit openInterest · Bitget size · HL openInterest · OKX oiCcy.
+--
+-- NULLABLE — contracts WARMS FORWARD (no clean cross-venue contracts history to
+-- backfill). computeOiDelta(basis:'contracts') filters rows where contracts_oi IS
+-- NULL → "warming" (null) until ≥2 contracts points span the window; never blocks
+-- the scan/verdict (the notional path is unaffected + stays the default).
+--
+-- SSH-preapplied to prod `signal_performance` BEFORE the code push (the push
+-- auto-deploys via GHA — SCAN-RANKBY-W3 lesson); ADD COLUMN IF NOT EXISTS =
+-- idempotent no-op against the prepared DB. Postgres 9.6+ only (the prod backend;
+-- the lazily-ensured ALTER in oi-snapshots.ts mirrors this for fresh-box repro).
+
+ALTER TABLE oi_snapshots ADD COLUMN IF NOT EXISTS contracts_oi DOUBLE PRECISION;

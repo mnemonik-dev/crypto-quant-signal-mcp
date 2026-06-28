@@ -36,7 +36,7 @@ import { getTradeSignal } from '../tools/get-trade-call.js';
 import { getExchangeTopAssetsWithVolume } from './exchange-universe.js';
 import { getRankedUniverse, type RankedAsset } from './rank-metrics.js';
 import { resolveRankBy, type RankBy } from './rank-constants.js';
-import type { OiWindow } from './oi-snapshots.js';
+import type { OiWindow, OiBasis } from './oi-snapshots.js';
 import { ResultCache } from './result-cache.js';
 import type { SignalVerdict, RegimeType, TradeCallResult } from '../types.js';
 import { enrichScanCall } from './scan-digest.js';
@@ -73,6 +73,8 @@ export interface ScanCallItem {
   oi_change_pct?: number;
   /** oi_change — the OI-delta window label, e.g. "24h". */
   oi_change_window?: string;
+  /** oi_change — CH3: the OI-delta basis, present ONLY for the non-default 'contracts'. */
+  oi_change_basis?: OiBasis;
   // ── SCAN-DIGEST-MCP-PARITY-W1 CH1: enriched-mode fields. Present ONLY when the
   //    caller passes includeReasoning:true (for a non-HOLD call); omitted in bare
   //    mode ⇒ byte-identical to the historical shape. Projected by enrichScanCall
@@ -117,6 +119,9 @@ export interface ScanTradeCallsParams {
   /** SCAN-RANKBY-REFINEMENTS-W1 CH1: OI-delta window for the oi_change lens
    *  (1h/4h/24h). Omitted ⇒ '24h' (byte-identical). Ignored by other lenses. */
   oiChangeWindow?: OiWindow;
+  /** SCAN-RANKBY-REFINEMENTS-W1 CH3: OI-delta basis for the oi_change lens
+   *  (notional/contracts). Omitted ⇒ 'notional' (byte-identical). Ignored by other lenses. */
+  oiBasis?: OiBasis;
 }
 
 /** The subset a scorer yields. Decouples the scanner from the full TradeCallResult,
@@ -179,6 +184,7 @@ export function attachRank(item: ScanCallItem, ranked: RankedAsset | undefined):
   if (ranked.atrp !== undefined) out.atrp = ranked.atrp;
   if (ranked.oi_change_pct !== undefined) out.oi_change_pct = ranked.oi_change_pct;
   if (ranked.oi_change_window !== undefined) out.oi_change_window = ranked.oi_change_window;
+  if (ranked.oi_change_basis !== undefined) out.oi_change_basis = ranked.oi_change_basis;
   return out;
 }
 
@@ -353,6 +359,7 @@ export async function scanTradeCalls(params: ScanTradeCallsParams): Promise<Scan
     // SCAN-RANKBY-REFINEMENTS-W1 CH1: forward the OI-delta window for the oi_change lens.
     const ranked = await getRankedUniverse(exchange, rankBy, topN, timeframe, {
       oiChangeWindow: params.oiChangeWindow,
+      oiBasis: params.oiBasis,
     });
     coins = ranked.map((r) => r.coin);
     rankMap = new Map(ranked.map((r) => [r.coin, r]));

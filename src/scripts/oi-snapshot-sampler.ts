@@ -39,7 +39,8 @@ export async function runOiSnapshotSampler(nowMs: number = Date.now()): Promise<
       const rows = await fetchCurrentOiUsd(venue, POOL);
       const n = await recordOiSnapshots(
         venue,
-        rows.map((r) => ({ symbol: r.coin, oi: r.oi, ts: bucket })),
+        // CH3: carry base-coin OI (contracts) alongside notional; NULL where absent (warms forward).
+        rows.map((r) => ({ symbol: r.coin, oi: r.oi, contracts: r.contracts, ts: bucket })),
       );
       perVenue[venue] = n;
       total += n;

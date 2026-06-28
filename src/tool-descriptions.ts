@@ -118,6 +118,9 @@ export const PARAM_DESC_SCAN_INCLUDE_REASONING =
 // SCAN-RANKBY-REFINEMENTS-W1 CH1: OI-delta window for the oi_change lens.
 export const PARAM_DESC_SCAN_OI_CHANGE_WINDOW =
   'OI-delta window for rankBy=oi_change: 1h, 4h, or 24h (default 24h). Ignored by other lenses.';
+// SCAN-RANKBY-REFINEMENTS-W1 CH3: OI-delta basis for the oi_change lens.
+export const PARAM_DESC_SCAN_OI_BASIS =
+  'OI-delta basis for rankBy=oi_change: notional (default, USD) or contracts (base-coin, price-independent). Ignored by other lenses.';
 
 // Top-20 keyword phrases the canary asserts each of the 3 BM25-audited tools'
 // combined-text contains ≥15 of (case-insensitive substring match). Sourced

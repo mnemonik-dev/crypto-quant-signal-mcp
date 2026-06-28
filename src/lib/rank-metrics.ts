@@ -34,8 +34,10 @@ import {
   DEFAULT_OI_WINDOW_MS,
   OI_WINDOWS,
   DEFAULT_OI_WINDOW,
+  DEFAULT_OI_BASIS,
   type OiDelta,
   type OiWindow,
+  type OiBasis,
 } from './oi-snapshots.js';
 import { getOkxFullFundingIfWarm } from './okx-funding-poller.js';
 
@@ -64,6 +66,8 @@ export interface RankedAsset {
   oi_change_pct?: number;
   /** oi_change — the OI-delta window label, e.g. "24h". */
   oi_change_window?: string;
+  /** oi_change — CH3: the OI-delta basis, echoed ONLY for the non-default 'contracts'. */
+  oi_change_basis?: OiBasis;
 }
 
 /**
@@ -75,6 +79,8 @@ export interface RankedAsset {
 export interface RankOptions {
   /** CH1: OI-delta window for the oi_change lens (1h/4h/24h). Default '24h'. */
   oiChangeWindow?: OiWindow;
+  /** CH3: OI-delta basis for the oi_change lens (notional/contracts). Default 'notional'. */
+  oiBasis?: OiBasis;
 }
 
 /**
@@ -251,11 +257,11 @@ function getAtrpForPool(exchange: ExchangeId, timeframe: string): Promise<Map<st
 // loadTimeoutMs (cold-serves an empty map; the store is the source so the load is just a query).
 const OI_CHANGE_TTL_MS = 60 * 1000;
 const oiChangeCache = coalescedCache<Map<string, OiDelta>>({
-  // SCAN-RANKBY-REFINEMENTS-W1 CH1: keyed `${exchange}:${window}` so 1h/4h/24h each
-  // memoize independently (mirrors atrpCache's `${exchange}:${timeframe}` key).
+  // SCAN-RANKBY-REFINEMENTS-W1 CH1+CH3: keyed `${exchange}:${window}:${basis}` so each
+  // (window, basis) pair memoizes independently (mirrors atrpCache's composite key).
   load: async (key) => {
-    const [exchange, window] = key.split(':') as [ExchangeId, OiWindow];
-    return computeOiDeltaForPool(exchange, OI_WINDOWS[window] ?? DEFAULT_OI_WINDOW_MS);
+    const [exchange, window, basis] = key.split(':') as [ExchangeId, OiWindow, OiBasis];
+    return computeOiDeltaForPool(exchange, OI_WINDOWS[window] ?? DEFAULT_OI_WINDOW_MS, basis);
   },
   ttlMs: OI_CHANGE_TTL_MS,
   staleOk: true,
@@ -268,8 +274,9 @@ const oiChangeCache = coalescedCache<Map<string, OiDelta>>({
 function getOiChangeForPool(
   exchange: ExchangeId,
   window: OiWindow = DEFAULT_OI_WINDOW,
+  basis: OiBasis = DEFAULT_OI_BASIS,
 ): Promise<Map<string, OiDelta>> {
-  return oiChangeCache.get(`${exchange}:${window}`);
+  return oiChangeCache.get(`${exchange}:${window}:${basis}`);
 }
 
 /**
@@ -305,7 +312,8 @@ export async function getRankedUniverse(
   // Symbols still "warming" (< 2 snapshots spanning the window) are omitted. Echoed at output
   // (never cached into the verdict cell). The store IS the universe → no `all` fetch here.
   if (rankBy === 'oi_change') {
-    const deltaMap = await getOiChangeForPool(exchange, opts.oiChangeWindow ?? DEFAULT_OI_WINDOW);
+    const basis = opts.oiBasis ?? DEFAULT_OI_BASIS;
+    const deltaMap = await getOiChangeForPool(exchange, opts.oiChangeWindow ?? DEFAULT_OI_WINDOW, basis);
     const sorted = [...deltaMap.entries()].sort((a, b) => b[1].oi_change_pct - a[1].oi_change_pct); // OI %Δ desc
     return sorted.slice(0, topN).map(([coin, d]) => ({
       coin,
@@ -313,6 +321,8 @@ export async function getRankedUniverse(
       rank_value: d.oi_change_pct,
       oi_change_pct: d.oi_change_pct,
       oi_change_window: d.oi_change_window,
+      // CH3: echo the basis ONLY for the non-default 'contracts' → notional stays byte-identical.
+      ...(basis === 'contracts' ? { oi_change_basis: 'contracts' as const } : {}),
     }));
   }
 

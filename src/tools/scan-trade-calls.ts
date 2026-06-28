@@ -47,6 +47,7 @@ import {
   PARAM_DESC_SCAN_RANK_BY,
   PARAM_DESC_SCAN_INCLUDE_REASONING,
   PARAM_DESC_SCAN_OI_CHANGE_WINDOW,
+  PARAM_DESC_SCAN_OI_BASIS,
 } from '../tool-descriptions.js';
 import type { LicenseInfo } from '../types.js';
 
@@ -79,6 +80,9 @@ export const SCAN_TRADE_CALLS_SCHEMA = {
   // rejects an invalid value at the MCP boundary (the same default-deny as exchange/
   // timeframe); default '24h' ⇒ byte-identical when omitted. Ignored by other lenses.
   oiChangeWindow: z.enum(['1h', '4h', '24h']).default('24h').describe(PARAM_DESC_SCAN_OI_CHANGE_WINDOW),
+  // SCAN-RANKBY-REFINEMENTS-W1 CH3: OI-delta basis for the oi_change lens. z.enum rejects an
+  // invalid value at the MCP boundary; default 'notional' ⇒ byte-identical. Ignored by other lenses.
+  oiBasis: z.enum(['notional', 'contracts']).default('notional').describe(PARAM_DESC_SCAN_OI_BASIS),
 };
 
 export interface ScanAlgovaultMeta {
