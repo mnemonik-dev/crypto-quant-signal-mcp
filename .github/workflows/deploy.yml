@@ -70,6 +70,14 @@ jobs:
       - name: Rank-metrics parity canary (check-rank-metrics-parity --check)
         run: node scripts/check-rank-metrics-parity.mjs --check
 
+      # SCAN-DIGEST-MCP-PARITY-W1 CH4: single-derivation canary (STATIC). Fails the push
+      # the moment a channel forks the scan digest — asserts renderScanDigestLine matches
+      # the cross-repo locked contract (the bot pins the same line), the webhook scan_digest
+      # calls[] are enrichScanCall output (passthrough), content[1] projects from the line
+      # renderer, and enrichScanCall stays allow-listed. Network-free. Weekly --live host cron.
+      - name: Scan-digest parity canary (check-scan-digest-parity --check)
+        run: node scripts/check-scan-digest-parity.mjs --check
+
       # GEO-W1 C4: JSON-LD structural integrity test. Network-free unit tests
       # validate the SHAPE of JSON-LD blocks across landing/*.html (Product /
       # Organization / WebSite / Service / SoftwareApplication on every page;

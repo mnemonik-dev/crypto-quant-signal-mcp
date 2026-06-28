@@ -83,6 +83,30 @@ serves an empty fallback < 1s while the load self-warms), negative-TTL 30s, lazy
 - `--live` — real-venue parity (weekly host cron); `--simulate-drift` proves detection (rc=1).
 - Shape snapshot: `audits/scan_trade_calls-rankby-shape-snapshot-2026-06-27.json`.
 
+## Scan digest (enriched, `includeReasoning`) — SCAN-DIGEST-MCP-PARITY-W1
+`scan_trade_calls({includeReasoning:true})` enriches each non-HOLD call at OUTPUT
+(`enrichScanCall`) with `price` + `factors[]` + `reasoning` (+ `oi_change_window`) — HOLDs
+stay bare + free; units stay `max(1, non-HOLD)`. **One projector, every channel projects:**
+MCP `content[1]` (`renderScanDigest`), the webhook `scan_digest` `calls[]` (the scheduler
+passes `includeReasoning:true` → buildPayload passthrough), and the bot `/scan` + `/scanwatch`
+(Python `scan_digest.render_scan_digest_line` MIRRORS the MCP `renderScanDigestLine`). Composes
+with `rankBy` (orthogonal). **Option A cache** (architect-ratified 2026-06-28): the scorer
+ALWAYS computes the canonical per-coin detail + caches it on the `(coin,exchange,timeframe)`
+cell; bare/enriched both PROJECT from it (no recompute); the lens-varying rank echo stays
+output-only via `attachRank` (the W1 "no-cache" law binds ONLY the rank fields).
+- Parity canary: `node scripts/check-scan-digest-parity.mjs --check` — `renderScanDigestLine`
+  matches the cross-repo locked line (the bot's `tests/test_scan_digest_render.py` pins the
+  SAME line for the SAME fixture), the webhook `scan_digest` `calls[]` == `enrichScanCall`
+  output, `content[1]` projects from the line renderer, allow-listed (no `outcome_*` / raw
+  `indicators`). `--simulate-divergence` → rc=1; `--live <base>` hits the deployed `/mcp`
+  (weekly). CI (deploy.yml) + `npm run scan:digest:parity:check` + prepublish.
+- Shape snapshot: `audits/scan_trade_calls-digest-shape-snapshot-2026-06-28.json`.
+- **Residual re-derivation (known):** `algovault-bot/adoption.py::scan_showcase` (the Mon
+  broadcast) still calls `scan_trade_calls` WITHOUT `includeReasoning` and renders its own
+  line — the ONE remaining per-channel assembly, OUT of CH3 scope (`/scan` + `/scanwatch`).
+  Tracked by `OPS-SCAN-SHOWCASE-ENRICH-W1` (WIS-PENDING). The CH4 canary scopes to `/scan`
+  + `/scanwatch` only — full bot dedup is NOT claimed while `scan_showcase` remains.
+
 ## Status / remaining lenses
 - **`volatility` (`atr`/ATRP) — ✅ SHIPPED (SCAN-RANKBY-W2).** See the ATRP note above.
 - **`oi_change` (`oid`) — ✅ SHIPPED (SCAN-RANKBY-W3).** Real OI delta over the `oi_snapshots` store; see

@@ -38,7 +38,9 @@
     "registry:drift:live": "node scripts/check-feature-registry-drift.mjs --live https://api.algovault.com",
     "rank:parity:check": "tsc && node scripts/check-rank-metrics-parity.mjs --check",
     "rank:parity:live": "node scripts/check-rank-metrics-parity.mjs --live",
-    "prepublishOnly": "npm run build && node scripts/snapshot_capabilities.mjs --live && node scripts/check-feature-registry-drift.mjs --check && node scripts/check-rank-metrics-parity.mjs --check"
+    "scan:digest:parity:check": "tsc && node scripts/check-scan-digest-parity.mjs --check",
+    "scan:digest:parity:live": "node scripts/check-scan-digest-parity.mjs --live",
+    "prepublishOnly": "npm run build && node scripts/snapshot_capabilities.mjs --live && node scripts/check-feature-registry-drift.mjs --check && node scripts/check-rank-metrics-parity.mjs --check && node scripts/check-scan-digest-parity.mjs --check"
   },
   "keywords": [
     "mcp",
