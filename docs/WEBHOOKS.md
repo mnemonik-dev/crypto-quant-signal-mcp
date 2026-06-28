@@ -100,7 +100,7 @@ no internal outcome/return metrics are ever sent.
 
 | Header | Meaning |
 |---|---|
-| `X-AlgoVault-Signature` | `hex(HMAC_SHA256(raw_body, your_secret))` |
+| `X-AlgoVault-Signature` | `hex(HMAC_SHA256("{X-AlgoVault-Timestamp}.{raw_body}", your_secret))` |
 | `X-AlgoVault-Event` | `trade_call` or `regime_shift` |
 | `X-AlgoVault-Delivery` | unique delivery id |
 | `X-AlgoVault-Timestamp` | epoch seconds at send time |
@@ -109,23 +109,28 @@ no internal outcome/return metrics are ever sent.
 
 ## Verify the signature
 
-Always verify `X-AlgoVault-Signature` against the **raw** request body before
-acting on a payload.
+> **🔒 Signature scheme update (v1.21.0 — 2026-06-28).** The signature now covers a **timestamped** string, not the raw body alone:
+> `X-AlgoVault-Signature` = `hex(HMAC_SHA256("{X-AlgoVault-Timestamp}.{raw_body}", your_secret))`, where `X-AlgoVault-Timestamp` is epoch seconds at send time. Also reject deliveries whose timestamp is outside a freshness window (±5 min below) to block replay.
+> **If you verified against the raw body alone (pre-v1.21.0), update to the scheme below — the old body-only HMAC no longer matches.**
+
+Recompute the HMAC over `"{timestamp}.{raw_body}"` using the `X-AlgoVault-Timestamp` header, constant-time compare against `X-AlgoVault-Signature`, and enforce a freshness window — all before acting on the payload.
 
 **Node.js**
 
 ```js
 import crypto from "node:crypto";
 
-function verify(rawBody, signatureHeader, secret) {
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+function verify(rawBody, signatureHeader, timestampHeader, secret, toleranceSec = 300) {
+  const ts = Number(timestampHeader);
+  if (!Number.isFinite(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > toleranceSec) return false; // freshness
+  const expected = crypto.createHmac("sha256", secret).update(`${ts}.${rawBody}`).digest("hex");
   // constant-time compare
   return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
 }
 
 // express: use express.raw({ type: "application/json" }) so req.body is the raw Buffer
 app.post("/algovault-hook", express.raw({ type: "application/json" }), (req, res) => {
-  if (!verify(req.body, req.get("X-AlgoVault-Signature"), process.env.ALGOVAULT_WEBHOOK_SECRET)) {
+  if (!verify(req.body, req.get("X-AlgoVault-Signature"), req.get("X-AlgoVault-Timestamp"), process.env.ALGOVAULT_WEBHOOK_SECRET)) {
     return res.status(401).end();
   }
   const event = JSON.parse(req.body.toString());
@@ -139,15 +144,22 @@ app.post("/algovault-hook", express.raw({ type: "application/json" }), (req, res
 **Python (Flask)**
 
 ```python
-import hmac, hashlib
+import hmac, hashlib, time
 
-def verify(raw_body: bytes, signature: str, secret: str) -> bool:
-    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+def verify(raw_body: bytes, signature: str, timestamp: str, secret: str, tolerance_sec: int = 300) -> bool:
+    try:
+        ts = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+    if abs(int(time.time()) - ts) > tolerance_sec:  # freshness
+        return False
+    signed = f"{ts}.".encode() + raw_body  # "{timestamp}.{raw_body}"
+    expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
     return hmac.compare_digest(signature, expected)
 
 @app.post("/algovault-hook")
 def hook():
-    if not verify(request.get_data(), request.headers.get("X-AlgoVault-Signature", ""), SECRET):
+    if not verify(request.get_data(), request.headers.get("X-AlgoVault-Signature", ""), request.headers.get("X-AlgoVault-Timestamp", ""), SECRET):
         abort(401)
     event = request.get_json()
     if event["event"] == "regime_shift" and event["data"]["regime"] in ("RANGING", "VOLATILE"):
