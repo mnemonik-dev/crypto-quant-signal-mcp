@@ -11,6 +11,8 @@
  * warning alert). No schema change — reads already-existing geo_* fields.
  */
 
+import { isSignificantDecline, DEFAULT_ALERT_HYGIENE, type AlertHygieneConfig } from './geo-alert-hygiene.js';
+
 export type Verdict = 'gaining' | 'holding' | 'slipping';
 
 const VERDICT_META: Record<Verdict, { emoji: string; word: string }> = {
@@ -35,8 +37,17 @@ export interface MomentumDeltas {
   sovLastWeek: number;
   mentionRateThisWeek: number; // %
   mentionRateLastWeek: number; // %
-  wowDropCount: number; // # models with >20% WoW mention-rate drop
-  wowDropSummary: string; // e.g. "claude-web -25%"
+  wowDropCount: number; // # models with >20% WoW mention-rate drop — RAW transparency only (NOT the gate)
+  wowDropSummary: string; // e.g. "claude-web -25%" — shown as supporting detail, never the trigger
+  /**
+   * OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — weekly cited-answer counts, MOST-RECENT-FIRST
+   * (this week, last week, two weeks ago, …). Feeds the significance gate that decides
+   * SLIPPING. Optional → falls back to [citationsThisWeek, citationsLastWeek] (a single
+   * transition can never satisfy the consecutive-cycles gate, so absent history ⇒ HOLDING).
+   */
+  weeklyCitations?: number[];
+  /** resolved alert-hygiene gate config (from geo-objective.yaml `alert_hygiene`). */
+  alertHygiene?: AlertHygieneConfig;
 }
 
 /**
@@ -72,17 +83,29 @@ export function computeMomentum(d: MomentumDeltas): Momentum {
     down++;
   }
 
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — 🔴 SLIPPING fires ONLY on a statistically
+  // meaningful, SUSTAINED citation decline, computed in the single shared gate
+  // (isSignificantDecline). Raw per-engine mention-rate wobble (wowDropSummary) is shown
+  // for transparency but never fires — LLM retrieval is non-deterministic (~16% noise
+  // floor) so a single tiny-sample >20% dip is noise, not a strategy signal.
+  const decline = isSignificantDecline(
+    d.weeklyCitations ?? [d.citationsThisWeek, d.citationsLastWeek],
+    d.alertHygiene ?? DEFAULT_ALERT_HYGIENE,
+  );
+
   let verdict: Verdict;
   let reason: string;
-  if (d.wowDropCount > 0) {
+  if (decline.slipping) {
     verdict = 'slipping';
-    reason = `mention rate dropped >20% (${d.wowDropSummary})`;
+    reason = d.wowDropSummary ? `${decline.reason}; per-engine: ${d.wowDropSummary}` : decline.reason;
   } else if (up > down) {
     verdict = 'gaining';
     reason = `${up} leading signal${up === 1 ? '' : 's'} moved up`;
   } else if (down > up) {
-    verdict = 'slipping';
-    reason = `${down} leading signal${down === 1 ? '' : 's'} moved down`;
+    // The OLD rule fired SLIPPING on any net-down week; the significance gate suppresses
+    // that noise → HOLDING, surfacing WHY it held (low sample / within noise / N down-weeks).
+    verdict = 'holding';
+    reason = decline.reason;
   } else {
     // up === down (incl. 0/0): holding — stage-aware framing keeps it honest + motivating
     verdict = 'holding';

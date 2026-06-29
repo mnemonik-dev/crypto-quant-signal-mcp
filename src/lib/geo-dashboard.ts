@@ -17,6 +17,13 @@
  */
 import { dbQuery } from './performance-db.js';
 import { computeIndexPresence } from './geo-digest.js';
+import { loadObjective } from './geo-decide.js';
+import {
+  isSignificantDecline,
+  resolveAlertHygiene,
+  DEFAULT_ALERT_HYGIENE,
+  type AlertHygieneConfig,
+} from './geo-alert-hygiene.js';
 
 interface WeeklyRow {
   week_utc: string;
@@ -103,6 +110,11 @@ export interface GeoDashboardData {
   // GEO-AUTOPILOT-W1 (C3) — the latest scored decision (geo_decisions); optional so
   // W1/W2 fixtures stay valid. Cowork materializes Prompt/geo-decision-<date>.md from it.
   latestDecision?: DecisionRow | null;
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — weekly cited-answer counts MOST-RECENT-FIRST
+  // (this week, last week, two weeks ago) + the resolved gate config. The red WoW alarm
+  // banner fires only when isSignificantDecline(weeklyCitations, alertHygiene) is slipping.
+  weeklyCitations?: number[];
+  alertHygiene?: AlertHygieneConfig;
 }
 
 interface DecisionRow {
@@ -138,8 +150,11 @@ function sparkline(values: number[]): string {
 }
 
 /**
- * WoW-drop SQL — also reused by `geo-weekly-cron.ts` to drive the Telegram
- * WARNING alert path. Threshold: >20% mention-count drop week-over-week.
+ * Per-engine WoW mention-count drop SQL — RAW transparency only (which engines dipped
+ * >20% this week, for display). It is NO LONGER the alarm gate: OPS-GEO-PROBE-SIGNIFICANCE-
+ * GATE-W1 routes the 🔴 banner + the Telegram WARNING through `isSignificantDecline`
+ * (the single shared gate on the citation history), so a single tiny-sample dip can't fire.
+ * The >0.20 here is a display threshold (notable dip), not the alarm threshold.
  */
 export const WOW_DROP_SQL = `
   WITH wk AS (
@@ -159,6 +174,24 @@ export const WOW_DROP_SQL = `
     END AS drop_pct
   FROM wk
   WHERE last_week > 0 AND ((last_week - this_week)::REAL / last_week) > 0.20
+`;
+
+/**
+ * Weekly aggregate CITED-ANSWER counts for the last 3 weeks, MOST-RECENT-FIRST
+ * (w0 = this week, w1 = last week, w2 = two weeks ago). Feeds the significance gate
+ * (isSignificantDecline). Shared by `getGeoDashboardData` AND `geo-weekly-cron.ts` so the
+ * dashboard banner, the digest verdict, and the Telegram WARNING all derive from the SAME
+ * history (single-derivation of the gate INPUT, not just the gate logic). Retrieval rows
+ * only, presence-tier excluded — matches every other authority aggregate.
+ */
+export const WEEKLY_CITED_3W_SQL = `
+  SELECT
+    count(*) FILTER (WHERE cited AND ran_at > now() - interval '1 week') AS w0,
+    count(*) FILTER (WHERE cited AND ran_at <= now() - interval '1 week' AND ran_at > now() - interval '2 weeks') AS w1,
+    count(*) FILTER (WHERE cited AND ran_at <= now() - interval '2 weeks' AND ran_at > now() - interval '3 weeks') AS w2
+  FROM geo_mentions
+  WHERE retrieval = true AND ran_at > now() - interval '3 weeks'
+    AND query_tier IS DISTINCT FROM 'presence'
 `;
 
 export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Promise<GeoDashboardData> {
@@ -194,6 +227,18 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
   );
 
   const wowDrops = await dbQuery<WowDropRow>(WOW_DROP_SQL, []);
+
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — 3-week citation history + gate config feed the
+  // significance gate that decides whether the WoW banner alarms (vs a within-noise note).
+  const citedHist = await dbQuery<{ w0: string | number; w1: string | number; w2: string | number }>(WEEKLY_CITED_3W_SQL, []);
+  const ch = citedHist[0] ?? { w0: 0, w1: 0, w2: 0 };
+  const weeklyCitations = [n(ch.w0), n(ch.w1), n(ch.w2)];
+  let alertHygiene: AlertHygieneConfig = DEFAULT_ALERT_HYGIENE;
+  try {
+    alertHygiene = resolveAlertHygiene(loadObjective().alert_hygiene);
+  } catch {
+    // Don't 500 the admin dashboard over an objective parse error — fall back to defaults.
+  }
 
   const latestRuns = await dbQuery<LatestRunRow>(
     `SELECT run_id::TEXT AS run_id,
@@ -289,6 +334,8 @@ export async function getGeoDashboardData(opts: { lookbackWeeks: number }): Prom
     gaps,
     presence,
     latestDecision: decisionRows[0] ?? null,
+    weeklyCitations,
+    alertHygiene,
   };
 }
 
@@ -358,13 +405,19 @@ export function renderGeoDashboardHtml(data: GeoDashboardData): string {
           <tbody>${competitorRows}</tbody>
         </table>`;
 
-  // WoW drop banner
-  const wowBanner =
-    wowDrops.length === 0
+  // WoW drop banner — OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1: the red ALARM banner fires ONLY
+  // when the shared gate (isSignificantDecline on the citation history) says slipping. Raw
+  // per-engine dips are still SHOWN — as a neutral within-noise note when not significant —
+  // so we gate the alarm, never hide the data. Single-derivation with the digest + the TG WARNING.
+  const decline = isSignificantDecline(data.weeklyCitations ?? [], data.alertHygiene ?? DEFAULT_ALERT_HYGIENE);
+  const wowRaw = wowDrops
+    .map((r) => `<code>${htmlEscape(r.model)}</code> -${n(r.drop_pct).toFixed(1)}% (this: ${fmtInt(n(r.this_week))} / last: ${fmtInt(n(r.last_week))})`)
+    .join(', ');
+  const wowBanner = decline.slipping
+    ? `<div class="banner">⚠️ <strong>Sustained mention-rate decline:</strong> ${htmlEscape(decline.reason)}${wowRaw ? ` · per-engine: ${wowRaw}` : ''}</div>`
+    : wowDrops.length === 0
       ? ''
-      : `<div class="banner">⚠️ <strong>WoW mention-rate drop &gt;20% detected:</strong> ${wowDrops
-          .map((r) => `<code>${htmlEscape(r.model)}</code> -${n(r.drop_pct).toFixed(1)}% (this: ${fmtInt(n(r.this_week))} / last: ${fmtInt(n(r.last_week))})`)
-          .join(', ')}</div>`;
+      : `<p class="meta">WoW per-engine dips (within noise, not alarmed — ${htmlEscape(decline.reason)}): ${wowRaw}</p>`;
 
   // Latest run summary
   const runSection = latestRun

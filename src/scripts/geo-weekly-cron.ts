@@ -14,7 +14,8 @@
 import { runWeeklyProbe } from '../lib/geo-orchestrator.js';
 import { dbQuery } from '../lib/performance-db.js';
 import { sendAlert, sendDigest } from '../lib/telegram.js';
-import { WOW_DROP_SQL } from '../lib/geo-dashboard.js';
+import { WOW_DROP_SQL, WEEKLY_CITED_3W_SQL } from '../lib/geo-dashboard.js';
+import { isSignificantDecline, resolveAlertHygiene, type SignificanceVerdict } from '../lib/geo-alert-hygiene.js';
 import {
   buildDigest,
   shortEngine,
@@ -148,6 +149,7 @@ async function fetchDigestData(): Promise<{
   wowAlerts: WowRow[];
   ranked: RankedDecision;
   brief: string;
+  decline: SignificanceVerdict;
 }> {
   const wowAlerts = await dbQuery<WowRow>(WOW_DROP_SQL, []);
 
@@ -175,6 +177,13 @@ async function fetchDigestData(): Promise<{
     [],
   );
   const dr = deltaRows[0] ?? {};
+
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — 3-week cited-answer history, MOST-RECENT-FIRST,
+  // feeding the significance gate (shared SQL with the dashboard so both derive from the
+  // same history). w0 == cit_this above by construction (identical window predicate).
+  const citedHistRows = await dbQuery<{ w0: string | number; w1: string | number; w2: string | number }>(WEEKLY_CITED_3W_SQL, []);
+  const chr = citedHistRows[0] ?? {};
+  const weeklyCitations = [num(chr.w0), num(chr.w1), num(chr.w2)];
 
   // New trusted (algovault) domains this week not seen in the prior 4w.
   const newDomainRows = await dbQuery<{ source_domain: string }>(
@@ -321,6 +330,10 @@ async function fetchDigestData(): Promise<{
   // ── GEO-AUTOPILOT-W1 (C3): the scored DECIDE handoff (read-only; replaces ONE MOVE) ──
   // computeGapList + citations + index-presence → priority-gated scoreWeek → brief.
   const objective = loadObjective();
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — the ONE gate verdict; drives the digest SLIPPING
+  // verdict (via momentumDeltas below), the dashboard banner, and the TG WARNING in main().
+  const alertHygiene = resolveAlertHygiene(objective.alert_hygiene);
+  const decline = isSignificantDecline(weeklyCitations, alertHygiene);
   const gapBriefs = await computeGapList(4);
   const seenQ = new Set<string>();
   const gaps: GapLike[] = [];
@@ -393,6 +406,9 @@ async function fetchDigestData(): Promise<{
       mentionRateLastWeek: num(dr.mention_last),
       wowDropCount: wowAlerts.length,
       wowDropSummary,
+      // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — significance-gate inputs (single shared gate).
+      weeklyCitations,
+      alertHygiene,
     },
     perEngineMention: perEngine.map((e) => ({
       model: e.model,
@@ -409,7 +425,7 @@ async function fetchDigestData(): Promise<{
     bySource,
   };
 
-  return { data, wowAlerts, ranked, brief };
+  return { data, wowAlerts, ranked, brief, decline };
 }
 
 async function main(): Promise<void> {
@@ -427,7 +443,7 @@ async function main(): Promise<void> {
       `[geo-cron] ${mode} — building digest from existing DB state; no LLM probe, no DB writes` +
         (previewSend ? '; sending ONE labelled preview to the operator chat' : ', no Telegram'),
     );
-    const { data, wowAlerts } = await fetchDigestData();
+    const { data, wowAlerts, decline } = await fetchDigestData();
     const lines = buildDigest(data);
     if (previewSend) {
       const ok = await sendDigest([
@@ -441,7 +457,9 @@ async function main(): Promise<void> {
       console.log(lines.join('\n'));
       console.log('---END---');
     }
-    console.log(`[geo-cron] ${mode} complete · wow_alerts=${wowAlerts.length}`);
+    console.log(
+      `[geo-cron] ${mode} complete · raw_wow_dips=${wowAlerts.length} · gate=${decline.slipping ? '🔴 SLIPPING' : '🟡 HOLDING'} (${decline.reason}) · TG_WARNING=${decline.slipping ? 'WOULD FIRE' : 'suppressed'}`,
+    );
     return;
   }
 
@@ -451,7 +469,7 @@ async function main(): Promise<void> {
     `[geo-cron] run ${runId} complete: engines=[${engineIds.join(',')}] rows=${resultCount} errors=${errorCount}`,
   );
 
-  const { data, wowAlerts, ranked, brief } = await fetchDigestData();
+  const { data, wowAlerts, ranked, brief, decline } = await fetchDigestData();
   const lines = buildDigest(data);
 
   await sendDigest(lines);
@@ -468,14 +486,19 @@ async function main(): Promise<void> {
   });
   console.log(`[geo-cron] decision persisted · tier=${ranked.priority_tier ?? 'none'} · candidates=${ranked.ranked.length}`);
 
-  // PRESERVED WoW operator-action alert (the only additional TG fire).
-  if (wowAlerts.length > 0) {
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — the WoW WARNING (operator-action) fires ONLY on a
+  // sustained, significant citation decline (the single shared gate — same verdict as the
+  // digest header + dashboard banner), never on a single noisy week. Raw per-engine dips are
+  // supporting detail, not the trigger; honors the "fire on sustained drift" alert contract.
+  if (decline.slipping) {
     const summary = wowAlerts.map((a) => `${a.model} -${num(a.drop_pct).toFixed(1)}%`).join(', ');
     await sendAlert(
-      `GEO weekly probe — WoW mention-rate drop >20% detected: ${summary} (see digest above for details)`,
+      `GEO weekly probe — ${decline.reason}${summary ? `; per-engine dips: ${summary}` : ''} (see digest above for details)`,
       'warning',
     );
-    console.log(`[geo-cron] WoW WARNING alert sent · models=${wowAlerts.length}`);
+    console.log(`[geo-cron] WoW WARNING alert sent · ${decline.reason}`);
+  } else {
+    console.log(`[geo-cron] no WoW WARNING (gate HOLDING: ${decline.reason}) · raw_wow_dips=${wowAlerts.length}`);
   }
 }
 

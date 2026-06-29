@@ -1,7 +1,9 @@
 /**
  * GEO-MEASUREMENT-W1 (C3) — geo-dashboard unit tests.
  *
- * Empty-state graceful, WoW banner appears only when wowDrops.length > 0.
+ * Empty-state graceful. OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1: the red WoW ALARM banner
+ * fires ONLY on a sustained, significant citation decline (the shared isSignificantDecline
+ * gate); within-noise dips render as a neutral note (raw numbers still shown).
  */
 import { describe, it, expect } from 'vitest';
 import { renderGeoDashboardHtml, type GeoDashboardData } from '../../src/lib/geo-dashboard.js';
@@ -23,19 +25,34 @@ describe('geo-dashboard: renderGeoDashboardHtml', () => {
     expect(html).toContain('No runs yet');
   });
 
-  it('does NOT render WoW banner when wowDrops is empty', () => {
+  it('renders no WoW alarm or note when there are no drops', () => {
     const html = renderGeoDashboardHtml(EMPTY);
-    expect(html).not.toContain('WoW mention-rate drop');
+    expect(html).not.toContain('Sustained mention-rate decline');
+    expect(html).not.toContain('within noise, not alarmed');
   });
 
-  it('renders WoW banner when wowDrops has entries', () => {
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — the red alarm banner is gated by the shared helper.
+  it('renders the red WoW alarm banner ONLY on a sustained significant decline (2 consecutive ≥20%, n≥5)', () => {
     const html = renderGeoDashboardHtml({
       ...EMPTY,
+      weeklyCitations: [6, 8, 10], // sustained: 10→8 (20%), 8→6 (25%)
       wowDrops: [{ model: 'claude-haiku-4-5-20251001', this_week: 3, last_week: 10, drop_pct: 70.0 }],
     });
-    expect(html).toContain('WoW mention-rate drop');
-    expect(html).toContain('70.0%');
+    expect(html).toContain('Sustained mention-rate decline');
+    expect(html).toContain('70.0%'); // raw per-engine numbers still surfaced
     expect(html).toContain('claude-haiku-4-5-20251001');
+  });
+
+  it('shows raw WoW dips as a within-noise NOTE (no red banner) when the decline is not significant', () => {
+    const html = renderGeoDashboardHtml({
+      ...EMPTY,
+      weeklyCitations: [0, 2], // the Mon-29 low-sample case (n=2)
+      wowDrops: [{ model: 'claude-haiku-4-5-20251001', this_week: 0, last_week: 2, drop_pct: 100.0 }],
+    });
+    expect(html).not.toContain('Sustained mention-rate decline'); // no alarm
+    expect(html).toContain('within noise, not alarmed'); // neutral note instead
+    expect(html).toContain('low sample (n=2)'); // the gate's reason is surfaced
+    expect(html).toContain('claude-haiku-4-5-20251001'); // raw numbers still shown
   });
 
   it('renders weekly trend rows when weekly is populated', () => {

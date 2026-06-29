@@ -111,3 +111,18 @@ action_types:
 # brief + digest name the already-drafted spec. Key = "<tier>:<engine-or-query_id>".
 known_action_specs:
   "eligibility:gemini": Prompt/fix-gemini-google-index-presence-w1.md
+
+# OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — alert-hygiene gate for the weekly digest.
+# 🔴 SLIPPING (and its operator-action Telegram WARNING) fires ONLY on a statistically
+# meaningful, SUSTAINED citation decline — never on tiny-sample noise. The monitoring
+# contract is "fire on sustained/accumulating drift, NOT single-sample breaches": LLM
+# retrieval is non-deterministic (published noise floor ≈16%; same prompt cites different
+# sources in <30% of identical re-runs) and median time-to-first-citation is ~7d (P90 ~37d),
+# so a single >20% week-over-week dip is noise. Read by geo-alert-hygiene.ts::isSignificantDecline
+# (via resolveAlertHygiene) — the ONE shared gate behind the digest verdict, the dashboard
+# banner, and the TG alert. Static policy config (no live numbers); tune here, zero code change.
+alert_hygiene:
+  min_baseline_citations: 5      # baseline (prior) week needs ≥5 cited answers to judge a drop (n=2 → suppressed)
+  min_relative_drop: 0.20        # ≥20% week-over-week decline counts as a down-cycle.
+                                 # HARD FLOOR 0.16 (research noise floor) — may RAISE, never lower below 0.16.
+  consecutive_down_cycles: 2     # require ≥2 consecutive down-weeks (each clearing the floors above) before SLIPPING

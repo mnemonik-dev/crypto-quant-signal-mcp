@@ -72,6 +72,16 @@ export interface Objective {
    * This is the ONLY index signal — the LLM presence probe (citation) never sets it.
    */
   eligibility?: { indexed_substrates: string[] };
+  /**
+   * OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — alert-hygiene gate (resolved by
+   * geo-alert-hygiene.ts::resolveAlertHygiene; shape matches AlertHygieneRaw). Static
+   * policy config (no live numbers). Absent ⇒ DEFAULT_ALERT_HYGIENE (floor 5 / 0.20 / 2).
+   */
+  alert_hygiene?: {
+    min_baseline_citations?: number;
+    min_relative_drop?: number;
+    consecutive_down_cycles?: number;
+  };
 }
 
 /** One per-query gap signal — a projection of geo-gap-list GapBrief / geo_mentions agg. */

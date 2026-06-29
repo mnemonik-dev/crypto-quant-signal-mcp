@@ -41,7 +41,7 @@ describe('computeMomentum', () => {
     const fixtures: MomentumDeltas[] = [
       { ...baseDeltas(), citationsThisWeek: 3, citationsLastWeek: 1, newTrustedDomains: ['github'] }, // gaining
       baseDeltas(), // holding
-      { ...baseDeltas(), wowDropCount: 1, wowDropSummary: 'claude-web -25%' }, // slipping
+      { ...baseDeltas(), citationsThisWeek: 6, citationsLastWeek: 8, weeklyCitations: [6, 8, 10] }, // slipping (sustained)
     ];
     for (const d of fixtures) {
       const m = computeMomentum(d);
@@ -63,16 +63,47 @@ describe('computeMomentum', () => {
     expect(m.headline).toContain('pre-visibility');
   });
 
-  it('slipping when WoW drop fires — folds the WoW number into the verdict (R6)', () => {
-    const m = computeMomentum({ ...baseDeltas(), wowDropCount: 1, wowDropSummary: 'claude-web -25%' });
+  // OPS-GEO-PROBE-SIGNIFICANCE-GATE-W1 — SLIPPING is now significance-gated.
+  it('slipping ONLY on a sustained, significant citation decline (≥2 consecutive ≥20%, n≥5)', () => {
+    const m = computeMomentum({
+      ...baseDeltas(),
+      citationsThisWeek: 6,
+      citationsLastWeek: 8,
+      weeklyCitations: [6, 8, 10],
+      wowDropCount: 2,
+      wowDropSummary: 'chatgpt -64%, claude-web -25%',
+    });
     expect(m.verdict).toBe('slipping');
     expect(m.emoji).toBe('🔴');
-    expect(m.headline).toContain('claude-web -25%');
+    expect(m.headline).toContain('sustained');
+    expect(m.headline).toContain('chatgpt -64%'); // raw per-engine numbers still surfaced
   });
 
-  it('slipping when leading indicators move down', () => {
-    const m = computeMomentum({ ...baseDeltas(), citationsThisWeek: 1, citationsLastWeek: 4, sovThisWeek: 0, sovLastWeek: 0.05 });
-    expect(m.verdict).toBe('slipping');
+  // Regression: the exact Mon-29 false alarm — a 2→0 citation move on n=2 with a per-engine
+  // mention wobble. Pre-fix this fired 🔴 SLIPPING; the gate now holds it as low-sample noise.
+  it('a low-sample 2→0 citation drop is HOLDING (low sample), never SLIPPING', () => {
+    const m = computeMomentum({
+      ...baseDeltas(),
+      citationsThisWeek: 0,
+      citationsLastWeek: 2,
+      weeklyCitations: [0, 2],
+      wowDropCount: 1,
+      wowDropSummary: 'chatgpt -64%',
+    });
+    expect(m.verdict).toBe('holding');
+    expect(m.emoji).toBe('🟡');
+    expect(m.headline).toContain('low sample');
+  });
+
+  it('a single 30% down-week with n≥5 is HOLDING (1 down-week, watching), not yet SLIPPING', () => {
+    const m = computeMomentum({
+      ...baseDeltas(),
+      citationsThisWeek: 7,
+      citationsLastWeek: 10,
+      weeklyCitations: [7, 10, 10],
+    });
+    expect(m.verdict).toBe('holding');
+    expect(m.headline).toContain('1 down-week');
   });
 });
 
