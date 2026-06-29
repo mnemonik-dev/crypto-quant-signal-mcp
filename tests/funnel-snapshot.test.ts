@@ -27,10 +27,12 @@ const describeOrSkip = SKIP_REASON ? describe.skip : describe;
 const SENTINEL_PREFIX = 'funnel-test-';
 
 async function deleteSentinels() {
-  // Remove any sentinel test rows from prior runs (funnel_events + the
-  // request_log rows the CH2 monotonic test seeds for the first_call fallback).
+  // Remove any sentinel test rows from prior runs across every table the CH2/CH3
+  // tests seed (funnel_events; request_log for the first_call fallback;
+  // agent_sessions for the by_authenticity real-call join).
   await dbRun(`DELETE FROM funnel_events WHERE session_id LIKE ?`, `${SENTINEL_PREFIX}%`);
   await dbRun(`DELETE FROM request_log WHERE session_id LIKE ?`, `${SENTINEL_PREFIX}%`);
+  await dbRun(`DELETE FROM agent_sessions WHERE session_id LIKE ?`, `${SENTINEL_PREFIX}%`);
 }
 
 describeOrSkip('funnel-snapshot — 14-stage extension', () => {
@@ -266,6 +268,48 @@ describeOrSkip('funnel-snapshot — 14-stage extension', () => {
     expect((snap.funnel.mcp_tools_list ?? 0) >= (snap.funnel.first_call ?? 0)).toBe(true);
     // The previously-null/zero stage-2→3 transition is now a real ratio in (0,1].
     expect(snap.stage_retentions['mcp_tools_list_to_first_call']).toBeCloseTo(2 / 3, 6);
+  });
+
+  it('CH3: by_authenticity cleans the mcp_connect denominator (tagged not dropped; human <= raw; cleaned activation)', async () => {
+    // Isolated future window. 4 connect sessions: 2 tagged human, 1 automated, 1
+    // pre-CH3 (no is_automated → defaults human). raw=4, automated=1, human=3.
+    // Of the 3 humans, 1 made a real tool call (agent_sessions) → cleaned activation 1/3.
+    const from = '2099-12-30T00:00:00.000Z';
+    const to = '2099-12-31T00:00:00.000Z';
+    const ts = '2099-12-30T12:00:00.000Z';
+    const tsMs = new Date(ts).getTime();
+    const connects: Array<[string, Record<string, unknown>]> = [
+      ['1', { source: 'unknown', source_confidence: 'unknown', identity_tier: 'fallback', is_automated: false, automated_reason: null }],
+      ['2', { source: 'claude', source_confidence: 'heuristic', identity_tier: 'token', is_automated: false, automated_reason: null }],
+      ['3', { source: 'unknown', source_confidence: 'unknown', identity_tier: 'fallback', is_automated: true, automated_reason: 'crawler_bot' }],
+      ['4', { source: 'unknown', source_confidence: 'unknown', identity_tier: 'fallback' }], // pre-CH3: no is_automated → human-default
+    ];
+    for (const [i, meta] of connects) {
+      await dbRun(
+        `INSERT INTO funnel_events (event_type, ts, session_id, license_tier, meta_json) VALUES (?, ?, ?, ?, ?)`,
+        'mcp_connect', ts, `${SENTINEL_PREFIX}${i}`, 'free', JSON.stringify(meta),
+      );
+    }
+    // Human session 1 made a real tool call → in agent_sessions with call_count >= 1.
+    await dbRun(
+      `INSERT INTO agent_sessions (session_id, first_seen, last_seen, call_count) VALUES (?, ?, ?, ?)`,
+      `${SENTINEL_PREFIX}1`, tsMs, tsMs, 3,
+    );
+    const snap = await generateFunnelSnapshot({ since: from, until: to });
+    const ba = snap.by_authenticity!;
+    expect(ba.raw_denominator).toBe(4);
+    expect(ba.automated_count).toBe(1);
+    expect(ba.human_denominator).toBe(3);
+    // AC invariant: human <= raw.
+    expect((ba.human_denominator ?? 0) <= (ba.raw_denominator ?? 0)).toBe(true);
+    // Cleaned activation: of 3 humans, 1 made a real call.
+    expect(ba.human_first_call_pct).toBeCloseTo(1 / 3, 6);
+    // TAGGED, NOT DROPPED — all 4 connect rows still present (Data Integrity).
+    const remaining = await dbQuery<{ c: number | string }>(
+      `SELECT COUNT(*) AS c FROM funnel_events WHERE event_type='mcp_connect' AND session_id LIKE ? AND ts >= ? AND ts <= ?`,
+      [`${SENTINEL_PREFIX}%`, from, to],
+    );
+    expect(Number(remaining[0].c)).toBe(4);
   });
 });
 

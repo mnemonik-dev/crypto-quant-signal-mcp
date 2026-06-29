@@ -170,6 +170,21 @@ export interface FunnelSnapshot {
     anonymous: number | null;
     coverage_pct: number | null;
   };
+  /**
+   * OPS-ACTIVATION-LEAK-FIX-W1 CH3: cleaned activation over the server-side
+   * `mcp_connect` base (npm `install` is structurally un-cleanable — registry
+   * counts only). `human_first_call_pct` is the "true activation" rate (human
+   * connects → real tool call) reported ALONGSIDE the historical
+   * `conversion.install_to_first_call` (25%). Additive / NON-stage (absent from
+   * CANONICAL_STAGE_ORDER → 14-stage funnel + 13 retentions byte-stable).
+   * `human_denominator ≤ raw_denominator` always. `null` on query failure.
+   */
+  by_authenticity: {
+    raw_denominator: number | null;
+    human_denominator: number | null;
+    automated_count: number | null;
+    human_first_call_pct: number | null;
+  } | null;
   warnings: string[]; // non-fatal notes, e.g. "agent_sessions empty — fell back to request_log"
 }
 
@@ -397,6 +412,100 @@ async function getIdentityCoverage(
       `identity_coverage query failed: ${err instanceof Error ? err.message : String(err)}`,
     );
     return { identified: null, fallback: null, anonymous: null, coverage_pct: null };
+  }
+}
+
+/**
+ * OPS-ACTIVATION-LEAK-FIX-W1 CH3 — cleaned `by_authenticity` denominator over the
+ * SERVER-SIDE `mcp_connect` base (Q3: npm `install` is structurally un-cleanable —
+ * the registry returns counts only, no per-download UA/IP — so the cleaned funnel
+ * sits on mcp_connect, NOT install). Additive / NON-stage: the 14-stage funnel +
+ * its 13 retentions stay byte-stable; this reports the "true activation" rate
+ * ALONGSIDE the historical `install_to_first_call`.
+ *
+ *   raw_denominator      = distinct sessions that connected (== by_source connects).
+ *   automated_count      = of those, distinct sessions the canonical classifyTraffic()
+ *                          tagged automated (is_automated=true in any connect's meta).
+ *   human_denominator    = raw − automated (raw ≤-invariant: human ≤ raw).
+ *   human_first_call_pct = of HUMAN connect sessions, the fraction that made a real
+ *                          tool call (agent_sessions.call_count ≥ 1 — `tools/list` /
+ *                          handshake-only never count). This is the cleaned activation.
+ *
+ * Connects predating CH3 (no `is_automated` in meta) default to HUMAN here — unproven
+ * ≠ automated ("never drop real agents"); the cleaned rate sharpens as tagging rolls
+ * out. (Contrast identity_coverage, which EXCLUDES unlabeled rows — it measures
+ * explicit labeling, this measures automated-vs-human with a human default.) The
+ * join is valid because `mcp_connect.session_id` and `agent_sessions.session_id` both
+ * derive from the ONE resolveSessionIdentity id (CH2). Fail-open: null on error.
+ */
+async function getByAuthenticity(
+  windowFromIso: string,
+  windowToIso: string,
+  windowFromMs: number,
+  windowToMs: number,
+  warnings: string[],
+): Promise<{ raw_denominator: number | null; human_denominator: number | null; automated_count: number | null; human_first_call_pct: number | null } | null> {
+  try {
+    const connectRows = await dbQuery<{ session_id: string | null; meta_json: string | null }>(
+      `SELECT session_id, meta_json
+         FROM funnel_events
+        WHERE event_type = 'mcp_connect'
+          AND ts >= ? AND ts <= ?`,
+      [windowFromIso, windowToIso],
+    );
+    if (connectRows.length === 0) {
+      return { raw_denominator: 0, human_denominator: 0, automated_count: 0, human_first_call_pct: null };
+    }
+    // Dedup by session; a session is automated if ANY of its connect rows tagged it.
+    const sessionAutomated = new Map<string, boolean>();
+    for (const r of connectRows) {
+      if (!r.session_id) continue;
+      let automated = sessionAutomated.get(r.session_id) ?? false;
+      try {
+        const m = r.meta_json ? (JSON.parse(r.meta_json) as Record<string, unknown>) : {};
+        if (m.is_automated === true) automated = true;
+      } catch {
+        /* malformed meta → leave as-is (defaults human) */
+      }
+      sessionAutomated.set(r.session_id, automated);
+    }
+    const raw = sessionAutomated.size;
+    let automatedCount = 0;
+    const humanSessions = new Set<string>();
+    for (const [sid, automated] of sessionAutomated) {
+      if (automated) automatedCount += 1;
+      else humanSessions.add(sid);
+    }
+    // Real-call set: same definition as first_call (agent_sessions, call_count ≥ 1).
+    const realCall = new Set<string>();
+    try {
+      const sessRows = await dbQuery<{ session_id: string | null }>(
+        `SELECT session_id
+           FROM agent_sessions
+          WHERE first_seen >= ? AND first_seen <= ?
+            AND call_count >= 1`,
+        [windowFromMs, windowToMs],
+      );
+      for (const r of sessRows) if (r.session_id) realCall.add(r.session_id);
+    } catch (err) {
+      warnings.push(
+        `by_authenticity agent_sessions join failed (human_first_call_pct may read 0): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    let humanWithCall = 0;
+    for (const sid of humanSessions) if (realCall.has(sid)) humanWithCall += 1;
+    const humanDenom = humanSessions.size;
+    return {
+      raw_denominator: raw,
+      human_denominator: humanDenom,
+      automated_count: automatedCount,
+      human_first_call_pct: humanDenom > 0 ? humanWithCall / humanDenom : null,
+    };
+  } catch (err) {
+    warnings.push(
+      `by_authenticity query failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
   }
 }
 
@@ -1023,6 +1132,9 @@ export async function generateFunnelSnapshot(
   // OPS-ACTIVATION-LEAK-FIX-W1 CH2: identity-tier coverage (additive, non-stage).
   const identityCoverage = await getIdentityCoverage(windowFromIso, windowToIso, warnings);
 
+  // OPS-ACTIVATION-LEAK-FIX-W1 CH3: cleaned by_authenticity over mcp_connect (additive, non-stage).
+  const byAuthenticity = await getByAuthenticity(windowFromIso, windowToIso, windowFromMs, windowToMs, warnings);
+
   return {
     generated_at: new Date().toISOString(),
     window: { from: windowFromIso, to: windowToIso },
@@ -1067,6 +1179,7 @@ export async function generateFunnelSnapshot(
     tier_cohort_sizes: tierCohortSizes,
     by_source: bySource,
     identity_coverage: identityCoverage,
+    by_authenticity: byAuthenticity,
     warnings,
   };
 }

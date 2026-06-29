@@ -68,6 +68,7 @@ import {
   type IdentityTier,
 } from './lib/track-token.js';
 import { recordMcpToolsListEvent } from './lib/tools-list-event.js';
+import { classifyTraffic } from './lib/traffic-classifier.js';
 import { resolveSource, shouldEmitConnect } from './lib/attribution-sources.js';
 import {
   isStripeConfigured,
@@ -2914,15 +2915,35 @@ async function startHttp() {
           origin: req.headers['origin'],
           referer: req.headers['referer'],
         });
+        // OPS-ACTIVATION-LEAK-FIX-W1 CH3: tag automated vs human via the ONE canonical
+        // classifier (single-derivation). Tags additively into meta_json — the row is
+        // NEVER dropped (Data Integrity). `hadRealToolCall` = is THIS connect POST itself
+        // a real tools/call (the L4 combining path treats connect-only probes as automated).
+        const connectBody = (req.body ?? {}) as { method?: string };
+        const authenticity = classifyTraffic({
+          ua: req.headers['user-agent'] as string | undefined,
+          ip: clientIp(req),
+          hadRealToolCall: connectBody.method === 'tools/call',
+          // This emit block is already gated on `license.tier !== 'internal'`, so internal
+          // traffic never reaches here (TS narrows tier to exclude 'internal'). The L0
+          // internal-tier path of classifyTraffic is exercised by its unit canary instead.
+          isInternalTier: false,
+        });
         recordFunnelEvent({
           eventType: 'mcp_connect',
           sessionId,
           licenseTier: license.tier,
-          // identity_tier (OPS-ACTIVATION-LEAK-FIX-W1 CH2): projected from the SHARED
-          // resolveSessionIdentity tier so the snapshot's identity_coverage reads
-          // per-session stitchability off the once-per-session connect event (not a
-          // re-derivation). Additive to the existing {source, source_confidence}.
-          meta: { source, source_confidence, identity_tier: identityTier },
+          // identity_tier (CH2): projected from the SHARED resolveSessionIdentity tier so
+          // identity_coverage reads per-session stitchability off the once-per-session
+          // connect event. is_automated/reason (CH3): the canonical classifyTraffic verdict
+          // for by_authenticity. All additive to the existing {source, source_confidence}.
+          meta: {
+            source,
+            source_confidence,
+            identity_tier: identityTier,
+            is_automated: authenticity.is_automated,
+            automated_reason: authenticity.reason,
+          },
         });
       } catch { /* best-effort; never blocks request */ }
     }
