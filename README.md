@@ -244,7 +244,7 @@ Quota-only tiers. Every tier gets all venues, all assets, all timeframes — you
 
 ## What's new in v1.22.0
 
-- **🌐 12 exchanges live.** Composite trade calls + market-regime detection now span **12 perp venues** — **ASTER, BingX, Gate, HTX, KuCoin, MEXC, and Phemex** join Hyperliquid, Binance, Bybit, OKX, and Bitget on the verified, Merkle-anchored public track record.
+- **🌐 <span data-tr-field="exchange_count">12</span> exchanges live.** **ASTER, BingX, Gate, HTX, KuCoin, MEXC, and Phemex** join Hyperliquid, Binance, Bybit, OKX, and Bitget on the verified, Merkle-anchored public track record — composite trade calls, market-regime detection, and the per-venue PFE leaderboard now span every promoted venue.
 - **🏆 12-venue leaderboard.** The live [track-record leaderboard](https://algovault.com/track-record) now ranks per-venue PFE win rate across all 12 — filter to any newly-added venue.
 - **🔁 Forward-stable coverage.** The venue count reads live everywhere it appears, so coverage stays accurate as we keep adding venues.
 

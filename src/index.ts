@@ -3585,15 +3585,11 @@ tailwind.config = {
   <!-- Exchange Logo Strip -->
   <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap">
     <span style="color:#6e7681;font-size:12px;text-transform:uppercase;letter-spacing:1px">Analyzing</span>
-    <span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:#4ade80">Hyperliquid</span>
-    <span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:#F0B90B">Binance</span>
-    <span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:#F7A600">Bybit</span>
-    <span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:#fff">OKX</span>
-    <span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:#00C8BC">Bitget</span>
+    <span id="analyzing-chips"></span>
   </div>
   <!-- Cross-Venue Intelligence Callout -->
   <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.15);border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#c9d1d9">
-    <strong style="color:#58a6ff">Cross-Venue Intelligence</strong> &mdash; Trade calls are generated per exchange using native order books, funding rates, and OI data. The only MCP server analyzing 5 derivatives venues simultaneously.
+    <strong style="color:#58a6ff">Cross-Venue Intelligence</strong> &mdash; Trade calls are generated per exchange using native order books, funding rates, and OI data. The only MCP server analyzing ${EXCHANGE_COUNT} derivatives venues simultaneously.
   </div>
   <!-- On-Chain Verification Badge -->
   <div class="onchain-badge" id="onchain-badge" style="display:none">
@@ -4066,7 +4062,9 @@ async function load() {
 
     // Exchange filter tabs
     var exTabs = document.getElementById('exchange-tabs');
-    var exchanges = [{id:'all',label:'ALL Exchanges'},{id:'HL',label:'Hyperliquid'},{id:'BINANCE',label:'Binance'},{id:'BYBIT',label:'Bybit'},{id:'OKX',label:'OKX'},{id:'BITGET',label:'Bitget'}];
+    // OPS-VENUE-GO-LIVE Phase B (R3b-TR): data-driven from LB_EX_ORDER (the single SoT the
+    // leaderboard uses) → shows all 12 promoted venues now, auto-grows to 17 with zero edits.
+    var exchanges = [{id:'all',label:'ALL Exchanges'}].concat(LB_EX_ORDER.map(function(ex){ return {id:ex,label:LB_EX_LABEL[ex]||ex}; }));
     // DESIGN-W11-FF-CARD-BG (2026-05-15): inline style block REMOVED — relies on
     // .tab + .tab.active CSS rules (canonical bg + mint active text/border per
     // Q-CARDBG-1 + Q-CARDBG-2). font-size:13px overrides .tab default 12px →
@@ -4074,6 +4072,12 @@ async function load() {
     exTabs.innerHTML = exchanges.map(function(ex){
       var isActive = activeExchangeFilter === ex.id;
       return '<div class="tab'+(isActive?' active':'')+'" data-ex="'+ex.id+'" style="font-size:13px" onclick="setExchangeFilter(\\''+ex.id+'\\')">'+ex.label+'</div>';
+    }).join('');
+
+    // OPS-VENUE-GO-LIVE Phase B (R3b-TR): Analyzing chip row — same LB_EX_ORDER SoT (12 now, auto-grows to 17)
+    var chipsEl = document.getElementById('analyzing-chips');
+    if (chipsEl) chipsEl.innerHTML = LB_EX_ORDER.map(function(ex){
+      return '<span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:'+(LB_EX_COLOR[ex]||'#c9d1d9')+'">'+(LB_EX_LABEL[ex]||ex)+'</span>';
     }).join('');
 
     // DESIGN-W8 / C4 (2026-05-11): #tf-tabs population REMOVED — DOM target
@@ -4217,15 +4221,7 @@ function getSignupPageHtml(): string {
   <h1>AlgoVault Subscriptions</h1>
   <div class="subtitle">Free tier includes all assets and all 11 timeframes &mdash; capped at 100 calls/month. Upgrade for higher monthly limits and unlimited funding-arb results.</div>
   <div style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;flex-wrap:wrap">
-    <span style="color:#4ade80;font-size:12px;font-weight:600">Hyperliquid</span>
-    <span style="color:#6e7681">&middot;</span>
-    <span style="color:#F0B90B;font-size:12px;font-weight:600">Binance</span>
-    <span style="color:#6e7681">&middot;</span>
-    <span style="color:#F7A600;font-size:12px;font-weight:600">Bybit</span>
-    <span style="color:#6e7681">&middot;</span>
-    <span style="color:#fff;font-size:12px;font-weight:600">OKX</span>
-    <span style="color:#6e7681">&middot;</span>
-    <span style="color:#00C8BC;font-size:12px;font-weight:600">Bitget</span>
+    ${EXCHANGES.map(e => '<span style="color:#8b949e;font-size:12px;font-weight:600">' + e.label + '</span>').join('<span style="color:#6e7681">&middot;</span>')}
   </div>
   ${renderSignupFlowDark()}
   ${renderPlanCards()}
