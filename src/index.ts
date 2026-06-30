@@ -3585,7 +3585,7 @@ tailwind.config = {
   <!-- Exchange Logo Strip -->
   <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap">
     <span style="color:#6e7681;font-size:12px;text-transform:uppercase;letter-spacing:1px">Analyzing</span>
-    <span id="analyzing-chips"></span>
+    <span id="analyzing-chips">${EXCHANGES.map(e => '<span style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;color:#8b949e">' + e.label + '</span>').join('')}</span>
   </div>
   <!-- Cross-Venue Intelligence Callout -->
   <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.15);border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#c9d1d9">
