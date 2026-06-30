@@ -92,7 +92,7 @@ Under the hood, a self-tuning model fuses momentum, trend structure, derivatives
     { "coin": "SOL", "timeframe": "15m", "confidence": 73 }
   ],
   "_algovault": {
-    "version": "1.21.0",
+    "version": "1.22.0",
     "tool": "get_trade_call",
     "compatible_with": ["crypto-quant-risk-mcp", "crypto-quant-backtest-mcp"]
   }
@@ -242,17 +242,20 @@ Quota-only tiers. Every tier gets all venues, all assets, all timeframes — you
 
 ---
 
-## What's new in v1.21.0
+## What's new in v1.22.0
 
-- **📊 `scan_trade_calls` ranking lenses (`rankBy`).** Rank the scan universe 9 ways — funding (negative/positive), top gainers/losers, volume, open interest, volatility (ATRP), and 24h OI change — plus aliases. One scanner, many market lenses.
-- **🧾 Verdict receipts (`_receipts`).** Every `get_trade_call` / `get_trade_signal` / `scan_trade_calls` verdict now carries inline proof: conviction, the top factors behind it, the live track record, and a verify link.
-- **🔌 Gemini, Kraken & Alpaca pairings.** Tutorials + runnable keyless demos that wire AlgoVault's analysis into each venue's own MCP execution kit. Browse at [algovault.com/integrations](https://algovault.com/integrations).
-- **🏆 Live track-record leaderboard.** One real-time, filterable leaderboard at [algovault.com/track-record](https://algovault.com/track-record).
-- **🎁 Referral program.** Free email-to-key signup + a public [referral page](https://algovault.com/referral) — refer a friend, you both get more calls.
-- **💸 Pay-per-call on the trade-call and scanner routes.** x402 (USDC on Base) — 100 free calls/month, then pay per call, no signup.
+- **🌐 12 exchanges live.** Composite trade calls + market-regime detection now span **12 perp venues** — **ASTER, BingX, Gate, HTX, KuCoin, MEXC, and Phemex** join Hyperliquid, Binance, Bybit, OKX, and Bitget on the verified, Merkle-anchored public track record.
+- **🏆 12-venue leaderboard.** The live [track-record leaderboard](https://algovault.com/track-record) now ranks per-venue PFE win rate across all 12 — filter to any newly-added venue.
+- **🔁 Forward-stable coverage.** The venue count reads live everywhere it appears, so coverage stays accurate as we keep adding venues.
 
-### 🔒 Security hardening
-Payment-path and webhook hardening: x402 per-route price binding + replay protection; webhook delivery now pins egress IPs and signs every payload with a timestamped HMAC. **Webhook subscribers:** the signature scheme changed — if you verify `X-AlgoVault-Signature`, update per [docs/WEBHOOKS.md](https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp/blob/main/docs/WEBHOOKS.md).
+> **Refresh your MCP client to pick up this release.** MCP clients cache `tools/list` at session start — Claude.ai/Desktop: toggle the connector off+on; Cursor/Cline: restart the MCP server connection.
+
+### v1.21.0 highlights (recap)
+
+- **📊 `scan_trade_calls` ranking lenses (`rankBy`)** — rank the scan universe 9 ways (funding, gainers/losers, volume, open interest, volatility, 24h OI change) + aliases.
+- **🧾 Verdict receipts (`_receipts`)** — inline conviction, top factors, live track record, and a verify link on every verdict.
+- **🔌 Gemini, Kraken & Alpaca pairings** · **🏆 live track-record leaderboard** · **🎁 referral program** · **💸 pay-per-call** on the trade-call & scanner routes.
+- **🔒 Security hardening** — x402 per-route price binding + replay protection; webhook egress-IP pinning + timestamped HMAC signatures. *Breaking for webhook subscribers* — update per [docs/WEBHOOKS.md](https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp/blob/main/docs/WEBHOOKS.md).
 
 ### v1.20.0 highlights (recap)
 
@@ -262,29 +265,6 @@ Payment-path and webhook hardening: x402 per-route price binding + replay protec
 - **🧭 Smarter errors on young listings.** Insufficient history returns a structured `INSUFFICIENT_CANDLES` error with `suggested_timeframes` instead of a plain string.
 
 > MCP clients cache `tools/list` at session start — toggle the connector off/on (or restart the MCP connection) to see `scan_trade_calls`.
-
-### v1.19.0 highlights (recap)
-
-- **🔔 Webhook Delivery Service.** Subscribe a URL; receive `trade_call` and `regime_shift` events as push, not poll. Payloads are HMAC-SHA256 signed, retried, and idempotent. Manage over HTTP: `POST` / `GET` / `DELETE /api/webhooks`, plus `POST /api/webhooks/:id/test` for a live test fire. API key required.
-- **🔗 One-call signal verification.** Every webhook payload carries a `verify_url`. Resolve it at `GET /api/verify-signal?hash=<signal_hash>` for that call's public, on-chain-anchored record.
-- **🔌 Two more platform integration examples.** The `algovault-integrations` mono-repo now ships 7 reference implementations — Hummingbot and FreqTrade join the existing five. New tiles on [algovault.com/integrations](https://algovault.com/integrations).
-
-**→ Set up a webhook:** [algovault.com/integrations#webhooks](https://algovault.com/integrations#webhooks) · **Webhook docs:** [docs/WEBHOOKS.md](https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp/blob/main/docs/WEBHOOKS.md)
-
-### v1.18.2 highlights (recap)
-
-- **🔌 Two new platform integration examples.** The `algovault-integrations` mono-repo now ships 5 reference implementations total (was 3 at v1.18.0):
-  - **QuantDinger** (reference-architecture doc) — cross-MCP IDE-mediated orchestration. AlgoVault MCP and QuantDinger MCP connect through the user's IDE (Claude Desktop / Cursor / Codex CLI); no transformer code.
-  - **Cryptohopper** (TypeScript) — Signaler webhook with HMAC-sha512 signed payloads. First HMAC-authed transport in the integrations repo.
-- **🧭 "Connect Your Trading Platform" section** added to [algovault.com/integrations](https://algovault.com/integrations). Discoverable tiles for the 5 platform examples; "Why integrate with AlgoVault?" framing replaces the prior exchange-kit framing.
-
-### v1.18.0 highlights (recap)
-
-- **⏱️ 3-minute timeframe goes LIVE on the public Live Track Record.** The 3m card and Methodology > Evaluation Windows row are now visible at [algovault.com/track-record](https://algovault.com/track-record). The 9th evaluated timeframe is live. (The `3m` key shipped to `/api/performance-public.byTimeframe` in v1.16.0; v1.18.0 completes the dashboard-display chain.)
-- **🔌 Platform integration examples.** New public repo at [github.com/AlgoVaultLabs/algovault-integrations](https://github.com/AlgoVaultLabs/algovault-integrations) ships reference implementations of the Verifiable-Signal v1.0 spec (introduced in v1.17.0). Three platforms in v1.18.0:
-  - **AI4Trade** (TypeScript) — REST POST with token-in-body auth.
-  - **Nautilus Trader** (Python) — Subclass of Nautilus's `Data` abstract base.
-  - **3Commas** (TypeScript) — Signal Bot webhook via per-bot curry-pattern factory.
 
 ---
 
