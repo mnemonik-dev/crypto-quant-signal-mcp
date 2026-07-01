@@ -178,6 +178,11 @@ async function runStatic() {
     if (!f?.x402) drifts.push(`a2mcp tool ${name} is UNPRICED (x402:null) — a paid A2MCP listing needs a price`);
     if (!f?.channels?.httpX402) drifts.push(`a2mcp tool ${name} lacks httpX402 — A2MCP settlement rides the x402 transport`);
     if (/^get_equity_/.test(name)) drifts.push(`a2mcp tool ${name} is an equity (securities/§7.1 HOLD — must be a2mcp:false)`);
+    // (d) a2mcp price DERIVES 1:1 from TOOL_PRICING (same product, same price every channel — Mr.1 R4 2026-06-30).
+    const a2Price = okx.okxA2mcpPriceUsdt0(name);
+    if (f?.x402 && a2Price !== f.x402.basePriceUsd) {
+      drifts.push(`a2mcp price for ${name} (${a2Price}) != registry basePriceUsd (${f.x402.basePriceUsd}) — must derive 1:1 from TOOL_PRICING`);
+    }
   }
 
   if (drifts.length === 0) {

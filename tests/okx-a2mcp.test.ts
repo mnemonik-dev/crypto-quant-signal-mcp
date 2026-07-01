@@ -20,9 +20,9 @@ import {
   StubOkxA2mcpProvider,
   XLAYER_NETWORK,
   XLAYER_USDT0,
-  OKX_A2MCP_MIN_PRICE_USDT0,
   A2MCP_PREFIX,
 } from '../src/lib/okx-a2mcp.js';
+import { getFeature } from '../src/lib/feature-registry.js';
 
 const CREDS = { OKX_AI_ENABLED: 'true', OKX_API_KEY: 'k', OKX_SECRET_KEY: 's', OKX_PASSPHRASE: 'p', OKX_A2MCP_PAYTO: '0xabc' };
 
@@ -73,22 +73,17 @@ describe('okxA2mcpTools — registry-derived listed set', () => {
   });
 });
 
-describe('okxA2mcpPriceUsdt0 — deliberate okx.ai price', () => {
-  it('is at least the floor (>0.05) for every listed tool', () => {
+describe('okxA2mcpPriceUsdt0 — derived 1:1 from TOOL_PRICING (registry) as USDT0', () => {
+  it('equals the registry basePriceUsd for every listed tool (same price every channel)', () => {
     for (const t of okxA2mcpTools()) {
-      expect(okxA2mcpPriceUsdt0(t)).toBeGreaterThanOrEqual(OKX_A2MCP_MIN_PRICE_USDT0);
-      expect(OKX_A2MCP_MIN_PRICE_USDT0).toBeGreaterThan(0.05);
+      expect(okxA2mcpPriceUsdt0(t)).toBe(getFeature(t)!.x402!.basePriceUsd);
     }
   });
-  it('honors the OKX_A2MCP_MIN_PRICE_USDT0 env override', () => {
-    const prev = process.env.OKX_A2MCP_MIN_PRICE_USDT0;
-    try {
-      process.env.OKX_A2MCP_MIN_PRICE_USDT0 = '0.25';
-      expect(okxA2mcpPriceUsdt0('get_trade_call')).toBeGreaterThanOrEqual(0.25);
-    } finally {
-      if (prev === undefined) delete process.env.OKX_A2MCP_MIN_PRICE_USDT0;
-      else process.env.OKX_A2MCP_MIN_PRICE_USDT0 = prev;
-    }
+  it('matches the R4-signed-off schedule (funding_arb 0.01, others 0.02)', () => {
+    expect(okxA2mcpPriceUsdt0('scan_funding_arb')).toBe(0.01);
+    expect(okxA2mcpPriceUsdt0('get_trade_call')).toBe(0.02);
+    expect(okxA2mcpPriceUsdt0('get_market_regime')).toBe(0.02);
+    expect(okxA2mcpPriceUsdt0('scan_trade_calls')).toBe(0.02);
   });
 });
 

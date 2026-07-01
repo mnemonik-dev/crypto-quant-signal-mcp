@@ -46,8 +46,6 @@ export const XLAYER_USDT0_DECIMALS = 6;
 export const XLAYER_USDT0_EIP712_NAME = 'USD₮0';
 export const OKX_FACILITATOR_DEFAULT_URL = 'https://web3.okx.com';
 export const A2MCP_PREFIX = '/a2mcp';
-/** Deliberate okx.ai floor (USDT0): >0.05 (competitor floor) + premium over the $0.02 Base price. */
-export const OKX_A2MCP_MIN_PRICE_USDT0 = 0.06;
 
 // ─────────────────────── registry-derived listed set (NO hardcoded okx.ai tool list) ───────────────────────
 /** The tools listed on okx.ai A2MCP — DERIVED from the registry (`channels.a2mcp` + enabled). */
@@ -56,15 +54,14 @@ export function okxA2mcpTools(): string[] {
 }
 
 /**
- * Deliberate okx.ai per-call price in USDT0, derived from the registry base price via a
- * documented policy (3× the Base $/call, floored at OKX_A2MCP_MIN_PRICE_USDT0 or the env
- * override). R4 presents the per-tool table; Mr.1 finalizes at registration (R5).
+ * okx.ai per-call price in USDT0 — DERIVED 1:1 from the TOOL_PRICING SoT (the registry
+ * `x402.basePriceUsd`), denominated USDT0. Same product, same price on every channel
+ * (Mr.1 R4 sign-off 2026-06-30): OKX take-rate=0 (UA §2.3) + gas subsidized (feePayer=true)
+ * → nothing to pad; NO separate/higher schedule. Editable later once ranked. The drift
+ * canary asserts this equals the registry basePriceUsd for every a2mcp tool.
  */
 export function okxA2mcpPriceUsdt0(tool: string): number {
-  const base = getFeature(tool)?.x402?.basePriceUsd ?? 0.02;
-  const envFloor = Number(process.env.OKX_A2MCP_MIN_PRICE_USDT0);
-  const floor = Number.isFinite(envFloor) && envFloor > 0 ? envFloor : OKX_A2MCP_MIN_PRICE_USDT0;
-  return Math.max(floor, Math.round(base * 3 * 100) / 100);
+  return getFeature(tool)?.x402?.basePriceUsd ?? 0.02;
 }
 
 // ─────────────────────── env → config → pure selection (mirrors selectFacilitator) ───────────────────────
