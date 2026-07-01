@@ -70,6 +70,20 @@ Every producer logs its `metadata.get_cost` estimate before pulling. Phase-1 dai
   ```
 - Public-copy HOLD stays in force until Mr.1 flips it post-audit; this alert does NOT unlock copy — it only prompts the audit.
 
+## Daily readiness readout — "Tool Promotion Readiness" card (EQUITY-READINESS-REPORT-W1)
+The launch-readiness **latch** above is a *fired-once* decision alert — it fires ONE Telegram when the gate first clears (`n≥150 ∧ s≥3`), writes the `.fired` latch, then goes silent forever. So after it fires, Mr.1 has no ongoing readout of where the equity tools stand. This wave adds a **recurring** card so equity readiness is visible **every day**.
+
+- **Where it lives:** a section appended to the daily venue digest (`src/scripts/venue-readiness-report.ts`, host cron `5 6 * * *` → `docker exec … node dist/scripts/venue-readiness-report.js`). It rides that digest's **single** `sendDigest()` Telegram — NOT a new cron, alert, or `send_telegram.sh` consumer. (The venue digest is venue-scoped by `exchange_id`; equities are a separate asset class, so they never appeared in it — that's the gap this closes.)
+- **Renderer:** `src/scripts/tool-readiness-report.ts` — a generic, asset-class-parameterised `renderToolReadiness(assetClass)` (options/futures/intraday Phase-2 launch gates reuse it). Equity is the first consumer.
+- **What it shows:** `get_equity_call` — sample `n`/150 (%), sessions `s`/3 (%), live PFE WR, per-rank-bucket WR one-liner, 7d out-of-universe count, and a status token (`⏳ ACCUMULATING` below the gate → `✅ READY-FOR-AUDIT` once `n≥150 ∧ s≥3`), with `🔒 HOLD — pending Mr.1 flip` appended while the public-copy HOLD is in force. `get_equity_regime` — a classifier line (sessions, last session, latest-session universe coverage), explicitly labelled **"classifier · no PFE gate"** (a regime classifier has no win-rate — none is fabricated).
+- **Latch vs card — the key difference:** the **latch** *decides and fires once* (it tells Mr.1 to dispatch `EQUITY-CALIBRATION-AUDIT-W1`); the **card** *reports continuously* (it never fires anything, never sends its own TG, never re-arms — it just renders the current numbers inside the existing digest). `READY-FOR-AUDIT` on the card mirrors the latch's fired state; neither auto-promotes, and the venue **0.80 WR** promotion bar is **not** an auto-gate for equities (the equity gate triggers a calibration *audit*, a human decision).
+- **Single-derivation:** the card lifts its SQL **verbatim** from `/opt/algovault-monitoring/equity-launch-readiness.sh` (same matured predicate, same PFE-WR math, same `equity_pfe_by_rank_bucket` view, same `n≥150`/`s≥3` constants) — no independent re-derivation.
+- **Verify (post-deploy, read-only):**
+  ```
+  docker exec crypto-quant-signal-mcp-mcp-server-1 sh -lc 'DRY_RUN=1 node dist/scripts/venue-readiness-report.js' | tail -n 8
+  ```
+  prints the venue blocks followed by the `🛠 Tool Promotion Readiness — Equities` section, then `[DRY_RUN] not sent.` (no Telegram). INTERNAL — PFE WR only; `outcome_return_pct` is never selected.
+
 ## Out-of-universe demand instrumentation (`equity_symbol_misses`)
 Every `SYMBOL_NOT_IN_UNIVERSE` from `get_equity_call`/`get_equity_regime` records the requested ticker (fire-and-forget, fail-open — never blocks the tool). This is the demand signal for a future 500→1000 universe bump. Internal-only.
 

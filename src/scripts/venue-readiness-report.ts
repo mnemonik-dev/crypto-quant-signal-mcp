@@ -19,6 +19,8 @@
 import { listVenues } from '../lib/venue-store.js';
 import { computeVenueStats } from './evaluate-venues.js';
 import { sendDigest } from '../lib/telegram.js';
+import { dbQuery } from '../lib/performance-db.js';
+import { loadEquityReadinessInput, renderToolReadiness } from './tool-readiness-report.js';
 import type { VenueRecord } from '../types.js';
 
 const PFE_WR_THRESHOLD = 0.80;
@@ -97,6 +99,19 @@ async function main(): Promise<void> {
   }
   const dateLabel = new Date().toISOString().slice(0, 10);
   const sections = buildReport(rows, statsByVenue, dateLabel);
+
+  // EQUITY-READINESS-REPORT-W1: append the recurring "Tool Promotion Readiness"
+  // card for the (non-venue) equity tools so it rides THIS digest's single
+  // sendDigest() Telegram — no new cron/alert channel. Fail-soft: a DB hiccup on
+  // the equity section must never suppress the venue blocks.
+  try {
+    sections.push(renderToolReadiness(await loadEquityReadinessInput(dbQuery)));
+  } catch (e) {
+    console.error(
+      `[tool-readiness] equity section failed (venue digest still sent): ${e instanceof Error ? e.message : e}`,
+    );
+  }
+
   const text = sections.join('\n\n');
   console.log(text);
 
