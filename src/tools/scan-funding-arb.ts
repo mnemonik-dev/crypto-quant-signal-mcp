@@ -11,7 +11,11 @@ import type {
   FundingUrgency,
   LicenseInfo,
   FundingData,
+  ExchangeId,
 } from '../types.js';
+import { annualizeFunding } from '../lib/rank-constants.js';
+import { FUNDING_VENUE_META, FUNDING_ARB_FETCH_ADAPTERS } from '../lib/funding-venues.js';
+import { fetchVenueUniverse } from '../lib/exchange-universe.js';
 
 // ── LATENCY-W1 C5: TTL caches for adapter calls (LRU-capped) ──
 //
@@ -41,17 +45,51 @@ interface FundingHistoryCacheEntry {
 }
 
 // Module-level singletons (process-lifetime). Reset via _resetScanFundingArbCaches().
-let predictedFundingsCache: PredictedFundingsCacheEntry | null = null;
+// OPS-FUNDING-ARB-EXPAND-W1: predicted-funding cache is now PER-ExchangeId (was a single HL entry) —
+// the expanded arb fetches multiple adapters' feeds per scan.
+const predictedFundingsCache = new Map<string, PredictedFundingsCacheEntry>();
 const fundingHistoryCache = new Map<string, FundingHistoryCacheEntry>();
+// Per-venue coin→USD-liquidity map (from the scan SoT getVenueUniverse), 60s TTL — powers the per-leg
+// liquidity gate.
+const LIQUIDITY_TTL_MS = 60_000;
+const liquidityCache = new Map<string, { at: number; byCoin: Map<string, number> }>();
+// (Q-B) per-leg liquidity floor — a spread surfaces only if the coin clears this on BOTH legs (notional
+// OI for real-OI venues; 24h volume for the ASTER volume-proxy). $1M start.
+// TODO(revisit by 2026-07-15): calibrate against the observed OI distribution across the 7 qualifying
+// venues — raise if the tail is noisy, lower if it kills meaningful pairs (defensive-threshold hygiene).
+const MIN_LIQUIDITY_USD = 1_000_000;
 
-async function getCachedPredictedFundings(adapter: ExchangeAdapter): Promise<FundingData[]> {
+async function getCachedPredictedFundings(exchangeId: ExchangeId): Promise<FundingData[]> {
   const now = Date.now();
-  if (predictedFundingsCache && now - predictedFundingsCache.at <= PREDICTED_FUNDINGS_TTL_MS) {
-    return predictedFundingsCache.data;
-  }
-  const data = await adapter.getPredictedFundings();
-  predictedFundingsCache = { at: now, data };
+  const hit = predictedFundingsCache.get(exchangeId);
+  if (hit && now - hit.at <= PREDICTED_FUNDINGS_TTL_MS) return hit.data;
+  const data = await getAdapter(exchangeId).getPredictedFundings();
+  predictedFundingsCache.set(exchangeId, { at: now, data });
   return data;
+}
+
+/** Per-leg USD liquidity for `exchangeId` (coin → notionalOI_usd, or volume24h_usd for proxy venues).
+ *  Fail-soft: a fetch error → empty map (that venue's coins are gated out this cycle, never a crash). */
+async function getVenueLiquidity(exchangeId: ExchangeId): Promise<Map<string, number>> {
+  const now = Date.now();
+  const hit = liquidityCache.get(exchangeId);
+  if (hit && now - hit.at <= LIQUIDITY_TTL_MS) return hit.byCoin;
+  const byCoin = new Map<string, number>();
+  try {
+    for (const a of await fetchVenueUniverse(exchangeId)) {
+      byCoin.set(a.coin, a.oiIsProxy ? a.volume24h_usd : a.notionalOI_usd);
+    }
+  } catch { /* fail-soft per venue */ }
+  liquidityCache.set(exchangeId, { at: now, byCoin });
+  return byCoin;
+}
+
+// Test seam (matches _setScanScorerForTest et al.): when set, the per-leg liquidity gate reads this
+// instead of the live SoT — and the live prefetch is SKIPPED — so unit tests never hit the network.
+// Return Infinity to make every leg liquid (0-regression tests), or specific USD values (gate tests).
+let _liquidityOverride: ((exchangeId: ExchangeId, coin: string) => number) | null = null;
+export function _setLiquidityOverrideForTest(fn: ((exchangeId: ExchangeId, coin: string) => number) | null): void {
+  _liquidityOverride = fn;
 }
 
 async function getCachedFundingHistory(
@@ -92,11 +130,12 @@ async function getCachedFundingHistory(
  * need to vary fundings per scan while observing fundingHistory growth.
  */
 export function _resetScanFundingArbCaches(): void {
-  predictedFundingsCache = null;
+  predictedFundingsCache.clear();
   fundingHistoryCache.clear();
+  liquidityCache.clear();
 }
 export function _resetPredictedFundingsCache(): void {
-  predictedFundingsCache = null;
+  predictedFundingsCache.clear();
 }
 
 /**
@@ -109,7 +148,7 @@ export function _getScanFundingArbCacheSizes(): {
   fundingHistoryCap: number;
 } {
   return {
-    predictedFundingsCached: predictedFundingsCache !== null,
+    predictedFundingsCached: predictedFundingsCache.size > 0,
     fundingHistorySize: fundingHistoryCache.size,
     fundingHistoryCap: FUNDING_HISTORY_CACHE_MAX,
   };
@@ -121,13 +160,9 @@ interface ScanFundingArbInput {
   license?: LicenseInfo;
 }
 
-// Venue funding period in hours
-const VENUE_PERIOD_HOURS: Record<string, number> = {
-  HlPerp: 1,       // HL pays hourly
-  BinPerp: 8,      // Binance pays every 8h
-  BybitPerp: 8,    // Bybit pays every 8h
-};
-
+// OPS-FUNDING-ARB-EXPAND-W1: the local VENUE_PERIOD_HOURS 3-map is RETIRED — funding intervals now come
+// from the shared FUNDING_VENUE_META SoT (funding-venues.ts) and normalization runs through the shared
+// annualizeFunding primitive. A new qualifying venue joins the arb via a META row, not a hand-edit here.
 const HOURS_PER_YEAR = 8760;
 
 // Composite ranking weights (research-backed: spread is primary, urgency second, conviction third)
@@ -157,13 +192,35 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
     });
   }
 
-  const adapter = getAdapter();
-  let fundings;
-  try {
-    // C5 (LATENCY-W1): cached, 30s TTL. Cache miss path falls through to the
-    // adapter's real getPredictedFundings(), so error semantics are identical.
-    fundings = await getCachedPredictedFundings(adapter);
-  } catch {
+  // OPS-FUNDING-ARB-EXPAND-W1: fetch every qualifying adapter's predicted-funding feed (fail-soft PER
+  // adapter — a down venue is skipped, never crashes the scan) and MERGE by coin. HL's feed is the
+  // Bin/HL/Bybit aggregate; GATE/KUCOIN/ASTER/OKX each add their own venue. Dedup by venue-string keeps
+  // HL the sole source for Bin/Bybit → 0-regression on the pre-expansion 3. Prefetch the per-venue
+  // liquidity maps (scan SoT) for the gate in the same round-trip. Both cached (30s / 60s TTL).
+  const [feeds, liquidityByExchange] = await Promise.all([
+    Promise.all(FUNDING_ARB_FETCH_ADAPTERS.map(v => getCachedPredictedFundings(v).catch(() => [] as FundingData[]))),
+    _liquidityOverride
+      ? Promise.resolve(new Map<ExchangeId, Map<string, number>>())
+      : (async () => {
+          const ids = [...new Set(Object.values(FUNDING_VENUE_META).map(m => m.exchangeId))];
+          const pairs = await Promise.all(ids.map(async id => [id, await getVenueLiquidity(id)] as const));
+          return new Map<ExchangeId, Map<string, number>>(pairs);
+        })(),
+  ]);
+
+  const mergedByCoin = new Map<string, FundingData['venues']>();
+  for (const feed of feeds) {
+    for (const entry of feed) {
+      const merged = mergedByCoin.get(entry.coin) ?? [];
+      for (const ve of entry.venues) {
+        if (!merged.some(m => m.venue === ve.venue)) merged.push(ve);
+      }
+      mergedByCoin.set(entry.coin, merged);
+    }
+  }
+  const fundings: FundingData[] = [...mergedByCoin.entries()].map(([coin, venues]) => ({ coin, venues }));
+  if (fundings.length === 0) {
+    // Every qualifying feed errored/empty this cycle — fail-soft, not a crash.
     return {
       opportunities: [],
       scannedPairs: 0,
@@ -205,9 +262,26 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
 
     for (const v of venueEntries) {
       if (isNaN(v.fundingRate)) continue;
+      // OPS-FUNDING-ARB-EXPAND-W1: interval-correct annualization via the shared annualizeFunding
+      // primitive + the FUNDING_VENUE_META interval SoT. `annualized / HOURS_PER_YEAR` === `rate /
+      // intervalHours` (byte-identical hourly rate → 0-regression on the pre-expansion HL/Bin/Bybit),
+      // but a venue NOT in the qualifying set — or with an unknown/invalid interval — self-skips
+      // rather than silently using a wrong period, so NO false cross-interval spread ever surfaces on
+      // this public, Merkle-anchored tool.
+      const meta = FUNDING_VENUE_META[v.venue];
+      if (!meta) continue;
+      // OPS-FUNDING-ARB-EXPAND-W1 (Q-B): per-leg liquidity gate — a venue is a valid arb LEG for this
+      // coin only if the coin clears MIN_LIQUIDITY_USD there (notional OI, or 24h volume for proxy
+      // venues). An illiquid leg = a non-executable / false spread → excluded (quality > breadth). A
+      // coin left with <2 liquid venues yields no spread (the `venues.length < 2` guard below).
+      const legLiquidity = _liquidityOverride
+        ? _liquidityOverride(meta.exchangeId, coin)
+        : (liquidityByExchange.get(meta.exchangeId)?.get(coin) ?? 0);
+      if (legLiquidity < MIN_LIQUIDITY_USD) continue;
+      const annualized = annualizeFunding(v.fundingRate, meta.intervalHours);
+      if (annualized === null) continue;
       rates[v.venue] = v.fundingRate;
-      const period = VENUE_PERIOD_HOURS[v.venue] || 8;
-      hourlyRates[v.venue] = v.fundingRate / period;
+      hourlyRates[v.venue] = annualized / HOURS_PER_YEAR;
       nextFundingTimes[v.venue] = v.nextFundingTime;
     }
 
@@ -268,8 +342,10 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
 
   // C5 (LATENCY-W1): cached, 60s TTL keyed by ${coin}:${minute-bucket}, LRU(200).
   // Same .catch(() => []) error swallow as before.
+  // Conviction uses HL's 24h funding history for the coin (the aggregate feed's stability proxy) —
+  // getAdapter('HL') since the single `adapter` var is gone (multi-adapter merge above).
   const historyPromises = candidates.map(opp =>
-    getCachedFundingHistory(adapter, opp.coin, historyStartTime).catch(() => [])
+    getCachedFundingHistory(getAdapter('HL'), opp.coin, historyStartTime).catch(() => [])
   );
   const histories = await Promise.all(historyPromises);
 
