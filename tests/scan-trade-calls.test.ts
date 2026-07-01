@@ -27,6 +27,7 @@ import {
   type ScanTradeCallsResponse,
   type ScanQuotaExhaustedResponse,
 } from '../src/tools/scan-trade-calls.js';
+import { PROMOTED_VENUE_IDS } from '../src/lib/capabilities.js';
 
 const mockUniverse = vi.mocked(getExchangeTopAssetsWithVolume);
 const SCHEMA = z.object(SCAN_TRADE_CALLS_SCHEMA);
@@ -102,8 +103,14 @@ describe('SCAN_TRADE_CALLS_SCHEMA bounds + defaults', () => {
     const parsed = SCHEMA.parse({});
     expect(parsed).toMatchObject({ topN: 20, timeframe: '15m', exchange: 'BINANCE', includeHolds: false, limit: 10 });
   });
-  it('rejects a shadow venue not in the promoted-5 enum', () => {
-    expect(SCHEMA.safeParse({ exchange: 'ASTER' }).success).toBe(false);
+  it('accepts every promoted venue (enum derived from EXCHANGES) + rejects a non-promoted shadow venue', () => {
+    // OPS-SCAN-UNIVERSE-EXPAND-W1: the exchange enum is now the 12 promoted venues (was the 5); ASTER
+    // et al. are accepted. A configured-but-shadow ExchangeId (EDGEX) is still rejected at the boundary.
+    for (const v of PROMOTED_VENUE_IDS) {
+      expect(SCHEMA.safeParse({ exchange: v }).success).toBe(true);
+    }
+    expect(SCHEMA.safeParse({ exchange: 'EDGEX' }).success).toBe(false);
+    expect(SCHEMA.safeParse({ exchange: 'NOPE' }).success).toBe(false);
   });
   it('rejects limit 101 and minConfidence 101', () => {
     expect(SCHEMA.safeParse({ limit: 101 }).success).toBe(false);

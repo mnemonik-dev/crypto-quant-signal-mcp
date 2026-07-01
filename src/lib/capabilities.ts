@@ -39,7 +39,7 @@ export interface ExchangeEntry {
   label: string;
 }
 
-export const EXCHANGES: readonly ExchangeEntry[] = Object.freeze([
+export const EXCHANGES = Object.freeze([
   { id: 'HL',      label: 'Hyperliquid' },
   { id: 'BINANCE', label: 'Binance' },
   { id: 'BYBIT',   label: 'Bybit' },
@@ -58,9 +58,23 @@ export const EXCHANGES: readonly ExchangeEntry[] = Object.freeze([
   { id: 'KUCOIN',  label: 'KuCoin' },
   { id: 'MEXC',    label: 'MEXC' },
   { id: 'PHEMEX',  label: 'Phemex' },
-]);
+] as const) satisfies readonly ExchangeEntry[];
 
 export const EXCHANGE_COUNT: number = EXCHANGES.length;
+
+/**
+ * OPS-SCAN-UNIVERSE-EXPAND-W1 — the promoted-venue id union, DERIVED from `EXCHANGES`
+ * (the single SoT). `EXCHANGES` is `as const`, so this resolves to the exact 12-literal
+ * union, NOT the full `ExchangeId`. Every scan representation (the universe FETCHERS record,
+ * `ScanExchangeId`, `SCAN_EXCHANGES`, the Zod enum, the x402 bazaar enum, the OI-sampler
+ * venue list) projects from this — so a `Record<PromotedVenueId, …>` is tsc-exhaustive and
+ * "forgot to add the new venue to scan" becomes a compile error. A unit test asserts this
+ * set equals `listVenues('promoted')` so the compile-time list can't drift from the DB truth.
+ */
+export type PromotedVenueId = (typeof EXCHANGES)[number]['id'];
+
+/** Runtime projection of {@link PromotedVenueId} — the promoted ids in render order. */
+export const PROMOTED_VENUE_IDS: readonly PromotedVenueId[] = EXCHANGES.map((e) => e.id);
 
 /**
  * Timeframes accepted by `get_trade_call`'s Zod enum. SOURCE OF TRUTH must

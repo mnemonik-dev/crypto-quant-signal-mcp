@@ -34,6 +34,7 @@
 import pLimit from 'p-limit';
 import { getTradeSignal } from '../tools/get-trade-call.js';
 import { getExchangeTopAssetsWithVolume } from './exchange-universe.js';
+import { PROMOTED_VENUE_IDS, type PromotedVenueId } from './capabilities.js';
 import { getRankedUniverse, type RankedAsset } from './rank-metrics.js';
 import { resolveRankBy, type RankBy } from './rank-constants.js';
 import type { OiWindow, OiBasis } from './oi-snapshots.js';
@@ -42,9 +43,12 @@ import type { SignalVerdict, RegimeType, TradeCallResult } from '../types.js';
 import { enrichScanCall } from './scan-digest.js';
 import type { ReceiptFactor } from './receipts.js';
 
-/** The 5 PROMOTED venues — the only exchanges `getExchangeTopAssetsWithVolume` supports. */
-export type ScanExchangeId = 'HL' | 'BINANCE' | 'BYBIT' | 'OKX' | 'BITGET';
-export const SCAN_EXCHANGES: readonly ScanExchangeId[] = ['BINANCE', 'HL', 'BYBIT', 'OKX', 'BITGET'] as const;
+// OPS-SCAN-UNIVERSE-EXPAND-W1: the promoted-venue scan set, DERIVED from EXCHANGES (capabilities.ts —
+// the single SoT). Was a hand-maintained 5-literal; now `ScanExchangeId` is the 12-promoted union and
+// `SCAN_EXCHANGES` its runtime projection, so a new promoted venue flows into the scan automatically
+// (getExchangeTopAssetsWithVolume now covers all 12 + fail-softs on the rest).
+export type ScanExchangeId = PromotedVenueId;
+export const SCAN_EXCHANGES: readonly ScanExchangeId[] = PROMOTED_VENUE_IDS;
 
 /** Public per-coin scan row — allow-listed projection of a trade call. */
 export interface ScanCallItem {

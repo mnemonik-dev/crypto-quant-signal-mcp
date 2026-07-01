@@ -20,6 +20,8 @@ import type { ExchangeId } from '../types.js';
 import { getTicker24hrFullCoalesced } from './adapters/binance.js';
 import { hlInfoPost } from './adapters/hyperliquid.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './adapters/_upstream-fetch.js';
+import type { PromotedVenueId } from './capabilities.js';
+import { normalizeBinanceCoin } from './coin-overrides.js';
 
 export interface ExchangeAsset {
   /** Bare coin symbol, uppercase (e.g. `BTC`, `SOL`). */
@@ -46,9 +48,18 @@ export interface ExchangeAsset {
   /** Funding interval in hours (HL=1; Bybit live `fundingIntervalHour`; 8h default
    *  elsewhere). null = unknown → APR null (never guessed). */
   fundingIntervalHours?: number | null;
+  /** OPS-SCAN-UNIVERSE-EXPAND-W1: true ⇔ `notionalOI_usd` is a 24h-VOLUME liquidity proxy because
+   *  the venue exposes no bulk OI endpoint (Binance / Aster / BingX). The oi_change lens + OI sampler
+   *  SKIP proxy assets (never record volume as OI); the default / oi + volume lenses still rank them,
+   *  labeled "open interest / liquidity". Honest-labeling contract — never silently mislabeled. */
+  oiIsProxy?: boolean;
 }
 
-type PromotedExchangeId = 'HL' | 'BINANCE' | 'BYBIT' | 'OKX' | 'BITGET';
+// OPS-SCAN-UNIVERSE-EXPAND-W1: the promoted-venue union, DERIVED from EXCHANGES (capabilities.ts) —
+// the single SoT. Was a hand-maintained 5-literal; now the 12 (and every future promotion) flow from
+// EXCHANGES, and the `FETCHERS` Record below is tsc-exhaustive (a new promoted venue won't compile
+// without its universe fetcher).
+type PromotedExchangeId = PromotedVenueId;
 
 /** Default funding interval (hours) for venues that don't report it on the bulk call. */
 const DEFAULT_FUNDING_INTERVAL_H = 8;
@@ -125,6 +136,7 @@ async function fetchBinance(limit: number): Promise<ExchangeAsset[]> {
       return {
         coin: t.symbol.replace(/USDT$/, '').toUpperCase(),
         notionalOI_usd: qv, // proxy: rank by 24h USD volume since no bulk OI endpoint
+        oiIsProxy: true, // OPS-SCAN-UNIVERSE-EXPAND-W1: Binance OI is a volume proxy (real OI via oi-sources openInterestHist)
         volume24h_usd: qv, // quoteVolume is USDT-denominated (≈ USD for USDT-margined perps)
         // SCAN-RANKBY-W1: % from openPrice (futures 24h-open; prevClosePrice is spot-only —
         // OPS-TRADE-CALL-CLUSTER-W1). Funding is NOT on ticker/24hr → filled by rank-metrics.ts
@@ -240,27 +252,243 @@ async function fetchBitget(limit: number): Promise<ExchangeAsset[]> {
   return assets.slice(0, limit);
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// OPS-SCAN-UNIVERSE-EXPAND-W1 — rich universe fetchers for the 7 newly-promoted venues.
+// Same ExchangeAsset[] contract as the original 5 (OI-desc + rank-metric fields). 5 carry REAL
+// bulk OI (GATE/MEXC/KUCOIN/HTX/PHEMEX); 2 are no-bulk-OI LIQUIDITY PROXIES (ASTER/BINGX —
+// oiIsProxy=true, mirroring fetchBinance). Each routes through the shared upstreamFetch (typed
+// ban handling) and throws on fetch failure (callers — getTopCoinSet / the seed loop — catch &
+// skip, never 500). Per-venue field divergence per the CLAUDE.md `curl <venue> | jq keys` law;
+// formulas probed live 2026-06-30 (audits/OPS-SCAN-UNIVERSE-EXPAND-W1-endpoint-truth.md §4).
+// ════════════════════════════════════════════════════════════════════════
+
+/** Coerce a number | numeric-string | undefined field → finite number (0 on junk). */
+function num(x: unknown): number {
+  const n = typeof x === 'number' ? x : parseFloat(String(x ?? ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Gate: /futures/usdt/tickers (1 call). REAL OI: total_size(contracts) × quanto_multiplier = coin
+ *  OI; × mark_price = notional. volume_24h_quote = USDT vol; change_percentage is already a %. */
+async function fetchGate(limit: number): Promise<ExchangeAsset[]> {
+  const data = await upstreamFetch<Array<{ contract?: string; total_size?: string; quanto_multiplier?: string;
+    mark_price?: string; volume_24h_quote?: string; funding_rate?: string; change_percentage?: string }>>(
+    VENUE_FETCH_CONFIGS.GATE, { url: 'https://api.gateio.ws/api/v4/futures/usdt/tickers' });
+  const assets: ExchangeAsset[] = (Array.isArray(data) ? data : [])
+    .filter((t) => typeof t.contract === 'string' && t.contract.endsWith('_USDT'))
+    .map((t) => {
+      const coinOI = num(t.total_size) * num(t.quanto_multiplier);
+      const chgRaw = parseFloat(t.change_percentage ?? '');
+      return {
+        coin: (t.contract as string).replace(/_USDT$/, '').toUpperCase(),
+        notionalOI_usd: coinOI * num(t.mark_price),
+        baseOI: coinOI,
+        volume24h_usd: num(t.volume_24h_quote),
+        changePct24h: Number.isFinite(chgRaw) ? chgRaw : undefined,
+        fundingRate: parseFunding(t.funding_rate),
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+/** MEXC: /contract/ticker + /contract/detail. REAL OI: holdVol(contracts) × contractSize(coin/contract)
+ *  × lastPrice = notional. amount24 = USDT vol; riseFallRate is a FRACTION (×100). */
+async function fetchMexc(limit: number): Promise<ExchangeAsset[]> {
+  const [tickerData, detailData] = await Promise.all([
+    upstreamFetch<{ data?: Array<{ symbol?: string; lastPrice?: number; holdVol?: number; amount24?: number;
+      fundingRate?: number; riseFallRate?: number }> }>(
+      VENUE_FETCH_CONFIGS.MEXC, { url: 'https://contract.mexc.com/api/v1/contract/ticker' }),
+    upstreamFetch<{ data?: Array<{ symbol?: string; contractSize?: number }> }>(
+      VENUE_FETCH_CONFIGS.MEXC, { url: 'https://contract.mexc.com/api/v1/contract/detail' }),
+  ]);
+  const sizeMap = new Map<string, number>();
+  for (const d of detailData.data ?? []) if (d.symbol) sizeMap.set(d.symbol, num(d.contractSize));
+  const assets: ExchangeAsset[] = (tickerData.data ?? [])
+    .filter((t) => typeof t.symbol === 'string' && t.symbol.endsWith('_USDT'))
+    .map((t) => {
+      const coinOI = num(t.holdVol) * (sizeMap.get(t.symbol as string) ?? 0);
+      const rf = t.riseFallRate;
+      return {
+        coin: (t.symbol as string).replace(/_USDT$/, '').toUpperCase(),
+        notionalOI_usd: coinOI * num(t.lastPrice),
+        baseOI: coinOI,
+        volume24h_usd: num(t.amount24),
+        changePct24h: typeof rf === 'number' && Number.isFinite(rf) ? rf * 100 : undefined,
+        fundingRate: typeof t.fundingRate === 'number' && Number.isFinite(t.fundingRate) ? t.fundingRate : undefined,
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+/** KuCoin: /contracts/active (1 call). REAL OI: openInterest(contracts) × multiplier(coin/contract)
+ *  × markPrice. turnoverOf24h = USDT vol; priceChgPct is a FRACTION (×100); fundingFeeRate on call.
+ *  USDT perps = type FFWCSX + quoteCurrency USDT; baseCurrency XBT→BTC. */
+async function fetchKucoin(limit: number): Promise<ExchangeAsset[]> {
+  const json = await upstreamFetch<{ data?: Array<{ baseCurrency?: string; quoteCurrency?: string; type?: string;
+    openInterest?: string; multiplier?: number; markPrice?: number; turnoverOf24h?: number; priceChgPct?: number;
+    fundingFeeRate?: number }> }>(
+    VENUE_FETCH_CONFIGS.KUCOIN, { url: 'https://api-futures.kucoin.com/api/v1/contracts/active' });
+  const assets: ExchangeAsset[] = (json.data ?? [])
+    .filter((c) => c.quoteCurrency === 'USDT' && c.type === 'FFWCSX' && typeof c.baseCurrency === 'string')
+    .map((c) => {
+      const coinOI = num(c.openInterest) * num(c.multiplier);
+      const chg = c.priceChgPct;
+      return {
+        coin: c.baseCurrency === 'XBT' ? 'BTC' : (c.baseCurrency as string).toUpperCase(),
+        notionalOI_usd: coinOI * num(c.markPrice),
+        baseOI: coinOI,
+        volume24h_usd: num(c.turnoverOf24h),
+        changePct24h: typeof chg === 'number' && Number.isFinite(chg) ? chg * 100 : undefined,
+        fundingRate: typeof c.fundingFeeRate === 'number' && Number.isFinite(c.fundingFeeRate) ? c.fundingFeeRate : undefined,
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+/** HTX: /linear-swap-api/v1/swap_open_interest (value = USD-notional OI; amount = coin OI) joined by
+ *  contract_code with /linear-swap-ex/market/detail/batch_merged (close, open, trade_turnover USDT
+ *  vol). USDT swaps = "<COIN>-USDT". Funding omitted → augmentFunding / fail-soft. */
+async function fetchHtx(limit: number): Promise<ExchangeAsset[]> {
+  const [oiData, tickData] = await Promise.all([
+    upstreamFetch<{ data?: Array<{ contract_code?: string; amount?: number; value?: number }> }>(
+      VENUE_FETCH_CONFIGS.HTX, { url: 'https://api.hbdm.com/linear-swap-api/v1/swap_open_interest' }),
+    upstreamFetch<{ ticks?: Array<{ contract_code?: string; close?: number | string;
+      trade_turnover?: number | string; open?: number | string }> }>(
+      VENUE_FETCH_CONFIGS.HTX, { url: 'https://api.hbdm.com/linear-swap-ex/market/detail/batch_merged' }),
+  ]);
+  const tickMap = new Map<string, { close?: number | string; trade_turnover?: number | string; open?: number | string }>();
+  for (const t of tickData.ticks ?? []) if (t.contract_code) tickMap.set(t.contract_code, t);
+  const assets: ExchangeAsset[] = (oiData.data ?? [])
+    .filter((o) => typeof o.contract_code === 'string' && o.contract_code.endsWith('-USDT'))
+    .map((o) => {
+      const tk = tickMap.get(o.contract_code as string);
+      const px = num(tk?.close);
+      const coinOI = num(o.amount);
+      return {
+        coin: (o.contract_code as string).replace(/-USDT$/, '').toUpperCase(),
+        notionalOI_usd: num(o.value) || coinOI * px,
+        baseOI: coinOI,
+        volume24h_usd: num(tk?.trade_turnover),
+        changePct24h: pctChange24h(px, num(tk?.open)),
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+/** Phemex: /md/v2/ticker/24hr/all — v2 "Rv/Rp/Rr" fields are REAL-value (unscaled). openInterestRv(coin
+ *  OI) × markPriceRp = notional; turnoverRv = USDT vol; (closeRp−openRp)/openRp = 24h%; fundingRateRr.
+ *  USDT perps = symbol ending "USDT". */
+async function fetchPhemex(limit: number): Promise<ExchangeAsset[]> {
+  const json = await upstreamFetch<{ result?: Array<{ symbol?: string; openInterestRv?: string; markPriceRp?: string;
+    turnoverRv?: string; openRp?: string; closeRp?: string; fundingRateRr?: string }> }>(
+    VENUE_FETCH_CONFIGS.PHEMEX, { url: 'https://api.phemex.com/md/v2/ticker/24hr/all' });
+  const assets: ExchangeAsset[] = (json.result ?? [])
+    .filter((t) => typeof t.symbol === 'string' && t.symbol.endsWith('USDT'))
+    .map((t) => {
+      const coinOI = num(t.openInterestRv);
+      return {
+        coin: (t.symbol as string).replace(/USDT$/, '').toUpperCase(),
+        notionalOI_usd: coinOI * num(t.markPriceRp),
+        baseOI: coinOI,
+        volume24h_usd: num(t.turnoverRv),
+        changePct24h: pctChange24h(num(t.closeRp), num(t.openRp)),
+        fundingRate: parseFunding(t.fundingRateRr),
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+/** Aster: Binance-fork /fapi/v1/ticker/24hr — NO bulk OI ⇒ LIQUIDITY PROXY (oiIsProxy=true,
+ *  notionalOI_usd = quoteVolume; mirrors fetchBinance). priceChangePercent = 24h%. */
+async function fetchAster(limit: number): Promise<ExchangeAsset[]> {
+  const data = await upstreamFetch<Array<{ symbol?: string; quoteVolume?: string; lastPrice?: string;
+    openPrice?: string; priceChangePercent?: string }>>(
+    VENUE_FETCH_CONFIGS.ASTER, { url: 'https://fapi.asterdex.com/fapi/v1/ticker/24hr' });
+  const assets: ExchangeAsset[] = (Array.isArray(data) ? data : [])
+    .filter((t) => typeof t.symbol === 'string' && t.symbol.endsWith('USDT'))
+    .map((t) => {
+      const qv = num(t.quoteVolume);
+      const pcp = parseFloat(t.priceChangePercent ?? '');
+      return {
+        // Aster is a Binance-fork → apply the shared 1000× meme overrides (1000PEPE → PEPE) so the
+        // delegated seed + scan match the signal engine's canonical symbol (never drop the coin).
+        coin: normalizeBinanceCoin((t.symbol as string).replace(/USDT$/, '').toUpperCase()),
+        notionalOI_usd: qv,
+        oiIsProxy: true,
+        volume24h_usd: qv,
+        changePct24h: Number.isFinite(pcp) ? pcp : pctChange24h(num(t.lastPrice), num(t.openPrice)),
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+/** BingX: /openApi/swap/v2/quote/ticker — NO bulk OI ⇒ LIQUIDITY PROXY (oiIsProxy=true,
+ *  notionalOI_usd = quoteVolume). symbol "<COIN>-USDT"; priceChangePercent = 24h%. */
+async function fetchBingx(limit: number): Promise<ExchangeAsset[]> {
+  const json = await upstreamFetch<{ data?: Array<{ symbol?: string; quoteVolume?: string;
+    priceChangePercent?: string }> }>(
+    VENUE_FETCH_CONFIGS.BINGX, { url: 'https://open-api.bingx.com/openApi/swap/v2/quote/ticker' });
+  const assets: ExchangeAsset[] = (json.data ?? [])
+    .filter((t) => typeof t.symbol === 'string' && t.symbol.endsWith('-USDT'))
+    .map((t) => {
+      const qv = num(t.quoteVolume);
+      const pcp = parseFloat(t.priceChangePercent ?? '');
+      return {
+        coin: (t.symbol as string).replace(/-USDT$/, '').toUpperCase(),
+        notionalOI_usd: qv,
+        oiIsProxy: true,
+        volume24h_usd: qv,
+        changePct24h: Number.isFinite(pcp) ? pcp : undefined,
+        fundingIntervalHours: DEFAULT_FUNDING_INTERVAL_H,
+      };
+    });
+  assets.sort((a, b) => b.notionalOI_usd - a.notionalOI_usd);
+  return assets.slice(0, limit);
+}
+
+// OPS-SCAN-UNIVERSE-EXPAND-W1: the unified venue→universe SoT, keyed by the EXCHANGES-derived
+// PromotedExchangeId — tsc fails if a promoted venue lacks a fetcher. 5 original + 7 new (5 real-OI,
+// 2 proxy). The seed loop's UNIVERSE_FETCHERS projects `.coin` off these (one registry, not two).
 const FETCHERS: Record<PromotedExchangeId, (limit: number) => Promise<ExchangeAsset[]>> = {
   HL: fetchHL,
   BINANCE: fetchBinance,
   BYBIT: fetchBybit,
   OKX: fetchOKX,
   BITGET: fetchBitget,
+  ASTER: fetchAster,
+  BINGX: fetchBingx,
+  GATE: fetchGate,
+  HTX: fetchHtx,
+  KUCOIN: fetchKucoin,
+  MEXC: fetchMexc,
+  PHEMEX: fetchPhemex,
 };
 
 /**
- * Fetch top-N USDT-margined perps on `exchange` by notional OI, returning
- * each asset's coin symbol + USD-notional OI + 24h USD-equivalent volume.
+ * Venues whose `notionalOI_usd` is a 24h-VOLUME liquidity proxy (no bulk OI endpoint). The OI sampler
+ * + oi_change lens MUST skip these (never record volume as OI). BINANCE keeps a real-OI special-case
+ * in oi-sources (openInterestHist); ASTER/BINGX have none. Honest-labeling contract.
+ */
+export const OI_PROXY_VENUES: ReadonlySet<ExchangeId> = new Set<ExchangeId>(['BINANCE', 'ASTER', 'BINGX']);
+
+/**
+ * Fetch top-N USDT-margined perps on `exchange` by notional OI (or volume proxy for proxy venues).
+ * Sorted desc by `notionalOI_usd`; at most `limit` entries.
  *
- * Sorted descending by `notionalOI_usd`. Returns at most `limit` entries.
- *
- * Only supports the 5 PROMOTED venues (HL, BINANCE, BYBIT, OKX, BITGET).
- * Shadow venues are intentionally not supported here — `isMemeCoinLiquid`
- * short-circuits TRUE for them at a higher level (per OPS-3M-EXPAND-W1
- * Q3 resolution `SHADOW_VENUE_PERMISSIVE_PASS`).
- *
- * Throws if invoked with a shadow venue or unknown ExchangeId — callers
- * must filter beforehand.
+ * OPS-SCAN-UNIVERSE-EXPAND-W1: covers all 12 promoted venues (was the 5). FAIL-SOFT — an exchange with
+ * no fetcher (non-promoted / unknown) returns `[]` + a warn (was a throw), so it never crashes a caller.
  */
 export async function getExchangeTopAssetsWithVolume(
   exchange: ExchangeId,
@@ -268,28 +496,22 @@ export async function getExchangeTopAssetsWithVolume(
 ): Promise<ExchangeAsset[]> {
   const fetcher = FETCHERS[exchange as PromotedExchangeId];
   if (!fetcher) {
-    throw new Error(
-      `getExchangeTopAssetsWithVolume: unsupported exchange '${exchange}' ` +
-        `(expected one of HL/BINANCE/BYBIT/OKX/BITGET)`,
-    );
+    console.warn(`[exchange-universe] getExchangeTopAssetsWithVolume: '${exchange}' is not a promoted venue with a universe fetcher — returning [] (fail-soft)`);
+    return [];
   }
   return fetcher(limit);
 }
 
 /**
- * SCAN-RANKBY-W1: the FULL rich USDT-perp universe on `exchange` (OI-desc, NO
- * slice), each asset carrying the rank-metric fields. The seam `getRankedUniverse`
- * (rank-metrics.ts) generalizes — it re-sorts this set by the chosen lens. Same
- * 5-venue support + throw contract as `getExchangeTopAssetsWithVolume`; the
- * `Number.MAX_SAFE_INTEGER` limit makes each fetcher's `slice` a no-op (return all).
+ * SCAN-RANKBY-W1: the FULL rich USDT-perp universe on `exchange` (OI-desc, NO slice), each asset
+ * carrying the rank-metric fields. `getRankedUniverse` (rank-metrics.ts) re-sorts by the chosen lens.
+ * OPS-SCAN-UNIVERSE-EXPAND-W1: all 12 promoted; FAIL-SOFT (no fetcher → `[]` + warn, not throw).
  */
 export async function fetchVenueUniverse(exchange: ExchangeId): Promise<ExchangeAsset[]> {
   const fetcher = FETCHERS[exchange as PromotedExchangeId];
   if (!fetcher) {
-    throw new Error(
-      `fetchVenueUniverse: unsupported exchange '${exchange}' ` +
-        `(expected one of HL/BINANCE/BYBIT/OKX/BITGET)`,
-    );
+    console.warn(`[exchange-universe] fetchVenueUniverse: '${exchange}' has no universe fetcher — returning [] (fail-soft)`);
+    return [];
   }
   return fetcher(Number.MAX_SAFE_INTEGER);
 }

@@ -13,7 +13,12 @@ const { fetchVenueUniverse } = vi.hoisted(() => ({ fetchVenueUniverse: vi.fn() }
 const { upstreamFetch } = vi.hoisted(() => ({ upstreamFetch: vi.fn() }));
 const { getAdapter } = vi.hoisted(() => ({ getAdapter: vi.fn() }));
 
-vi.mock('../../src/lib/exchange-universe.js', () => ({ fetchVenueUniverse }));
+vi.mock('../../src/lib/exchange-universe.js', () => ({
+  fetchVenueUniverse,
+  // OPS-SCAN-UNIVERSE-EXPAND-W1: fetchCurrentOiUsd now consults OI_PROXY_VENUES to skip volume-proxy
+  // venues (Aster/BingX). BINANCE is a proxy too but is exempt via its openInterestHist real-OI path.
+  OI_PROXY_VENUES: new Set(['BINANCE', 'ASTER', 'BINGX']),
+}));
 vi.mock('../../src/lib/adapters/_upstream-fetch.js', () => ({
   upstreamFetch,
   VENUE_FETCH_CONFIGS: { BINANCE: { venueName: 'Binance' }, BYBIT: { venueName: 'Bybit' } },

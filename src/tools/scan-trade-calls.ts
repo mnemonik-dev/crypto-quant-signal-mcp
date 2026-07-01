@@ -50,13 +50,15 @@ import {
   PARAM_DESC_SCAN_OI_BASIS,
 } from '../tool-descriptions.js';
 import type { LicenseInfo } from '../types.js';
+import { PROMOTED_VENUE_IDS, type PromotedVenueId } from '../lib/capabilities.js';
 
 export { SCAN_TRADE_CALLS_DESCRIPTION };
 
 /**
- * Zod raw shape for `server.tool`. Exported so the C3 canary can validate
- * bounds without importing index.ts. Promoted-5 venue enum (NOT the 17-value
- * get_trade_call enum — getExchangeTopAssetsWithVolume throws on shadow venues).
+ * Zod raw shape for `server.tool`. Exported so the C3 canary can validate bounds without importing
+ * index.ts. OPS-SCAN-UNIVERSE-EXPAND-W1: the `exchange` enum is DERIVED from EXCHANGES (all 12
+ * promoted venues), NOT a hand-maintained 5-literal and NOT the 17-value get_trade_call enum
+ * (getExchangeTopAssetsWithVolume now covers the 12 promoted + fail-softs, never throws).
  */
 export const SCAN_TRADE_CALLS_SCHEMA = {
   topN: z.number().int().min(1).max(100).default(20).describe(PARAM_DESC_SCAN_TOP_N),
@@ -64,7 +66,7 @@ export const SCAN_TRADE_CALLS_SCHEMA = {
     .enum(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d'])
     .default('15m')
     .describe(PARAM_DESC_SCAN_TIMEFRAME),
-  exchange: z.enum(['BINANCE', 'HL', 'BYBIT', 'OKX', 'BITGET']).default('BINANCE').describe(PARAM_DESC_SCAN_EXCHANGE),
+  exchange: z.enum(PROMOTED_VENUE_IDS as [PromotedVenueId, ...PromotedVenueId[]]).default('BINANCE').describe(PARAM_DESC_SCAN_EXCHANGE),
   minConfidence: z.number().min(0).max(100).optional().describe(PARAM_DESC_SCAN_MIN_CONFIDENCE),
   includeHolds: z.boolean().default(false).describe(PARAM_DESC_SCAN_INCLUDE_HOLDS),
   limit: z.number().int().min(1).max(100).default(10).describe(PARAM_DESC_SCAN_LIMIT),

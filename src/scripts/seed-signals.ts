@@ -54,6 +54,8 @@ import { upstreamFetch, VENUE_FETCH_CONFIGS } from '../lib/adapters/_upstream-fe
 import type { LicenseInfo, ExchangeId, VenueStatus } from '../types.js';
 import { listVenues, stampSeedingStarted } from '../lib/venue-store.js';
 import { recordSeedHeartbeat } from '../lib/seed-heartbeats.js';
+import { fetchVenueUniverse } from '../lib/exchange-universe.js';
+import { BINANCE_OVERRIDES } from '../lib/coin-overrides.js';
 
 // Internal license bypasses free-tier gating
 const INTERNAL_LICENSE: LicenseInfo = { tier: 'pro', key: 'internal-seed' };
@@ -434,14 +436,9 @@ async function fetchHLCoins(topN: number): Promise<string[]> {
   return limited.map(a => a.name);
 }
 
-// Binance 1000-prefix overrides for low-price coins
-const BINANCE_OVERRIDES: Record<string, string> = {
-  '1000PEPE': 'PEPE', '1000SHIB': 'SHIB', '1000FLOKI': 'FLOKI',
-  '1000BONK': 'BONK', '1000LUNC': 'LUNC', '1000XEC': 'XEC',
-  '1000SATS': 'SATS', '1000RATS': 'RATS', '1000CAT': 'CAT',
-  '1000CHEEMS': 'CHEEMS', '1000WHINE': 'WHINE', '1000APU': 'APU',
-  '1000X': 'X', '1000MOGCOIN': 'MOGCOIN',
-};
+// BINANCE_OVERRIDES moved to src/lib/coin-overrides.ts (OPS-SCAN-UNIVERSE-EXPAND-W1) — shared by the
+// seed loop (fetchBinanceCoins, below) AND the scan universe fetchers (exchange-universe.ts fetchAster),
+// so the 1000× meme canonicalization is single-sourced (no parallel copy).
 
 /**
  * Fetch Binance USDT-M pairs sorted by 24h quoteVolume (proxy for OI —
@@ -575,72 +572,39 @@ function rankTopN(rows: { coin: string; score: number }[], topN: number): string
   return topN > 0 ? sorted.slice(0, topN) : sorted;
 }
 
-// ASTER — Binance-fork USDT-M; /fapi/v1/ticker/24hr (quoteVolume). 1000-prefix overrides.
-export async function fetchAsterCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://fapi.asterdex.com/fapi/v1/ticker/24hr', 'ASTER');
-  if (!Array.isArray(data)) return [];
-  const rows = (data as Array<{ symbol?: string; quoteVolume?: string }>)
-    .filter(t => typeof t.symbol === 'string' && t.symbol.endsWith('USDT'))
-    .map(t => {
-      const raw = (t.symbol as string).replace(/USDT$/, '');
-      return { coin: BINANCE_OVERRIDES[raw] || raw, score: parseFloat(t.quoteVolume || '0') };
-    });
-  return rankTopN(rows, topN);
+// ── OPS-SCAN-UNIVERSE-EXPAND-W1 (S2): the 7 newly-promoted venues' seed universe now projects
+//    `.coin` off the unified scan SoT (exchange-universe `fetchVenueUniverse`) — ONE venue→universe
+//    registry, not two. OI-ranked for the real-OI venues / volume-proxy for Aster+BingX. The
+//    established 5 (HL / BINANCE / BYBIT / OKX / BITGET) keep their OWN fetchers (below) pending
+//    OPS-SEED-SCAN-UNIVERSE-DEDUP-W1 — re-ranking the LIVE public flywheel needs a coin-parity +
+//    WR-stability audit first (prove the OI universe ⊇ the current track-record coin set). ──
+async function scanUniverseCoins(venue: ExchangeId, topN: number): Promise<string[]> {
+  try {
+    const coins = (await fetchVenueUniverse(venue)).map((a) => a.coin);
+    return topN > 0 ? coins.slice(0, topN) : coins;
+  } catch (e) {
+    console.warn(`[${ts()}] [${venue}] scan-universe delegate error: ${e instanceof Error ? e.message : e} — skipping venue this cycle`);
+    return [];
+  }
 }
 
-// GATE — /futures/usdt/tickers (volume_24h_quote); contract = "<COIN>_USDT".
-export async function fetchGateCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://api.gateio.ws/api/v4/futures/usdt/tickers', 'GATE');
-  if (!Array.isArray(data)) return [];
-  const rows = (data as Array<{ contract?: string; volume_24h_quote?: string }>)
-    .filter(t => typeof t.contract === 'string' && t.contract.endsWith('_USDT'))
-    .map(t => ({ coin: (t.contract as string).replace(/_USDT$/, ''), score: parseFloat(t.volume_24h_quote || '0') }));
-  return rankTopN(rows, topN);
-}
+// ASTER — delegates to the rich SoT (proxy: volume-ranked; 1000× meme overrides applied in fetchAster).
+export async function fetchAsterCoins(topN: number): Promise<string[]> { return scanUniverseCoins('ASTER', topN); }
 
-// MEXC — /contract/ticker (amount24 = 24h quote vol); symbol = "<COIN>_USDT".
-export async function fetchMexcCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://contract.mexc.com/api/v1/contract/ticker', 'MEXC');
-  const arr = (data as { data?: Array<{ symbol?: string; amount24?: number }> })?.data;
-  if (!Array.isArray(arr)) return [];
-  const rows = arr
-    .filter(t => typeof t.symbol === 'string' && t.symbol.endsWith('_USDT'))
-    .map(t => ({ coin: (t.symbol as string).replace(/_USDT$/, ''), score: Number(t.amount24 || 0) }));
-  return rankTopN(rows, topN);
-}
+// GATE — delegates to the rich SoT (real OI: total_size × quanto_multiplier × mark_price).
+export async function fetchGateCoins(topN: number): Promise<string[]> { return scanUniverseCoins('GATE', topN); }
 
-// KUCOIN — /contracts/active (turnoverOf24h); baseCurrency XBT→BTC; type FFWCSX = USDT perp.
-export async function fetchKucoinCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://api-futures.kucoin.com/api/v1/contracts/active', 'KUCOIN');
-  const arr = (data as { data?: Array<{ baseCurrency?: string; quoteCurrency?: string; type?: string; turnoverOf24h?: number }> })?.data;
-  if (!Array.isArray(arr)) return [];
-  const rows = arr
-    .filter(c => c.quoteCurrency === 'USDT' && c.type === 'FFWCSX' && typeof c.baseCurrency === 'string')
-    .map(c => ({ coin: c.baseCurrency === 'XBT' ? 'BTC' : (c.baseCurrency as string), score: Number(c.turnoverOf24h || 0) }));
-  return rankTopN(rows, topN);
-}
+// MEXC — delegates to the rich SoT (real OI: holdVol × contractSize × lastPrice).
+export async function fetchMexcCoins(topN: number): Promise<string[]> { return scanUniverseCoins('MEXC', topN); }
 
-// BINGX — /openApi/swap/v2/quote/ticker (quoteVolume); symbol = "<COIN>-USDT".
-export async function fetchBingxCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://open-api.bingx.com/openApi/swap/v2/quote/ticker', 'BINGX');
-  const arr = (data as { data?: Array<{ symbol?: string; quoteVolume?: string }> })?.data;
-  if (!Array.isArray(arr)) return [];
-  const rows = arr
-    .filter(t => typeof t.symbol === 'string' && t.symbol.endsWith('-USDT'))
-    .map(t => ({ coin: (t.symbol as string).replace(/-USDT$/, ''), score: parseFloat(t.quoteVolume || '0') }));
-  return rankTopN(rows, topN);
-}
+// KUCOIN — delegates to the rich SoT (real OI: openInterest × multiplier × markPrice).
+export async function fetchKucoinCoins(topN: number): Promise<string[]> { return scanUniverseCoins('KUCOIN', topN); }
 
-// HTX — /linear-swap-ex/market/detail/batch_merged (trade_turnover); contract_code "<COIN>-USDT" swap.
-export async function fetchHtxCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://api.hbdm.com/linear-swap-ex/market/detail/batch_merged', 'HTX');
-  const arr = (data as { ticks?: Array<{ contract_code?: string; trade_turnover?: string }> })?.ticks;
-  if (!Array.isArray(arr)) return [];
-  const rows = arr
-    .filter(t => typeof t.contract_code === 'string' && t.contract_code.endsWith('-USDT'))
-    .map(t => ({ coin: (t.contract_code as string).replace(/-USDT$/, ''), score: parseFloat(t.trade_turnover || '0') }));
-  return rankTopN(rows, topN);
-}
+// BINGX — delegates to the rich SoT (proxy: volume-ranked, no bulk OI endpoint).
+export async function fetchBingxCoins(topN: number): Promise<string[]> { return scanUniverseCoins('BINGX', topN); }
+
+// HTX — delegates to the rich SoT (real OI: swap_open_interest.value, joined to batch_merged price/vol).
+export async function fetchHtxCoins(topN: number): Promise<string[]> { return scanUniverseCoins('HTX', topN); }
 
 // WEEX — /capi/v2/market/tickers (volume_24h); symbol = "cmt_<coin>usdt".
 export async function fetchWeexCoins(topN: number): Promise<string[]> {
@@ -711,18 +675,9 @@ export async function fetchEdgexCoins(topN: number): Promise<string[]> {
   return topN > 0 ? coins.slice(0, topN) : coins;
 }
 
-// PHEMEX — products.perpProductsV2 filtered to USDT-quote Listed perps; coin=baseCurrency.
-// (perpProductsV2 also lists USDC-quote — must filter.) No reliable bulk ticker →
-// unranked top-N (liquidity filter handles the rest). Fail-soft.
-export async function fetchPhemexCoins(topN: number): Promise<string[]> {
-  const data = await fetchUniverseJson('https://api.phemex.com/public/products', 'PHEMEX');
-  const arr = (data as { data?: { perpProductsV2?: Array<{ baseCurrency?: string; quoteCurrency?: string; status?: string }> } })?.data?.perpProductsV2;
-  if (!Array.isArray(arr)) return [];
-  const coins = [...new Set(arr
-    .filter(p => p.quoteCurrency === 'USDT' && p.status === 'Listed' && typeof p.baseCurrency === 'string')
-    .map(p => p.baseCurrency as string))];
-  return topN > 0 ? coins.slice(0, topN) : coins;
-}
+// PHEMEX — delegates to the rich SoT (real OI: openInterestRv × markPriceRp; v2 ticker now OI-ranked,
+// upgraded from the old unranked /public/products list).
+export async function fetchPhemexCoins(topN: number): Promise<string[]> { return scanUniverseCoins('PHEMEX', topN); }
 
 /**
  * OPS-SHADOW-PIPELINE-W1 / C1 — venue-table-driven universe registry (the

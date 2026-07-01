@@ -20,7 +20,7 @@
  */
 
 import type { ExchangeId } from '../types.js';
-import { fetchVenueUniverse } from './exchange-universe.js';
+import { fetchVenueUniverse, OI_PROXY_VENUES } from './exchange-universe.js';
 import { upstreamFetch, VENUE_FETCH_CONFIGS } from './adapters/_upstream-fetch.js';
 import { getAdapter } from './exchange-adapter.js';
 import { bucketHour } from './oi-snapshots.js';
@@ -76,6 +76,11 @@ async function binanceOiHistUsd(
  * 4 venues read from the universe directly; Binance fans out per-symbol.
  */
 export async function fetchCurrentOiUsd(exchange: ExchangeId, poolSize: number): Promise<CurrentOi[]> {
+  // OPS-SCAN-UNIVERSE-EXPAND-W1: proxy venues (Aster/BingX) expose no real OI — their
+  // fetchVenueUniverse `notionalOI_usd` is a 24h-VOLUME proxy, so NEVER sample them as OI (it would
+  // pollute the oi_change lens + snapshots with volume). Binance is a proxy too but has its own
+  // openInterestHist real-OI path below, so it is exempt from the skip.
+  if (OI_PROXY_VENUES.has(exchange) && exchange !== 'BINANCE') return [];
   const universe = await fetchVenueUniverse(exchange);
   const pool = universe.slice(0, poolSize);
   if (exchange === 'BINANCE') {

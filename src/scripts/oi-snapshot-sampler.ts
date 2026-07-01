@@ -19,8 +19,12 @@
 import type { ExchangeId } from '../types.js';
 import { fetchCurrentOiUsd } from '../lib/oi-sources.js';
 import { recordOiSnapshots, bucketHour, pruneOiSnapshots } from '../lib/oi-snapshots.js';
+import { PROMOTED_VENUE_IDS } from '../lib/capabilities.js';
 
-const PROMOTED_VENUES: ExchangeId[] = ['HL', 'BINANCE', 'BYBIT', 'OKX', 'BITGET'];
+// OPS-SCAN-UNIVERSE-EXPAND-W1: derive from EXCHANGES (all 12 promoted). oi-sources SKIPS the volume-
+// proxy venues (Aster/BingX) — returning [] rather than volume-as-OI — so the sampler safely attempts
+// all 12; the oi_change lens ends up covering the ~10 with a real OI source (incl. Binance's hist path).
+const PROMOTED_VENUES: readonly ExchangeId[] = PROMOTED_VENUE_IDS;
 const POOL = Number(process.env.RANK_OI_SAMPLE_POOL ?? 60);
 const RETENTION_H = Number(process.env.RANK_OI_RETENTION_H ?? 30 * 24); // 30 days
 

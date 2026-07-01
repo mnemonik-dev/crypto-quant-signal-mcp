@@ -27,6 +27,7 @@
  * mirror the live public response shapes (probed 2026-05-29, leak-verified).
  */
 import { declareDiscoveryExtension } from '@x402/extensions/bazaar';
+import { PROMOTED_VENUE_IDS } from './capabilities.js';
 
 /**
  * Tokens that must never appear in any public Bazaar description/example.
@@ -218,7 +219,7 @@ export const BAZAAR_ROUTES: Record<string, BazaarRouteSpec> = {
         },
         exchange: {
           type: 'string',
-          enum: ['BINANCE', 'HL', 'BYBIT', 'OKX', 'BITGET'],
+          enum: [...PROMOTED_VENUE_IDS], // OPS-SCAN-UNIVERSE-EXPAND-W1: derived from EXCHANGES (all 12 promoted)
           default: 'BINANCE',
           description: 'Promoted derivatives venue to scan.',
         },

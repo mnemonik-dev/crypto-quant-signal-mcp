@@ -34,29 +34,17 @@ describe('C2 shadow universe-fetchers — shape mapping + ranking + filters', ()
     expect(await fetchAsterCoins(5)).toEqual(['PEPE', 'BTC']);
   });
 
-  it('GATE: contract "_USDT" strip, volume_24h_quote ranking', async () => {
-    mockFetch([
-      { contract: 'BTC_USDT', volume_24h_quote: '100' },
-      { contract: 'ETH_USDT', volume_24h_quote: '200' },
-    ]);
-    expect(await fetchGateCoins(5)).toEqual(['ETH', 'BTC']);
-  });
-
-  it('MEXC: symbol "_USDT" strip, amount24 ranking', async () => {
-    mockFetch({ data: [
-      { symbol: 'BTC_USDT', amount24: 100 },
-      { symbol: 'ETH_USDT', amount24: 200 },
-    ] });
-    expect(await fetchMexcCoins(5)).toEqual(['ETH', 'BTC']);
-  });
-
-  it('KUCOIN: XBT→BTC, FFWCSX+USDT filter, turnoverOf24h ranking', async () => {
-    mockFetch({ data: [
-      { symbol: 'XBTUSDTM', baseCurrency: 'XBT', quoteCurrency: 'USDT', type: 'FFWCSX', turnoverOf24h: 500 },
-      { symbol: 'ETHUSDTM', baseCurrency: 'ETH', quoteCurrency: 'USDT', type: 'FFWCSX', turnoverOf24h: 100 },
-      { symbol: 'XBTUSDCM', baseCurrency: 'XBT', quoteCurrency: 'USDC', type: 'FFWCSX', turnoverOf24h: 9999 }, // USDC → excl
-    ] });
-    expect(await fetchKucoinCoins(5)).toEqual(['BTC', 'ETH']);
+  // OPS-SCAN-UNIVERSE-EXPAND-W1 (S2): GATE / MEXC / KUCOIN / HTX / PHEMEX universe fetchers now DELEGATE
+  // to the rich scan SoT (getVenueUniverse). Their OI-ranked shape-mapping is covered directly in
+  // tests/unit/exchange-universe-fetchers.test.ts; here we only pin the delegate is wired + fail-soft.
+  // (ASTER / BingX stay volume-ranked proxies and are exercised above — they double as the delegate
+  // e2e path through fetchVenueUniverse → the rich fetcher.)
+  it('real-OI new venues delegate to the rich SoT and stay fail-soft ([] on error)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNRESET'));
+    for (const f of [fetchGateCoins, fetchMexcCoins, fetchKucoinCoins, fetchHtxCoins, fetchPhemexCoins]) {
+      expect(await f(5)).toEqual([]);
+    }
   });
 
   it('BINGX: symbol "-USDT" strip, quoteVolume ranking', async () => {
@@ -65,14 +53,6 @@ describe('C2 shadow universe-fetchers — shape mapping + ranking + filters', ()
       { symbol: 'ETH-USDT', quoteVolume: '200' },
     ] });
     expect(await fetchBingxCoins(5)).toEqual(['ETH', 'BTC']);
-  });
-
-  it('HTX: contract_code "-USDT" strip, trade_turnover ranking', async () => {
-    mockFetch({ ticks: [
-      { contract_code: 'BTC-USDT', trade_turnover: '100' },
-      { contract_code: 'ETH-USDT', trade_turnover: '200' },
-    ] });
-    expect(await fetchHtxCoins(5)).toEqual(['ETH', 'BTC']);
   });
 
   it('WEEX: cmt_ prefix + usdt suffix strip + uppercase, volume_24h ranking', async () => {
@@ -115,15 +95,6 @@ describe('C2 shadow universe-fetchers — shape mapping + ranking + filters', ()
       ] },
     );
     expect(await fetchXtCoins(5)).toEqual(['ETH', 'BTC']);
-  });
-
-  it('PHEMEX: perpProductsV2 USDT+Listed filter (excludes USDC)', async () => {
-    mockFetch({ data: { perpProductsV2: [
-      { baseCurrency: 'BTC', quoteCurrency: 'USDT', status: 'Listed' },
-      { baseCurrency: 'ETH', quoteCurrency: 'USDT', status: 'Listed' },
-      { baseCurrency: 'SOL', quoteCurrency: 'USDC', status: 'Listed' }, // USDC → excl
-    ] } });
-    expect((await fetchPhemexCoins(5)).sort()).toEqual(['BTC', 'ETH']);
   });
 
   it('EDGEX: contractName USD strip (unranked top-N)', async () => {
