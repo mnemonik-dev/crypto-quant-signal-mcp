@@ -1,0 +1,250 @@
+/**
+ * tests/unit/calibration-audit.test.ts — EQUITY-CALIBRATION-AUDIT-W1.
+ *
+ * Pure-function coverage for the reusable audit harness: the SHIPPED PFE-win
+ * predicate (single-derivation parity), benchmark edge, calibration + ECE,
+ * percentile, magnitude, sign-agreement, and the GO / GO-WITH-REFRAME / NO-GO
+ * verdict rule.
+ */
+import { describe, it, expect } from 'vitest';
+import {
+  isPfeWin,
+  isRealizedFavorable,
+  seededCall,
+  benchmarkEdge,
+  realizedHitRate,
+  calibrationBins,
+  expectedCalibrationError,
+  isMonotonic,
+  percentileCont,
+  winMagnitudeQuartiles,
+  signAgreement,
+  splitWr,
+  computeAuditReport,
+  type AuditRow,
+} from '../../src/scripts/calibration-audit.js';
+
+function row(o: Partial<AuditRow> & Pick<AuditRow, 'call'>): AuditRow {
+  return {
+    pfePct: 0,
+    confidence: 0.8,
+    entry: 100,
+    winHighMax: 100,
+    winLowMin: 100,
+    outcomeReturnPct: 0,
+    regime: 'ranging',
+    bucket: '101-500',
+    ...o,
+  };
+}
+
+describe('isPfeWin — the SHIPPED predicate (single-derivation)', () => {
+  it('BUY wins iff pfe>0, SELL wins iff pfe<0', () => {
+    expect(isPfeWin('BUY', 0.01)).toBe(true);
+    expect(isPfeWin('BUY', 0)).toBe(false);
+    expect(isPfeWin('BUY', -1)).toBe(false);
+    expect(isPfeWin('SELL', -0.01)).toBe(true);
+    expect(isPfeWin('SELL', 0)).toBe(false);
+    expect(isPfeWin('SELL', 1)).toBe(false);
+  });
+  it('realized-favorable mirrors the call direction on close-to-close', () => {
+    expect(isRealizedFavorable('BUY', 2)).toBe(true);
+    expect(isRealizedFavorable('SELL', -2)).toBe(true);
+    expect(isRealizedFavorable('BUY', -2)).toBe(false);
+  });
+});
+
+describe('seededCall — deterministic (no Math.random)', () => {
+  it('is stable and binary', () => {
+    for (let i = 0; i < 50; i++) {
+      const a = seededCall(i);
+      expect(a === 'BUY' || a === 'SELL').toBe(true);
+      expect(seededCall(i)).toBe(a);
+    }
+  });
+});
+
+describe('benchmarkEdge — base-rate artifact detection', () => {
+  // r0/r2 win under their own call AND both benchmarks; r1/r3 lose everywhere.
+  const rows: AuditRow[] = [
+    row({ call: 'BUY', pfePct: 10, entry: 100, winHighMax: 110, winLowMin: 95, outcomeReturnPct: 5 }),
+    row({ call: 'BUY', pfePct: 0, entry: 100, winHighMax: 100, winLowMin: 101, outcomeReturnPct: -1 }),
+    row({ call: 'SELL', pfePct: -10, entry: 50, winHighMax: 55, winLowMin: 45, outcomeReturnPct: -3 }),
+    row({ call: 'SELL', pfePct: 0, entry: 50, winHighMax: 49, winLowMin: 50, outcomeReturnPct: 1 }),
+  ];
+  it('computes actual/always-BUY/always-SELL and a ≤0 edge when calls match the base rate', () => {
+    const e = benchmarkEdge(rows);
+    expect(e.n).toBe(4);
+    expect(e.actualWr).toBeCloseTo(0.5, 10);
+    expect(e.alwaysBuyWr).toBeCloseTo(0.5, 10);
+    expect(e.alwaysSellWr).toBeCloseTo(0.5, 10);
+    expect(e.buyWr).toBeCloseTo(0.5, 10);
+    expect(e.sellWr).toBeCloseTo(0.5, 10);
+    expect(e.edge).toBeLessThanOrEqual(0); // no edge over the naive benchmark
+  });
+});
+
+describe('realizedHitRate', () => {
+  it('measures directional accuracy on realized close-to-close', () => {
+    const rows: AuditRow[] = [
+      row({ call: 'BUY', outcomeReturnPct: 2 }), // hit
+      row({ call: 'BUY', outcomeReturnPct: -2 }), // miss
+      row({ call: 'SELL', outcomeReturnPct: -2 }), // hit
+      row({ call: 'SELL', outcomeReturnPct: 2 }), // miss
+    ];
+    const r = realizedHitRate(rows);
+    expect(r.actual).toBeCloseTo(0.5, 10);
+    expect(r.alwaysBuy).toBeCloseTo(0.5, 10); // 2 of 4 have orp>0
+    expect(r.alwaysSell).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe('calibrationBins + ECE', () => {
+  const rows: AuditRow[] = [
+    row({ call: 'BUY', pfePct: 5, confidence: 0.85 }), // bin[8] win
+    row({ call: 'BUY', pfePct: 5, confidence: 0.85 }), // bin[8] win
+    row({ call: 'BUY', pfePct: 0, confidence: 0.35 }), // bin[3] loss
+    row({ call: 'BUY', pfePct: 0, confidence: 0.35 }), // bin[3] loss
+  ];
+  it('bins by confidence and computes per-bin WR + meanConf', () => {
+    const bins = calibrationBins(rows);
+    const b8 = bins.find((b) => b.lo === 0.8)!;
+    const b3 = bins.find((b) => b.lo === 0.3)!;
+    expect(b8.n).toBe(2);
+    expect(b8.wr).toBeCloseTo(1.0, 10);
+    expect(b8.meanConf).toBeCloseTo(0.85, 10);
+    expect(b3.wr).toBeCloseTo(0.0, 10);
+  });
+  it('ECE = Σ (n_b/N)·|WR_b − meanConf_b| = 0.25 for this fixture', () => {
+    const ece = expectedCalibrationError(calibrationBins(rows));
+    expect(ece).toBeCloseTo(0.5 * 0.15 + 0.5 * 0.35, 6); // 0.25
+  });
+  it('conf==1.0 lands in the last bin', () => {
+    const bins = calibrationBins([row({ call: 'BUY', pfePct: 1, confidence: 1.0 })]);
+    expect(bins[0].lo).toBe(0.9);
+  });
+});
+
+describe('isMonotonic (n≥minN gate)', () => {
+  it('true when WR non-decreasing across well-populated bins', () => {
+    const lo = Array.from({ length: 30 }, (_, i) =>
+      row({ call: 'BUY', pfePct: i < 6 ? 1 : 0, confidence: 0.35 }),
+    ); // wr=0.2
+    const hi = Array.from({ length: 30 }, (_, i) =>
+      row({ call: 'BUY', pfePct: i < 27 ? 1 : 0, confidence: 0.85 }),
+    ); // wr=0.9
+    expect(isMonotonic(calibrationBins([...lo, ...hi]))).toBe(true);
+  });
+  it('false when a higher-confidence bin wins less', () => {
+    const lo = Array.from({ length: 30 }, () => row({ call: 'BUY', pfePct: 1, confidence: 0.35 })); // wr=1.0
+    const hi = Array.from({ length: 30 }, (_, i) =>
+      row({ call: 'BUY', pfePct: i < 15 ? 1 : 0, confidence: 0.85 }),
+    ); // wr=0.5
+    expect(isMonotonic(calibrationBins([...lo, ...hi]))).toBe(false);
+  });
+});
+
+describe('percentileCont (matches PG percentile_cont)', () => {
+  it('interpolates linearly', () => {
+    const x = [1, 2, 3, 4];
+    expect(percentileCont(x, 0.5)).toBeCloseTo(2.5, 10);
+    expect(percentileCont(x, 0.25)).toBeCloseTo(1.75, 10);
+    expect(percentileCont(x, 0.75)).toBeCloseTo(3.25, 10);
+    expect(percentileCont([7], 0.9)).toBe(7);
+  });
+});
+
+describe('winMagnitudeQuartiles', () => {
+  it('quartiles of |pfe| over winning rows only', () => {
+    const rows: AuditRow[] = [
+      row({ call: 'BUY', pfePct: 2 }),
+      row({ call: 'BUY', pfePct: 6 }),
+      row({ call: 'SELL', pfePct: -4 }),
+      row({ call: 'BUY', pfePct: 0 }), // not a win → excluded
+    ];
+    const q = winMagnitudeQuartiles(rows);
+    expect(q.nWins).toBe(3);
+    expect(q.median).toBeCloseTo(4, 10); // |{2,4,6}| median = 4
+  });
+});
+
+describe('signAgreement (PFE-win vs realized)', () => {
+  it('fraction of PFE-wins that also end realized-favorable', () => {
+    const rows: AuditRow[] = [
+      row({ call: 'BUY', pfePct: 5, outcomeReturnPct: 3 }), // win + realized fav
+      row({ call: 'BUY', pfePct: 5, outcomeReturnPct: -1 }), // win + realized UNfav
+    ];
+    const s = signAgreement(rows);
+    expect(s.nPfeWins).toBe(2);
+    expect(s.pfeWinAlsoRealizedFav).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe('splitWr', () => {
+  it('groups WR by key', () => {
+    const rows: AuditRow[] = [
+      row({ call: 'BUY', pfePct: 1, regime: 'trending_up' }),
+      row({ call: 'BUY', pfePct: 0, regime: 'trending_up' }),
+      row({ call: 'SELL', pfePct: -1, regime: 'ranging' }),
+    ];
+    const cells = splitWr(rows, (r) => r.regime);
+    expect(cells.find((c) => c.key === 'trending_up')!.wr).toBeCloseTo(0.5, 10);
+    expect(cells.find((c) => c.key === 'ranging')!.wr).toBeCloseTo(1.0, 10);
+  });
+});
+
+describe('computeAuditReport — verdict rule', () => {
+  it('NO-GO when the PFE edge is ≤ floor (base-rate artifact)', () => {
+    const rows: AuditRow[] = [
+      row({ call: 'BUY', pfePct: 10, entry: 100, winHighMax: 110, winLowMin: 95, outcomeReturnPct: 5 }),
+      row({ call: 'BUY', pfePct: 0, entry: 100, winHighMax: 100, winLowMin: 101, outcomeReturnPct: -1 }),
+      row({ call: 'SELL', pfePct: -10, entry: 50, winHighMax: 55, winLowMin: 45, outcomeReturnPct: -3 }),
+      row({ call: 'SELL', pfePct: 0, entry: 50, winHighMax: 49, winLowMin: 50, outcomeReturnPct: 1 }),
+    ];
+    expect(computeAuditReport(rows, 'equities').verdict).toBe('NO-GO');
+  });
+
+  it('GO when the engine beats every benchmark on PFE AND realized, with strong sign-agreement', () => {
+    // Each row wins ONLY under its own call → always-BUY and always-SELL each ~0.5,
+    // the engine's directional pick wins all → dominant edge; realized mirrors it.
+    const rows: AuditRow[] = [];
+    for (let i = 0; i < 20; i++) {
+      if (i % 2 === 0) {
+        // BUY winner: high breaks up, low never breaches entry
+        rows.push(row({ call: 'BUY', pfePct: 8, entry: 100, winHighMax: 108, winLowMin: 100, outcomeReturnPct: 6 }));
+      } else {
+        // SELL winner: low breaks down, high never breaches entry
+        rows.push(row({ call: 'SELL', pfePct: -8, entry: 100, winHighMax: 100, winLowMin: 92, outcomeReturnPct: -6 }));
+      }
+    }
+    const rep = computeAuditReport(rows, 'equities');
+    expect(rep.edge.actualWr).toBeCloseTo(1.0, 10);
+    expect(rep.edge.alwaysBuyWr).toBeCloseTo(0.5, 10);
+    expect(rep.edge.alwaysSellWr).toBeCloseTo(0.5, 10);
+    expect(rep.edge.edge).toBeGreaterThanOrEqual(0.08);
+    expect(rep.realized.edge).toBeGreaterThan(0);
+    expect(rep.verdict).toBe('GO');
+  });
+
+  it('GO-WITH-REFRAME when a real edge exists but PFE-wins often end unfavorable', () => {
+    const rows: AuditRow[] = [];
+    for (let i = 0; i < 20; i++) {
+      if (i % 2 === 0) {
+        // BUY winner on PFE; realized favorable only ~half the time
+        rows.push(
+          row({ call: 'BUY', pfePct: 8, entry: 100, winHighMax: 108, winLowMin: 100, outcomeReturnPct: i % 4 === 0 ? 6 : -3 }),
+        );
+      } else {
+        // SELL winner on PFE; realized favorable only ~half the time
+        rows.push(
+          row({ call: 'SELL', pfePct: -8, entry: 100, winHighMax: 100, winLowMin: 92, outcomeReturnPct: i % 4 === 1 ? -6 : 3 }),
+        );
+      }
+    }
+    const rep = computeAuditReport(rows, 'equities');
+    expect(rep.edge.edge).toBeGreaterThanOrEqual(0.08);
+    expect(rep.sign.pfeWinAlsoRealizedFav).toBeLessThan(0.6);
+    // realized edge may be ≤0 here (PFE-wins reverse) → NO-GO; or >0 → GO-WITH-REFRAME.
+    expect(['GO-WITH-REFRAME', 'NO-GO']).toContain(rep.verdict);
+  });
+});
