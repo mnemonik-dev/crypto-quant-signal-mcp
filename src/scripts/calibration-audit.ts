@@ -271,6 +271,51 @@ export function computeAuditReport(
   };
 }
 
+// ── Crypto loader (2nd asset class — Pillar 2 reuse of the SAME pure fns) ─────
+// The crypto `signals` table stores BOTH pfe_return_pct (favorable excursion)
+// AND mae_return_pct (adverse excursion). Because pfe tracks the favorable side
+// and mae the adverse side, and favorable/adverse map to window high/low by call
+// direction, we can RECONSTRUCT the window max-high and min-low from stored
+// columns alone — so the always-BUY / always-SELL benchmarks need NO kline
+// re-fetch. Single-derivation: `isPfeWin(call, pfe_return_pct)` is the shipped
+// crypto predicate (src/resources/signal-performance.ts), unchanged.
+export interface CryptoSignalRow {
+  signal: 'BUY' | 'SELL';
+  pfe_return_pct: number; // favorable-side excursion %, entry-anchored
+  mae_return_pct: number; // adverse-side excursion %, entry-anchored
+  outcome_return_pct: number; // close-to-close return % (realized)
+  confidence: number; // INTEGER 0-100 as stored
+  coin: string;
+  regime: string | null;
+}
+
+/** BTC/ETH = Tier-1. Full 4-tier needs the dynamic hourly top-20-OI set, which
+ * cannot be reconstructed historically → the audit segments primarily by
+ * timeframe (fully accurate) and reports T1-vs-rest as the tier proxy. */
+export function cryptoTierProxy(coin: string): string {
+  return coin === 'BTC' || coin === 'ETH' ? 'T1_bluechip' : 'rest';
+}
+
+/** Reconstruct a benchmark-ready AuditRow from one stored crypto signal. */
+export function cryptoRowToAudit(r: CryptoSignalRow): AuditRow {
+  // BUY: pfe = high-side (≥0), mae = low-side (≤0). SELL: pfe = low-side (≤0),
+  // mae = high-side (≥0). So the window extrema recover as:
+  const maxHighExc = r.signal === 'BUY' ? r.pfe_return_pct : r.mae_return_pct; // % of entry above
+  const minLowExc = r.signal === 'BUY' ? r.mae_return_pct : r.pfe_return_pct; // % of entry below
+  const entry = 1; // benchmarks depend only on signs/ratios; entry is a scale-free anchor
+  return {
+    call: r.signal,
+    pfePct: r.pfe_return_pct,
+    confidence: r.confidence / 100, // integer 0-100 → [0,1]
+    entry,
+    winHighMax: entry * (1 + maxHighExc / 100),
+    winLowMin: entry * (1 + minLowExc / 100),
+    outcomeReturnPct: r.outcome_return_pct,
+    regime: r.regime,
+    bucket: cryptoTierProxy(r.coin),
+  };
+}
+
 // ── CLI (read-only fetch → report). Runs in-container: node dist/scripts/calibration-audit.js ──
 /* c8 ignore start */
 const EQUITY_AUDIT_SQL = `
@@ -322,19 +367,71 @@ async function fetchEquityRows(engineVersion: string): Promise<AuditRow[]> {
   }));
 }
 
+// Crypto `signals` loader — benchmarks reconstruct from stored (pfe,mae); no
+// kline re-fetch. Optional per-(timeframe,tier) filter for cell-level audits.
+const CRYPTO_AUDIT_SQL = `
+SELECT signal, coin, regime,
+       confidence::float8 AS confidence,
+       pfe_return_pct::float8 AS pfe_return_pct,
+       mae_return_pct::float8 AS mae_return_pct,
+       outcome_return_pct::float8 AS outcome_return_pct
+FROM signals
+WHERE signal IN ('BUY','SELL')
+  AND pfe_return_pct IS NOT NULL AND mae_return_pct IS NOT NULL AND outcome_return_pct IS NOT NULL
+  AND ($1::text IS NULL OR timeframe = $1)
+  AND ($2::text IS NULL OR (CASE WHEN coin IN ('BTC','ETH') THEN 'T1_bluechip' ELSE 'rest' END) = $2)`;
+
+export async function loadCryptoAuditInput(
+  opts: { timeframe?: string; tier?: string } = {},
+): Promise<AuditRow[]> {
+  const { dbQuery } = await import('../lib/performance-db.js');
+  const raw = await dbQuery<CryptoSignalRow>(CRYPTO_AUDIT_SQL, [
+    opts.timeframe ?? null,
+    opts.tier ?? null,
+  ]);
+  return raw.map(cryptoRowToAudit);
+}
+
+const CRYPTO_TFS = ['3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d'];
+
 async function main(): Promise<void> {
-  const asset = process.argv.includes('--asset')
-    ? process.argv[process.argv.indexOf('--asset') + 1]
-    : 'equities';
-  if (asset !== 'equities') {
-    // Crypto/options/futures re-use the SAME pure functions; only the fetcher
-    // (own-bars window) differs — not yet wired (see CRYPTO-PFE-BENCHMARK-AUDIT-W1).
-    console.error(`[calibration-audit] asset '${asset}' fetcher not wired; only 'equities' is implemented.`);
-    process.exit(2);
+  const argAfter = (flag: string): string | undefined =>
+    process.argv.includes(flag) ? process.argv[process.argv.indexOf(flag) + 1] : undefined;
+  const asset = argAfter('--asset') ?? 'equities';
+
+  if (asset === 'equities') {
+    const rows = await fetchEquityRows('equities-v1');
+    console.log(JSON.stringify(computeAuditReport(rows, asset), null, 2));
+    return;
   }
-  const rows = await fetchEquityRows('equities-v1');
-  const rep = computeAuditReport(rows, asset);
-  console.log(JSON.stringify(rep, null, 2));
+  if (asset === 'crypto') {
+    const tf = argAfter('--timeframe');
+    if (tf) {
+      const rows = await loadCryptoAuditInput({ timeframe: tf });
+      console.log(JSON.stringify(computeAuditReport(rows, `crypto:${tf}`), null, 2));
+      return;
+    }
+    // Default: aggregate + a compact per-timeframe edge table (the crux).
+    const agg = computeAuditReport(await loadCryptoAuditInput({}), 'crypto:aggregate');
+    const cells = [];
+    for (const t of CRYPTO_TFS) {
+      const rep = computeAuditReport(await loadCryptoAuditInput({ timeframe: t }), `crypto:${t}`);
+      cells.push({
+        tf: t,
+        n: rep.n,
+        actualWr: +rep.edge.actualWr.toFixed(4),
+        bestBenchmark: +rep.edge.bestBenchmark.toFixed(4),
+        pfeEdge: +rep.edge.edge.toFixed(4),
+        realizedHit: +rep.realized.actual.toFixed(4),
+        realizedEdge: +rep.realized.edge.toFixed(4),
+        verdict: rep.verdict,
+      });
+    }
+    console.log(JSON.stringify({ aggregate: { n: agg.n, actualWr: +agg.edge.actualWr.toFixed(4), pfeEdge: +agg.edge.edge.toFixed(4), realizedHit: +agg.realized.actual.toFixed(4), ece: +agg.calibration.ece.toFixed(4), verdict: agg.verdict }, byTimeframe: cells }, null, 2));
+    return;
+  }
+  console.error(`[calibration-audit] asset '${asset}' not wired (equities | crypto).`);
+  process.exit(2);
 }
 
 if (require.main === module) {

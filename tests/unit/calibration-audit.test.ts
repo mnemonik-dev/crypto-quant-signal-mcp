@@ -21,6 +21,8 @@ import {
   signAgreement,
   splitWr,
   computeAuditReport,
+  cryptoRowToAudit,
+  cryptoTierProxy,
   type AuditRow,
 } from '../../src/scripts/calibration-audit.js';
 
@@ -246,5 +248,48 @@ describe('computeAuditReport — verdict rule', () => {
     expect(rep.sign.pfeWinAlsoRealizedFav).toBeLessThan(0.6);
     // realized edge may be ≤0 here (PFE-wins reverse) → NO-GO; or >0 → GO-WITH-REFRAME.
     expect(['GO-WITH-REFRAME', 'NO-GO']).toContain(rep.verdict);
+  });
+});
+
+describe('crypto loader — reconstruct benchmarks from stored (pfe, mae)', () => {
+  it('maps a BUY signal: high-side=pfe, low-side=mae; confidence int→[0,1]', () => {
+    const buy = cryptoRowToAudit({
+      signal: 'BUY', pfe_return_pct: 2, mae_return_pct: -1, outcome_return_pct: 1.5,
+      confidence: 80, coin: 'SOL', regime: 'trending_up',
+    });
+    expect(buy.winHighMax).toBeCloseTo(1.02, 10); // maxHigh = entry·(1+pfe/100)
+    expect(buy.winLowMin).toBeCloseTo(0.99, 10); // minLow = entry·(1+mae/100)
+    expect(buy.confidence).toBeCloseTo(0.8, 10);
+    expect(buy.bucket).toBe('rest');
+    expect(isPfeWin(buy.call, buy.pfePct)).toBe(true);
+  });
+
+  it('maps a SELL signal: low-side=pfe, high-side=mae', () => {
+    const sell = cryptoRowToAudit({
+      signal: 'SELL', pfe_return_pct: -2, mae_return_pct: 1, outcome_return_pct: -1.5,
+      confidence: 60, coin: 'BTC', regime: null,
+    });
+    expect(sell.winLowMin).toBeCloseTo(0.98, 10);
+    expect(sell.winHighMax).toBeCloseTo(1.01, 10);
+    expect(sell.bucket).toBe('T1_bluechip');
+    expect(isPfeWin(sell.call, sell.pfePct)).toBe(true);
+  });
+
+  it('benchmarkEdge over reconstructed rows is base-rate-shaped (edge ≤ 0)', () => {
+    const rows = [
+      cryptoRowToAudit({ signal: 'BUY', pfe_return_pct: 2, mae_return_pct: -1, outcome_return_pct: 1, confidence: 70, coin: 'ETH', regime: null }),
+      cryptoRowToAudit({ signal: 'SELL', pfe_return_pct: -2, mae_return_pct: 1, outcome_return_pct: -1, confidence: 70, coin: 'ETH', regime: null }),
+    ];
+    const e = benchmarkEdge(rows);
+    expect(e.actualWr).toBeCloseTo(1.0, 10);
+    expect(e.alwaysBuyWr).toBeCloseTo(1.0, 10); // both rows have a high>entry
+    expect(e.alwaysSellWr).toBeCloseTo(1.0, 10); // both rows have a low<entry
+    expect(e.edge).toBeLessThanOrEqual(0);
+  });
+
+  it('cryptoTierProxy: BTC/ETH → T1, else rest', () => {
+    expect(cryptoTierProxy('BTC')).toBe('T1_bluechip');
+    expect(cryptoTierProxy('ETH')).toBe('T1_bluechip');
+    expect(cryptoTierProxy('DOGE')).toBe('rest');
   });
 });
