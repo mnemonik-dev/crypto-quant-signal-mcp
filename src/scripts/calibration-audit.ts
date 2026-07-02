@@ -22,6 +22,12 @@
  * values are never emitted.
  */
 
+// Shared statistics primitives now live in the canonical leaf module edge-stats.ts
+// (EDGE-DWR-METRIC-SOT-W1). Imported for internal use and re-exported below so this
+// module's public interface — and its shipped tests — remain byte-identical.
+import { normalCdf, wilsonInterval, excessZP, benjaminiHochberg, bonferroni } from './edge-stats.js';
+export { normalCdf, wilsonInterval, excessZP, benjaminiHochberg, bonferroni };
+
 // ── Row shape (asset-agnostic) ───────────────────────────────────────────────
 export interface AuditRow {
   call: 'BUY' | 'SELL';
@@ -324,56 +330,8 @@ export function cryptoRowToAudit(r: CryptoSignalRow): AuditRow {
 // out-of-sample. The benchmark is the CRUX: realized-hit-vs-50% is inflated by
 // tape drift — the honest edge is realized-hit − max(always-BUY, always-SELL).
 
-/** erf via Abramowitz-Stegun 7.1.26. */
-function erf(x: number): number {
-  const t = 1 / (1 + 0.3275911 * Math.abs(x));
-  const y =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-x * x);
-  return x >= 0 ? y : -y;
-}
-export function normalCdf(z: number): number {
-  return 0.5 * (1 + erf(z / Math.SQRT2));
-}
-
-/** Wilson score interval for a binomial proportion k/n. */
-export function wilsonInterval(k: number, n: number, z = 1.96): { lo: number; hi: number; pHat: number } {
-  if (n === 0) return { lo: 0, hi: 1, pHat: NaN };
-  const p = k / n;
-  const z2 = z * z;
-  const denom = 1 + z2 / n;
-  const center = (p + z2 / (2 * n)) / denom;
-  const half = (z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / denom;
-  return { lo: Math.max(0, center - half), hi: Math.min(1, center + half), pHat: p };
-}
-
-/** One-sided z-test that the observed rate exceeds a benchmark rate p0. */
-export function excessZP(hits: number, n: number, p0: number): { z: number; p: number } {
-  if (n === 0 || p0 <= 0 || p0 >= 1) return { z: 0, p: 1 };
-  const pHat = hits / n;
-  const se = Math.sqrt((p0 * (1 - p0)) / n);
-  const z = (pHat - p0) / se;
-  return { z, p: 1 - normalCdf(z) };
-}
-
-/** Benjamini-Hochberg FDR at level q. Returns per-index rejection + the cut p. */
-export function benjaminiHochberg(pvals: number[], q = 0.05): { rejected: boolean[]; threshold: number } {
-  const m = pvals.length;
-  const order = pvals.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
-  let kMax = -1;
-  for (let r = 0; r < m; r++) if (order[r].p <= ((r + 1) / m) * q) kMax = r;
-  const rejected = new Array(m).fill(false);
-  for (let r = 0; r <= kMax; r++) rejected[order[r].i] = true;
-  return { rejected, threshold: kMax >= 0 ? order[kMax].p : 0 };
-}
-
-/** Bonferroni family-wise correction. */
-export function bonferroni(pvals: number[], q = 0.05): boolean[] {
-  const thr = q / Math.max(1, pvals.length);
-  return pvals.map((p) => p <= thr);
-}
+// normalCdf / wilsonInterval / excessZP / benjaminiHochberg / bonferroni MOVED to
+// src/scripts/edge-stats.ts (imported + re-exported at the top of this file).
 
 export interface EdgeSplit {
   n: number;
