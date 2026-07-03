@@ -23,6 +23,7 @@ import { getCustomerByApiKey, getCustomerByEmail, createBillingPortalSession } f
 import { sendKeyRecoveryEmail } from './email.js';
 import type { ReferralStatsView } from './referral-pages.js';
 import { renderBrandFooter } from './footer-content.js';
+import { renderSiteNav } from './site-nav.js';
 
 // DESIGN-W10 / C2 / Q-W10-10: REPLACED body-flex-centering with var(--bg) layout.
 // Existing .tabs/.tab/.panel/.subtitle/.footer/.error/.success class blocks PRESERVED
@@ -81,28 +82,10 @@ tailwind.config = {
 </script>
 <style>${ACCOUNT_PAGE_STYLES}</style>`;
 
-// DESIGN-W10 / C2 / Q-W10-1 + Q-W10-2: canonical Nav VERBATIM from live algovault.com
-// (lines 178-201 per audits/DESIGN-W10-canonical-chrome-extract.md §1) with Account
-// link Q-W10-2 active-link substitution: hover:text-white transition → text-mint-400 font-medium.
-const ACCOUNT_NAV_HTML = `<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
-  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-    <a href="https://algovault.com/" class="flex items-center gap-2.5" aria-label="AlgoVault home">
-      <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
-      <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
-    </a>
-    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
-      <a href="https://algovault.com/track-record" class="hover:text-white transition">Track Record</a>
-      <a href="https://algovault.com/how-it-works" class="hover:text-white transition">How it works</a>
-      <a href="https://algovault.com/#pricing" class="hover:text-white transition">Pricing</a>
-      <a href="https://algovault.com/integrations" class="hover:text-white transition">Integrations</a>
-      <a href="https://algovault.com/skills" class="hover:text-white transition">Skills</a>
-      <a href="https://algovault.com/docs.html" class="hover:text-white transition">Docs</a>
-      <a href="https://algovault.com/verify" class="hover:text-white transition">Verify</a>
-      <a href="https://api.algovault.com/account" class="text-mint-400 font-medium">Account</a>
-      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
-    </div>
-  </div>
-</nav>`;
+// LANDING-MOBILE-NAV-FUNCTION-RENDERED-W1: nav now via shared renderSiteNav()
+// (src/lib/site-nav.ts) — desktop byte-identical to the prior inline ACCOUNT_NAV_HTML
+// (Account active-link, cross-origin Track Record href) + mobile hamburger/#mobile-menu/controller.
+const ACCOUNT_NAV_HTML = renderSiteNav({ active: 'account', trackRecordHref: 'https://algovault.com/track-record' });
 
 // FOOTER-UNIFY-W1: the canonical brand footer now comes from the single SoT
 // (src/lib/footer-content.ts renderBrandFooter). The former inline ACCOUNT_FOOTER_HTML

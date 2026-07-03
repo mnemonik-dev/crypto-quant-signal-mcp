@@ -207,6 +207,7 @@ import {
   accountReferralsHandler,
   accountPayoutAddressHandler,
 } from './lib/account-handlers.js';
+import { renderSiteNav } from './lib/site-nav.js';
 import { getTopAssetsByOI } from './lib/oi-ranking.js';
 
 /** Timing-safe string comparison to prevent side-channel attacks on admin key. */
@@ -3555,26 +3556,8 @@ tailwind.config = {
 </script>
 </head>
 <body>
-<!-- DESIGN-W11 / C2 / Q-W11-1+Q-W11-4: canonical Nav VERBATIM from live algovault.com per audits/DESIGN-W11-canonical-chrome-extract.md §1. Track Record link uses active-link styling (text-mint-400 font-medium) replacing hover:text-white transition. Brand-mark wrap uses /account precedent (direct ahref + aria-label + cross-origin href). -->
-<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
-  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-    <a href="https://algovault.com/" class="flex items-center gap-2.5" aria-label="AlgoVault home">
-      <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
-      <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
-    </a>
-    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
-      <a href="/track-record" class="text-mint-400 font-medium">Track Record</a>
-      <a href="https://algovault.com/how-it-works" class="hover:text-white transition">How it works</a>
-      <a href="https://algovault.com/#pricing" class="hover:text-white transition">Pricing</a>
-      <a href="https://algovault.com/integrations" class="hover:text-white transition">Integrations</a>
-      <a href="https://algovault.com/skills" class="hover:text-white transition">Skills</a>
-      <a href="https://algovault.com/docs.html" class="hover:text-white transition">Docs</a>
-      <a href="https://algovault.com/verify" class="hover:text-white transition">Verify</a>
-      <a href="https://api.algovault.com/account" class="hover:text-white transition">Account</a>
-      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
-    </div>
-  </div>
-</nav>
+<!-- LANDING-MOBILE-NAV-FUNCTION-RENDERED-W1: canonical Nav via shared renderSiteNav() (src/lib/site-nav.ts) — desktop byte-identical to the prior inline nav (Track Record active) + mobile hamburger/#mobile-menu panel/controller. -->
+${renderSiteNav({ active: 'track-record', trackRecordHref: '/track-record' })}
 <!-- DESIGN-W11 / C2 / Q-W11-3: canonical artboard wrapper OPEN (max-width:1400px preserves dashboard layout; 80px top padding clears 56px fixed Nav + breathing). Foreground content stacks above 3 bg-* layers via position:relative;z-index:1. -->
 <main class="lp-track-record">
   <div class="artboard" style="padding:80px 24px 64px;max-width:1400px;margin:0 auto;width:100%">
