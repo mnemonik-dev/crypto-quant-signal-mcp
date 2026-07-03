@@ -5,6 +5,11 @@
  */
 import crypto from 'node:crypto';
 import { dbExec, dbRun, dbQuery } from './performance-db.js';
+// OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: single-derivation — logRequest reads the
+// per-request classifyTraffic verdict from the ALS to stamp `request_log.is_automated`.
+// analytics.ts is a leaf (only performance-db + crypto); license.ts does NOT import
+// analytics → this edge is a DAG, no import cycle (verified in Plan Mode).
+import { getRequestIsAutomated } from './license.js';
 
 // ── Table creation ──
 
@@ -21,7 +26,8 @@ const CREATE_TABLE_SQL = `
     verdict TEXT,
     confidence INTEGER,
     ip_hash TEXT,
-    is_bot_internal ${process.env.DATABASE_URL ? 'BOOLEAN' : 'INTEGER'} DEFAULT ${process.env.DATABASE_URL ? 'FALSE' : '0'}
+    is_bot_internal ${process.env.DATABASE_URL ? 'BOOLEAN' : 'INTEGER'} DEFAULT ${process.env.DATABASE_URL ? 'FALSE' : '0'},
+    is_automated ${process.env.DATABASE_URL ? 'BOOLEAN NOT NULL' : 'INTEGER NOT NULL'} DEFAULT ${process.env.DATABASE_URL ? 'FALSE' : '0'}
   );
 `;
 
@@ -35,6 +41,17 @@ const CREATE_TABLE_SQL = `
 const ALTER_BOT_INTERNAL_SQL = process.env.DATABASE_URL
   ? `ALTER TABLE request_log ADD COLUMN IF NOT EXISTS is_bot_internal BOOLEAN DEFAULT FALSE;`
   : `ALTER TABLE request_log ADD COLUMN is_bot_internal INTEGER DEFAULT 0;`;
+
+// OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1 (2026-07-03): idempotent ALTER mirroring
+// the is_bot_internal pattern. Pre-applied on prod PG via SSH BEFORE this deploy
+// (information_schema-guarded) — the code path is a no-op there. Fresh deploys get the
+// column at CREATE TABLE; existing deploys (incl. the SQLite test/dev DB) get it here.
+// PG: IF NOT EXISTS (idempotent no-op). SQLite: bare (throws "duplicate column" on
+// re-run — caught by initAnalytics try/catch). NOT NULL DEFAULT FALSE = every row has a
+// concrete verdict (fail-open genuine); matches the live prod column.
+const ALTER_AUTOMATED_SQL = process.env.DATABASE_URL
+  ? `ALTER TABLE request_log ADD COLUMN IF NOT EXISTS is_automated BOOLEAN NOT NULL DEFAULT FALSE;`
+  : `ALTER TABLE request_log ADD COLUMN is_automated INTEGER NOT NULL DEFAULT 0;`;
 
 // DASH-EXTERNAL-ONLY-W1, 2026-05-24: partial index for external-only reads.
 // Speeds the 24h/7d/all-time tiles in getUsageStats() + getToolLatencyStats(),
@@ -94,6 +111,14 @@ export function initAnalytics(): void {
     // differs. Best-effort; the column has DEFAULT 0/FALSE so old rows remain
     // queryable.
   }
+  // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: backward-compat is_automated column
+  // (pre-applied on prod PG via SSH → no-op here; SQLite dev/test gets it now).
+  try {
+    dbExec(ALTER_AUTOMATED_SQL);
+  } catch {
+    // Best-effort — column may already exist (PG IF NOT EXISTS no-ops; SQLite
+    // "duplicate column" caught here). DEFAULT FALSE keeps old rows queryable.
+  }
   // DASH-EXTERNAL-ONLY-W1: partial index on (timestamp) WHERE NOT is_bot_internal.
   // Idempotent CREATE INDEX IF NOT EXISTS; safe to fire on fresh deploy + existing PG.
   try {
@@ -139,6 +164,10 @@ interface LogEntry {
   // bypass header. Preserved for analytics attribution — bot calls don't tick
   // the user quota counter, but we still want to count them by tool.
   isBotInternal?: boolean;
+  // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: the per-request classifyTraffic
+  // verdict. Optional — when omitted, logRequest reads it from the ALS
+  // (getRequestIsAutomated), so the 12 existing call sites need no change.
+  isAutomated?: boolean;
 }
 
 export function logRequest(entry: LogEntry): void {
@@ -146,9 +175,16 @@ export function logRequest(entry: LogEntry): void {
     const botInternalValue = entry.isBotInternal
       ? (process.env.DATABASE_URL ? true : 1)
       : (process.env.DATABASE_URL ? false : 0);
+    // Single-derivation: prefer an explicit entry value, else the ALS verdict
+    // computed once at the POST/x402 layer. Fail-open FALSE (never inflate the
+    // automated bucket) via getRequestIsAutomated's own default.
+    const isAutomated = entry.isAutomated ?? getRequestIsAutomated();
+    const automatedValue = isAutomated
+      ? (process.env.DATABASE_URL ? true : 1)
+      : (process.env.DATABASE_URL ? false : 0);
     dbRun(
-      `INSERT INTO request_log (timestamp, session_id, tool_name, asset, timeframe, license_tier, response_time_ms, verdict, confidence, ip_hash, is_bot_internal)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO request_log (timestamp, session_id, tool_name, asset, timeframe, license_tier, response_time_ms, verdict, confidence, ip_hash, is_bot_internal, is_automated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       new Date().toISOString(),
       entry.sessionId || null,
       entry.toolName,
@@ -160,6 +196,7 @@ export function logRequest(entry: LogEntry): void {
       entry.confidence ?? null,
       entry.ipHash || null,
       botInternalValue,
+      automatedValue,
     );
   } catch {
     // Never fail the request — logging is best-effort
@@ -385,6 +422,17 @@ export async function getUsageStats(): Promise<Record<string, unknown>> {
     externalCalls24h,
     internalCalls24h,
     externalSessions24h,
+    // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1
+    genuineFree24h,
+    genuinePaid24h,
+    automatedFree24h,
+    genuineSessions24h,
+    automatedSessions24h,
+    genuineFree7d,
+    genuinePaid7d,
+    automatedFree7d,
+    topSessions24h,
+    topAssetsGenuine24h,
   ] = await Promise.all([
     // DASH-EXTERNAL-ONLY-W1: every dashboard tile / breakdown counts EXTERNAL
     // calls only (internal loopback like algovault-bot excluded). Per CLAUDE.md
@@ -411,7 +459,37 @@ export async function getUsageStats(): Promise<Record<string, unknown>> {
     dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ?', [dayAgo, BOT_FALSE]),
     dbQuery<{ count: string }>('SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ?', [dayAgo, BOT_TRUE]),
     dbQuery<{ count: string }>('SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL AND is_bot_internal = ?', [dayAgo, BOT_FALSE]),
+    // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: genuine vs automated split.
+    // Payment = legitimacy → PAID (license_tier NOT IN 'free','internal') is ALWAYS
+    // genuine, is_automated IGNORED; the automated bucket is FREE-tier bots ONLY.
+    // Every external row (is_bot_internal=false) is exactly one of: paid[genuine] ·
+    // free-nonbot[genuine] · free-bot[automated] → sums reconcile with externalCalls,
+    // no double-count. Cross-DB boolean encoding reuses BOT_TRUE/BOT_FALSE (is_automated
+    // is the same BOOLEAN/INTEGER type as is_bot_internal).
+    dbQuery<{ count: string }>("SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND license_tier = 'free' AND is_automated = ?", [dayAgo, BOT_FALSE, BOT_FALSE]),
+    dbQuery<{ count: string }>("SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND license_tier NOT IN ('free','internal')", [dayAgo, BOT_FALSE]),
+    dbQuery<{ count: string }>("SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND license_tier = 'free' AND is_automated = ?", [dayAgo, BOT_FALSE, BOT_TRUE]),
+    dbQuery<{ count: string }>("SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL AND is_bot_internal = ? AND (license_tier <> 'free' OR is_automated = ?)", [dayAgo, BOT_FALSE, BOT_FALSE]),
+    dbQuery<{ count: string }>("SELECT COUNT(DISTINCT session_id) as count FROM request_log WHERE timestamp >= ? AND session_id IS NOT NULL AND is_bot_internal = ? AND license_tier = 'free' AND is_automated = ?", [dayAgo, BOT_FALSE, BOT_TRUE]),
+    dbQuery<{ count: string }>("SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND license_tier = 'free' AND is_automated = ?", [weekAgo, BOT_FALSE, BOT_FALSE]),
+    dbQuery<{ count: string }>("SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND license_tier NOT IN ('free','internal')", [weekAgo, BOT_FALSE]),
+    dbQuery<{ count: string }>("SELECT COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND license_tier = 'free' AND is_automated = ?", [weekAgo, BOT_FALSE, BOT_TRUE]),
+    // Concentration surge-flag: top session_id share of ALL external (genuine+automated) 24h.
+    dbQuery<{ session_id: string; count: string }>("SELECT session_id, COUNT(*) as count FROM request_log WHERE timestamp >= ? AND is_bot_internal = ? AND session_id IS NOT NULL GROUP BY session_id ORDER BY count DESC LIMIT 5", [dayAgo, BOT_FALSE]),
+    // Top assets over the GENUINE slice only (so bot-BTC-polling doesn't dominate).
+    dbQuery<{ asset: string; count: string }>("SELECT asset, COUNT(*) as count FROM request_log WHERE asset IS NOT NULL AND timestamp >= ? AND is_bot_internal = ? AND (license_tier <> 'free' OR is_automated = ?) GROUP BY asset ORDER BY count DESC LIMIT 10", [dayAgo, BOT_FALSE, BOT_FALSE]),
   ]);
+
+  // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: concentration % of the top talkers
+  // over ALL external calls (the surge flag). Denominator = total external 24h.
+  const extTotal24h = Number(externalCalls24h[0]?.count ?? 0);
+  const topSessionCounts = topSessions24h.map(r => Number(r.count));
+  const top1Calls = topSessionCounts[0] ?? 0;
+  const top5Calls = topSessionCounts.slice(0, 5).reduce((s, v) => s + v, 0);
+  const pctOfExternal = (n: number): number =>
+    extTotal24h > 0 ? Math.round((n / extTotal24h) * 1000) / 10 : 0;
+  const genuineFreeN = Number(genuineFree24h[0]?.count ?? 0);
+  const genuinePaidN = Number(genuinePaid24h[0]?.count ?? 0);
 
   return {
     totalCalls: {
@@ -433,7 +511,29 @@ export async function getUsageStats(): Promise<Record<string, unknown>> {
     totalCallsExternal: { last24h: Number(externalCalls24h[0]?.count ?? 0) },
     totalCallsInternal: { last24h: Number(internalCalls24h[0]?.count ?? 0) },
     uniqueSessionsExternal: { last24h: Number(externalSessions24h[0]?.count ?? 0) },
+    // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: the genuine-vs-automated split.
+    // Payment = legitimacy → paid always genuine; automated = free-tier bots only.
+    // Invariant: externalGenuine.total + externalAutomated.total == totalCallsExternal.last24h.
+    externalGenuine: {
+      total: genuineFreeN + genuinePaidN,
+      free: genuineFreeN,
+      paid: genuinePaidN,
+      sessions: Number(genuineSessions24h[0]?.count ?? 0),
+      last7d: {
+        total: Number(genuineFree7d[0]?.count ?? 0) + Number(genuinePaid7d[0]?.count ?? 0),
+        free: Number(genuineFree7d[0]?.count ?? 0),
+        paid: Number(genuinePaid7d[0]?.count ?? 0),
+      },
+    },
+    externalAutomated: {
+      total: Number(automatedFree24h[0]?.count ?? 0),
+      sessions: Number(automatedSessions24h[0]?.count ?? 0),
+      last7d: { total: Number(automatedFree7d[0]?.count ?? 0) },
+    },
+    externalConcentration: { top1_pct: pctOfExternal(top1Calls), top5_pct: pctOfExternal(top5Calls) },
     topAssets: topAssets.map(r => ({ asset: r.asset, calls: Number(r.count) })),
+    // Genuine-slice top assets — the digest uses THIS (bot-BTC excluded).
+    topAssetsGenuine: topAssetsGenuine24h.map(r => ({ asset: r.asset, calls: Number(r.count) })),
     // C1 (LATENCY-W1): truthful per-tool latency stats. Replaces the misleading
     // single-number `avgResponseTimeMs` (kept as a field per row for context but
     // no longer the headline — the dashboard column is gone).

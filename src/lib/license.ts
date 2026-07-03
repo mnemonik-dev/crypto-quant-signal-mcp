@@ -43,6 +43,14 @@ interface RequestContext {
   ipHash?: string;
   /** Set by tool handler so HTTP layer can skip x402 settlement for HOLD. */
   lastVerdict?: string;
+  /**
+   * OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: the per-request `classifyTraffic`
+   * verdict (is_automated), computed ONCE at the /mcp POST (and x402/a2mcp) layer
+   * where raw UA/IP/tier are in scope, then read by `logRequest()` to stamp
+   * `request_log.is_automated`. Single-derivation with the `mcp_connect` funnel
+   * emit — the SAME verdict feeds both. Absent (edge paths) → fail-open FALSE.
+   */
+  isAutomated?: boolean;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();
@@ -75,6 +83,16 @@ export function setRequestVerdict(verdict: string): void {
 
 export function getRequestVerdict(): string | undefined {
   return requestContext.getStore()?.lastVerdict;
+}
+
+/**
+ * OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: read the per-request automated
+ * verdict for the `request_log.is_automated` stamp. Fail-open FALSE when unset
+ * (stdio / edge paths without a classifier input) — never silently inflate the
+ * automated bucket.
+ */
+export function getRequestIsAutomated(): boolean {
+  return requestContext.getStore()?.isAutomated ?? false;
 }
 
 /** Settlement refs from a verified x402 payment, for async settle after response. */

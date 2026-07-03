@@ -2848,6 +2848,20 @@ async function startHttp() {
     // default 'anon' label is harmless (only read when sessionId is set + stateless).
     const identityTier: IdentityTier = sessionIdentity?.tier ?? 'anon';
 
+    // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: classify THIS request ONCE
+    // (single-derivation — the ONE authoritative automated-vs-human verdict). Pure fn
+    // of (UA, IP, tier, is-this-a-real-call). Stored in the requestContext ALS below so
+    // `logRequest()` stamps `request_log.is_automated` per call, and REUSED by the
+    // once-per-session `mcp_connect` emit — byte-identical for tier!=='internal', so
+    // `funnel_events.meta_json.is_automated` / `by_authenticity` do NOT drift. Computed
+    // for every request; only consumed on POST tool-calls (harmless on GET/handshake).
+    const requestAuthenticity = classifyTraffic({
+      ua: req.headers['user-agent'] as string | undefined,
+      ip: clientIp(req),
+      hadRealToolCall: (req.body as { method?: string } | undefined)?.method === 'tools/call',
+      isInternalTier: license.tier === 'internal',
+    });
+
     // C6 (algovault-skills SKILLS-W1): per-Skill attribution.
     // If the request carries X-AlgoVault-Skill-Slug AND is a tools/call,
     // log the invocation fire-and-forget BEFORE dispatching to the transport.
@@ -2920,18 +2934,12 @@ async function startHttp() {
         });
         // OPS-ACTIVATION-LEAK-FIX-W1 CH3: tag automated vs human via the ONE canonical
         // classifier (single-derivation). Tags additively into meta_json — the row is
-        // NEVER dropped (Data Integrity). `hadRealToolCall` = is THIS connect POST itself
-        // a real tools/call (the L4 combining path treats connect-only probes as automated).
-        const connectBody = (req.body ?? {}) as { method?: string };
-        const authenticity = classifyTraffic({
-          ua: req.headers['user-agent'] as string | undefined,
-          ip: clientIp(req),
-          hadRealToolCall: connectBody.method === 'tools/call',
-          // This emit block is already gated on `license.tier !== 'internal'`, so internal
-          // traffic never reaches here (TS narrows tier to exclude 'internal'). The L0
-          // internal-tier path of classifyTraffic is exercised by its unit canary instead.
-          isInternalTier: false,
-        });
+        // NEVER dropped (Data Integrity). OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1:
+        // REUSES the per-request `requestAuthenticity` computed once above (the SAME
+        // verdict that stamps request_log.is_automated) instead of re-calling — this
+        // block only runs when tier!=='internal', for which the hoisted call's
+        // isInternalTier is false, so the emitted value is byte-identical (no drift).
+        const authenticity = requestAuthenticity;
         recordFunnelEvent({
           eventType: 'mcp_connect',
           sessionId,
@@ -2973,7 +2981,7 @@ async function startHttp() {
 
     // Run the entire request handling inside AsyncLocalStorage context
     // so tool handlers read the correct per-request license
-    await requestContext.run({ license, sessionId, ipHash }, async () => {
+    await requestContext.run({ license, sessionId, ipHash, isAutomated: requestAuthenticity.is_automated }, async () => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
 

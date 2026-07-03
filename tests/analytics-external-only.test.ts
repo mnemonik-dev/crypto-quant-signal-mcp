@@ -22,12 +22,18 @@ import {
   getToolLatencyStats,
   getSkillInvocationStats,
 } from '../src/lib/analytics.js';
+import { requestContext } from '../src/lib/license.js';
 import { dbQuery, dbRun } from '../src/lib/performance-db.js';
 
 const SENTINEL_TOOL = 'test_dash_ext_w1';
 const SENTINEL_TIER_EXT = 'TESTSENT_W1_external';
 const SENTINEL_TIER_INT = 'TESTSENT_W1_internal';
 const SENTINEL_SKILL_SLUG = 'test-dash-ext-w1-patcha';
+// OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: the genuine/automated split tests live in
+// THIS file (the single external-row writer) so they never race the shared SQLite DB.
+// These rows use REAL license tiers ('free'/'pro'/'internal') — the split keys on the
+// literal tier — and a distinct sentinel tool_name for cleanup.
+const SPLIT_TOOL = 'test_split_w1';
 
 const SKIP = !!process.env.DATABASE_URL;
 
@@ -35,6 +41,11 @@ async function cleanSentinels(): Promise<void> {
   // Hit both `is_bot_internal` flavors and both sentinel tiers; idempotent.
   try {
     dbRun('DELETE FROM request_log WHERE tool_name = ?', SENTINEL_TOOL);
+  } catch {
+    // Table may not exist yet; initAnalytics will create it
+  }
+  try {
+    dbRun('DELETE FROM request_log WHERE tool_name = ?', SPLIT_TOOL);
   } catch {
     // Table may not exist yet; initAnalytics will create it
   }
@@ -207,5 +218,84 @@ describe.skipIf(SKIP)('DASH-EXTERNAL-ONLY-W1 — dashboard filter excludes is_bo
     const stats = await getSkillInvocationStats();
     const sentinelEntry = stats.find((s) => s.slug === SENTINEL_SKILL_SLUG);
     expect(sentinelEntry).toBeUndefined();
+  });
+
+  // ── OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: is_automated stamp + split math ──
+
+  it('logRequest stamps is_automated=TRUE from the requestContext ALS (single-derivation)', async () => {
+    await requestContext.run(
+      { license: { tier: 'free' }, isAutomated: true } as never,
+      async () => {
+        logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10 });
+      },
+    );
+    await new Promise((r) => setTimeout(r, 60));
+    const rows = await dbQuery<{ is_automated: number | boolean }>(
+      'SELECT is_automated FROM request_log WHERE tool_name = ?',
+      [SPLIT_TOOL],
+    );
+    expect(rows.length).toBe(1);
+    expect(Boolean(rows[0].is_automated)).toBe(true);
+  });
+
+  it('logRequest defaults is_automated=FALSE with no ALS + no explicit value (fail-open)', async () => {
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10 });
+    await new Promise((r) => setTimeout(r, 60));
+    const rows = await dbQuery<{ is_automated: number | boolean }>(
+      'SELECT is_automated FROM request_log WHERE tool_name = ?',
+      [SPLIT_TOOL],
+    );
+    expect(rows.length).toBe(1);
+    expect(Boolean(rows[0].is_automated)).toBe(false);
+  });
+
+  it('explicit entry.isAutomated overrides the ALS (the x402/a2mcp path pattern)', async () => {
+    await requestContext.run(
+      { license: { tier: 'free' }, isAutomated: false } as never,
+      async () => {
+        logRequest({ toolName: SPLIT_TOOL, licenseTier: 'pro', responseTimeMs: 10, isAutomated: true });
+      },
+    );
+    await new Promise((r) => setTimeout(r, 60));
+    const rows = await dbQuery<{ is_automated: number | boolean }>(
+      'SELECT is_automated FROM request_log WHERE tool_name = ?',
+      [SPLIT_TOOL],
+    );
+    expect(rows.length).toBe(1);
+    expect(Boolean(rows[0].is_automated)).toBe(true);
+  });
+
+  it('getUsageStats split reconciles: paid always genuine, automated = free-bots only, no double-count', async () => {
+    type Split = {
+      totalCallsExternal: { last24h: number };
+      externalGenuine: { total: number; free: number; paid: number };
+      externalAutomated: { total: number };
+    };
+    const pre = (await getUsageStats()) as unknown as Split;
+
+    // 2 free non-bot (genuine free) · 3 free bot (automated) · 1 paid non-bot (genuine
+    // paid) · 1 paid BOT (STILL genuine paid — payment=legitimacy) · 1 internal (excluded).
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10, isAutomated: false });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10, isAutomated: false });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10, isAutomated: true });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10, isAutomated: true });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'free', responseTimeMs: 10, isAutomated: true });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'pro', responseTimeMs: 10, isAutomated: false });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'pro', responseTimeMs: 10, isAutomated: true });
+    logRequest({ toolName: SPLIT_TOOL, licenseTier: 'internal', responseTimeMs: 10, isBotInternal: true, isAutomated: true });
+    await new Promise((r) => setTimeout(r, 120));
+
+    const post = (await getUsageStats()) as unknown as Split;
+    const d = (f: (s: Split) => number) => f(post) - f(pre);
+
+    expect(d((s) => s.externalGenuine.free)).toBe(2); // free non-bot
+    expect(d((s) => s.externalGenuine.paid)).toBe(2); // BOTH paid rows (incl. the bot one)
+    expect(d((s) => s.externalGenuine.total)).toBe(4);
+    expect(d((s) => s.externalAutomated.total)).toBe(3); // free bots only
+    expect(d((s) => s.totalCallsExternal.last24h)).toBe(7); // 7 external (internal excluded)
+    // Reconcile invariant — no double-count, no gap.
+    expect(d((s) => s.externalGenuine.total) + d((s) => s.externalAutomated.total)).toBe(
+      d((s) => s.totalCallsExternal.last24h),
+    );
   });
 });

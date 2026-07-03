@@ -7,6 +7,7 @@
 import os from 'node:os';
 import fs from 'node:fs';
 import { sendAlert, sendDigest } from '../lib/telegram.js';
+import { formatAgentActivity } from '../lib/agent-activity-format.js';
 import { getPerformanceStatsAsync, dbQuery } from '../lib/performance-db.js';
 import { evaluatePfeWinRate, internalPerfPublicUrl } from './monitor-pfe.js';
 import { evaluateSeedFreshness, buildSeedFreshnessRows, formatSeedOutagePage } from './monitor-seed-freshness.js';
@@ -601,27 +602,9 @@ async function runDigest(): Promise<void> {
   // today" line was ~99% bot self-traffic and read as external agent adoption.
   if (analyticsResult.ok && analyticsResult.data) {
     const a = analyticsResult.data as Record<string, unknown>;
-    const pickLast24h = (raw: unknown): number | string => {
-      if (typeof raw === 'object' && raw !== null) {
-        const obj = raw as Record<string, unknown>;
-        return (obj.last24h ?? obj.allTime ?? '—') as number | string;
-      }
-      return (raw ?? '—') as number | string;
-    };
-    const externalCalls = pickLast24h(a.totalCallsExternal);
-    const internalCalls = pickLast24h(a.totalCallsInternal);
-    const externalSessions = pickLast24h(a.uniqueSessionsExternal);
-    const topAssets = a.topAssets ?? a.top_assets;
-    const assetList = Array.isArray(topAssets)
-      ? topAssets.slice(0, 5).map((t: Record<string, unknown>) => t.asset ?? t.coin ?? t.symbol).join(', ')
-      : '—';
-    sections.push([
-      '🤖 *Agent Activity (24h)*',
-      `• External agent calls: ${externalCalls}`,
-      `• Internal bot calls: ${internalCalls}`,
-      `• Unique external sessions: ${externalSessions}`,
-      `• Top assets (24h): ${assetList}`,
-    ].join('\n'));
+    // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: render via the pure, golden-tested
+    // formatter (genuine-vs-automated split; top-assets over the genuine slice).
+    sections.push(formatAgentActivity(a));
   }
 
   // Infrastructure

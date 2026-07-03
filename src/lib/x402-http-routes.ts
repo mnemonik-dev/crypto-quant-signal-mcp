@@ -30,6 +30,9 @@ import { encodePaymentRequiredHeader } from '@x402/core/http';
 import { resolveLicense, requestContext } from './license.js';
 import { hashIp, logRequest } from './analytics.js';
 import { clientIp } from './client-ip.js';
+// OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1 (Q2=A): classify EVERY external path,
+// including paid x402/a2mcp, via the ONE canonical classifier — no second isbot impl.
+import { classifyTraffic } from './traffic-classifier.js';
 import { generate402Response, settleX402Async, paymentMatchesToolRoute } from './x402.js';
 import { tryClaimPayment, extractPaymentNonce } from './x402-idempotency-store.js';
 import { BAZAAR_ROUTES, bazaarResourceUrl, bazaarRouteDescription } from './x402-bazaar.js';
@@ -288,9 +291,21 @@ export function mountX402HttpRoutes(app: Express): string[] {
       }
 
       const ipHash = clientIpHash(req);
+      // OPS-ANALYTICS-GENUINE-VS-AUTOMATED-SPLIT-W1: classify this paid request ONCE.
+      // A settled x402/a2mcp call is a real tool call (hadRealToolCall:true) and never
+      // internal-tier. Stored in the ALS for any in-handler logRequest AND passed
+      // explicitly to the logRequest below (which runs AFTER run() resolves, outside the
+      // ALS scope). Note: the read-path (getUsageStats) counts ALL paid as genuine
+      // regardless of this flag — this is truthful per-row telemetry only.
+      const authenticity = classifyTraffic({
+        ua: req.headers['user-agent'] as string | undefined,
+        ip: clientIp(req),
+        hadRealToolCall: true,
+        isInternalTier: false,
+      });
       try {
         const result = await requestContext.run(
-          { license, sessionId: undefined, ipHash },
+          { license, sessionId: undefined, ipHash, isAutomated: authenticity.is_automated },
           () => callCoreHandler(tool, input, license),
         );
 
@@ -316,6 +331,8 @@ export function mountX402HttpRoutes(app: Express): string[] {
             verdict: tool === 'get_trade_signal' ? (result as TradeCallResult).call : undefined,
             ipHash,
             isBotInternal: false,
+            // Explicit — this logRequest runs after run() resolves (outside the ALS).
+            isAutomated: authenticity.is_automated,
           });
         } catch { /* best-effort; never blocks the request */ }
       } catch (err: unknown) {
