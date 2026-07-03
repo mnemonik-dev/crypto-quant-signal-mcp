@@ -185,8 +185,22 @@ async function runStatic() {
     }
   }
 
+  // 7. acp (Virtuals ACP untokenized seller) parity — P1-ACP-SELLER-SEED.
+  //    (a) the OFFERED set DERIVES from the registry (offerings' canonical tools == registry acp set) —
+  //        no hardcoded ACP tool list (single-derivation lock);
+  //    (b) every acp tool is PRICED (x402!=null) — a paid ACP offering needs a setBudget price.
+  const acpOfferings = await import(path.join(REPO_ROOT, 'dist', 'channels', 'acp', 'offerings.js'));
+  const regAcp = FEATURE_REGISTRY.filter((f) => f.enabled && f.channels.acp).map((f) => f.name).sort();
+  const offeredAcp = [...acpOfferings.acpOfferedTools()].sort();
+  if (!eq(offeredAcp, regAcp)) {
+    drifts.push(`acp offerings=[${offeredAcp}] != registry acp set=[${regAcp}] — every channels.acp tool needs exactly one offering`);
+  }
+  for (const name of regAcp) {
+    if (!getFeature(name)?.x402) drifts.push(`acp tool ${name} is UNPRICED (x402:null) — a paid ACP offering needs a price`);
+  }
+
   if (drifts.length === 0) {
-    log(`STATIC in-sync ✅ — ${toolNames.length} tools, ${regHttpX402.length} gated x402 routes, ${regEvents.length} webhook events, ${regA2mcp.length} a2mcp tools, projection clean`);
+    log(`STATIC in-sync ✅ — ${toolNames.length} tools, ${regHttpX402.length} gated x402 routes, ${regEvents.length} webhook events, ${regA2mcp.length} a2mcp tools, ${regAcp.length} acp offerings, projection clean`);
     process.exit(0);
   }
   fail(`STATIC DRIFT (${drifts.length}):`);

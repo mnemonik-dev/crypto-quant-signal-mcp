@@ -74,9 +74,11 @@
     "@okxweb3/x402-evm": "0.2.1",
     "@okxweb3/x402-express": "0.1.1",
     "@slicekit/erc8128": "^0.3.3",
+    "@virtuals-protocol/acp-node-v2": "0.1.7",
     "@x402/core": "^2.9.0",
     "@x402/evm": "^2.9.0",
     "@x402/extensions": "~2.9.0",
+    "ajv": "^8.20.0",
     "better-sqlite3": "^11.8.2",
     "binance": "^3.5.4",
     "bitget-api": "^3.1.6",
@@ -109,7 +111,6 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.11.11",
-    "ajv": "^8.20.0",
     "ajv-cli": "^5.0.0",
     "ajv-formats": "^3.0.1",
     "hardhat": "^3.3.0",
@@ -119,6 +120,9 @@
     "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
+  },
+  "overrides": {
+    "@privy-io/node": "^0.16.0"
   },
   "files": [
     "dist",

@@ -35,6 +35,7 @@ import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, 
 import { initX402, settleX402Async, buildX402PaymentRequiredResult } from './lib/x402.js';
 import { mountX402HttpRoutes, HTTP_TOOLS } from './lib/x402-http-routes.js';
 import { mountOkxA2mcpRoutes } from './lib/okx-a2mcp.js';
+import { startAcpSellerWorker } from './channels/acp/seller-worker.js';
 import { PUBLIC_READONLY_TOOL_ANNOTATIONS } from './tool-annotations.js';
 import { getEquityRegime } from './lib/equities/equity-tool-formatters.js';
 import { getEquityPerformance } from './lib/equities/equity-performance.js';
@@ -3094,6 +3095,17 @@ async function startHttp() {
   if (okxA2mcpRoutes.length > 0) {
     console.log(`okx.ai A2MCP routes mounted (X Layer / USDT0): ${okxA2mcpRoutes.join(', ')}`);
   }
+
+  // P1-ACP-SELLER-SEED: start the Virtuals ACP seller worker — ONLY when ACP_ENABLED=true.
+  // Default (unset) → selectAcp returns 'off' → the worker never starts → prod byte-identical.
+  // Fire-and-forget: the worker runs a long-lived SSE agent (like the bot channel, NOT a request
+  // path), so it must not block the HTTP server boot; it is boot-safe internally (a live-connect
+  // failure leaves ACP dark, never crash-loops). Stub-first: enabled-but-unprovisioned → [STUB] seller.
+  void startAcpSellerWorker()
+    .then((r) => {
+      if (r.started) console.log(`Virtuals ACP seller worker started (mode=${r.mode})`);
+    })
+    .catch((e) => console.error('[ACP] worker bootstrap error (ACP stays dark):', e instanceof Error ? e.message : e));
 
   const httpServer = app.listen(port, () => {
     console.log(`crypto-quant-signal-mcp running on http://0.0.0.0:${port}/mcp`);
