@@ -16,6 +16,7 @@ import type {
 import { annualizeFunding } from '../lib/rank-constants.js';
 import { FUNDING_VENUE_META, FUNDING_ARB_FETCH_ADAPTERS } from '../lib/funding-venues.js';
 import { fetchVenueUniverse } from '../lib/exchange-universe.js';
+import { getFreshCarryScores, carryKey, type CarryScores } from '../lib/carry-rank-reader.js';
 
 // ── LATENCY-W1 C5: TTL caches for adapter calls (LRU-capped) ──
 //
@@ -398,13 +399,19 @@ export async function scanFundingArb(input: ScanFundingArbInput): Promise<Fundin
   // Sort by composite rank score descending (not just annualized spread)
   opportunities.sort((a, b) => b.bestArb.rankScore - a.bestArb.rankScore);
 
+  // EDGE-CARRY-SERVING-W1: carry-ranker ordering, DARK behind the two-flag firewall (both default
+  // OFF → the returned array is the SAME reference, byte-identical response). The divergence
+  // logger inside runs on EVERY scan regardless of flags (the flip evidence); it is fail-open —
+  // any error or stale/missing scores → legacy order, never a throw into the tool path.
+  const orderedOpportunities = await applyCarryOrdering(opportunities);
+
   // C4 (LATENCY-W1): use the pre-slice qualifying count, NOT opportunities.length.
   // `opportunities` was built from `candidates` (sliced to limit*2 before history
   // fetch), so its length now reflects the candidate window, not the true total.
   // `totalFound` MUST stay truthful so the cappedResults hint + response shape
   // match user-visible reality. Spec: response shape is frozen.
   const totalFound = totalQualifying;
-  const capped = opportunities.slice(0, limit);
+  const capped = orderedOpportunities.slice(0, limit);
 
   // Upgrade hint: capped results take priority, then quota usage
   const upgradeHint = getUpgradeHint(license, {
@@ -554,3 +561,92 @@ function computeUrgency(
     effectiveVenue,
   };
 }
+
+// ── EDGE-CARRY-SERVING-W1: carry-ranker ordering (DARK) + always-on divergence logger ──
+//
+// Two-flag firewall (CLAUDE.md pattern): OUTER source flag + INNER enabled flag, BOTH default OFF.
+// With either flag off, applyCarryOrdering returns the input array UNCHANGED (same reference) —
+// the response is byte-identical to legacy. The divergence log line is the flip evidence and runs
+// on every scan regardless of flags. Everything here is fail-open: scores unavailable/stale/error
+// → legacy order (the reader logs the outage once per episode).
+
+const carryFlagsOn = (): boolean =>
+  process.env.CARRY_RANKER_SOURCE === 'postgres' && process.env.CARRY_RANKER_ENABLED === 'true';
+
+/** Item score = MAX fresh score over the coin's QUOTED venue legs (venue-string → ExchangeId via
+ *  FUNDING_VENUE_META). The ranker scored per-venue funding persistence; an arb's collectable leg
+ *  is among its quoted venues. null = unscored (no fresh row for any leg). */
+function carryScoreFor(opp: FundingArbOpportunity, scores: CarryScores): number | null {
+  let best: number | null = null;
+  for (const venueStr of Object.keys(opp.rates)) {
+    const meta = FUNDING_VENUE_META[venueStr];
+    if (!meta) continue;
+    const s = scores.byVenueSymbol.get(carryKey(meta.exchangeId, opp.coin));
+    if (s !== undefined && (best === null || s > best)) best = s;
+  }
+  return best;
+}
+
+/** Scored items first (score desc; tie → legacy relative order), unscored after in legacy order.
+ *  A permutation — same items, same fields; ordering is the ONLY change. */
+function carryOrder(opportunities: FundingArbOpportunity[], scores: CarryScores): { ordered: FundingArbOpportunity[]; nScored: number } {
+  const scored: { o: FundingArbOpportunity; s: number; i: number }[] = [];
+  const unscored: FundingArbOpportunity[] = [];
+  opportunities.forEach((o, i) => {
+    const s = carryScoreFor(o, scores);
+    if (s === null) unscored.push(o);
+    else scored.push({ o, s, i });
+  });
+  scored.sort((a, b) => b.s - a.s || a.i - b.i);
+  return { ordered: [...scored.map(x => x.o), ...unscored], nScored: scored.length };
+}
+
+/** Kendall tau between two orderings of the SAME item set (by coin). n<2 → 1 (trivially concordant). */
+function kendallTau(legacy: string[], carry: string[]): number {
+  const pos = new Map(carry.map((c, i) => [c, i]));
+  const n = legacy.length;
+  if (n < 2) return 1;
+  let concordant = 0;
+  let discordant = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const pi = pos.get(legacy[i]);
+      const pj = pos.get(legacy[j]);
+      if (pi === undefined || pj === undefined) continue;
+      if (pi < pj) concordant++;
+      else if (pi > pj) discordant++;
+    }
+  }
+  const total = concordant + discordant;
+  return total === 0 ? 1 : parseFloat(((concordant - discordant) / total).toFixed(4));
+}
+
+async function applyCarryOrdering(opportunities: FundingArbOpportunity[]): Promise<FundingArbOpportunity[]> {
+  try {
+    if (opportunities.length === 0) return opportunities;
+    const scores = await getFreshCarryScores();
+    if (!scores) return opportunities; // unavailable/stale → legacy (reader logged the episode)
+    const { ordered, nScored } = carryOrder(opportunities, scores);
+    const legacyCoins = opportunities.map(o => o.coin);
+    const carryCoins = ordered.map(o => o.coin);
+    const k = Math.min(5, opportunities.length);
+    const topLegacy = new Set(legacyCoins.slice(0, k));
+    const overlap = carryCoins.slice(0, k).filter(c => topLegacy.has(c)).length;
+    const applied = carryFlagsOn();
+    // Fire-and-forget forensic line — the flip evidence (parsed by the CH5 evidence pack).
+    console.log(`[carry-divergence] ${JSON.stringify({
+      n: opportunities.length,
+      n_scored: nScored,
+      kendall_tau: kendallTau(legacyCoins, carryCoins),
+      top5_overlap: `${overlap}/${k}`,
+      artifact_version: scores.artifactVersion,
+      applied,
+    })}`);
+    return applied ? ordered : opportunities;
+  } catch {
+    return opportunities; // fail-open ALWAYS — never a throw into the tool path
+  }
+}
+
+// Test seams (underscore convention — matches _setLiquidityOverrideForTest).
+export { carryOrder as _carryOrderForTest, kendallTau as _kendallTauForTest };
