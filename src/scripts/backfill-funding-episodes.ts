@@ -50,8 +50,19 @@ const META: Record<string, VenueMeta> = {
 // Step-0 cost model: majors ≈ 0.5bp half-spread, alts ≈ 2bp (BTC 0.5bp / DOGE 2bp reproduced).
 const MAJORS = new Set(['BTC', 'ETH', 'SOL', 'BNB', 'XRP']);
 const halfSpread = (coin: string): number => (MAJORS.has(coin) ? 0.00005 : 0.0002);
-// per-venue inter-call pacing (ms). HL widest (≤25% of 1200 weight/min, off-peak, bounded 500h windows).
-const PACING_MS: Record<string, number> = { HL: 1800, BYBIT: 350, KUCOIN: 250, BINANCE: 120, ASTER: 120, OKX: 300, GATE: 300 };
+// per-venue inter-call pacing (ms), env-tunable via BACKFILL_PACING_<VENUE>_MS (no redeploy to retune).
+// Defaults honor the riders vs each venue's documented budget:
+//   HL: weight 20/call, budget 1200/min → 4500ms ≈ 266 weight/min ≈ 22% (≤25% rider, off-peak, bounded windows).
+//   OKX: funding-rate-history 5/s → 500ms = 2/s ≈ 40% (≤50%). GATE 500ms. BYBIT 350ms ≈ 28%.
+//   KUCOIN: weight 5/call, ~30 req/s cap → 250ms = 4/s ≈ 13%. BINANCE/ASTER weight 1, 2400/min → 120ms ≈ 21%.
+const pacingMs = (venue: string, def: number): number => {
+  const v = Number(process.env[`BACKFILL_PACING_${venue}_MS`]);
+  return Number.isFinite(v) && v > 0 ? v : def;
+};
+const PACING_MS: Record<string, number> = {
+  HL: pacingMs('HL', 4500), BYBIT: pacingMs('BYBIT', 350), KUCOIN: pacingMs('KUCOIN', 250),
+  BINANCE: pacingMs('BINANCE', 120), ASTER: pacingMs('ASTER', 120), OKX: pacingMs('OKX', 500), GATE: pacingMs('GATE', 500),
+};
 
 const sleep = (n: number): Promise<void> => new Promise((r) => setTimeout(r, n));
 const log = (...a: unknown[]): void => console.log(`[${new Date().toISOString()}]`, ...a);
