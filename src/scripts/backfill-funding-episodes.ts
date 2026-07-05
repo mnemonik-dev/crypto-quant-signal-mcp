@@ -8,6 +8,10 @@
  *
  * Phases:  schema | manifest | raw | episodes | report | all
  * Flags:   --venue=BINANCE  --limit=N (symbols)  --check (zero writes)  --floors=8,12,20
+ *          --since-checkpoint (raw: resume each venue×symbol from MAX(ts) − 2 intervals; new symbols
+ *            forward-accumulate from a bounded lookback — never a deep re-backfill) [EDGE-CARRY-RANKER-W1 CH2]
+ *          --reclose-censored (episodes: rows previously closed as exit_reason='data_end' may be re-closed
+ *            as new data extends them; real closes stay immutable) [EDGE-CARRY-RANKER-W1 CH2]
  *
  * Data Integrity: `net_carry` / `net_apr` are outcome-class — INTERNAL, never exposed via MCP/API/landing.
  * Rate discipline: ≤50% of each documented budget, per-venue pacing delay, HL ≤25% off-peak; the shared
@@ -18,6 +22,7 @@ import { getAdapter } from '../lib/exchange-adapter.js';
 import { fetchVenueUniverse } from '../lib/exchange-universe.js';
 import { buildPoolConfig } from '../lib/performance-db.js';
 import { buildEpisodes, type FundingPoint, type Episode } from './funding-episode-builder.js';
+import { checkpointStartMs, episodesConflictClause } from './carry-freshness-helpers.js';
 import type { ExchangeId } from '../types.js';
 
 // ── configuration (pinned from Step-0) ──
@@ -66,6 +71,12 @@ const PACING_MS: Record<string, number> = {
 
 const sleep = (n: number): Promise<void> => new Promise((r) => setTimeout(r, n));
 const log = (...a: unknown[]): void => console.log(`[${new Date().toISOString()}]`, ...a);
+
+// ── incremental (nightly) semantics [EDGE-CARRY-RANKER-W1 CH2] ──
+const NEW_SYMBOL_LOOKBACK_D = (() => {
+  const v = Number(process.env.BACKFILL_NEW_SYMBOL_LOOKBACK_D);
+  return Number.isFinite(v) && v > 0 ? v : 30;
+})();
 
 // ── schema (Step-0 R4 DDL VERBATIM) ──
 const SCHEMA_SQL = `
@@ -200,13 +211,13 @@ async function fetchSeed(venue: 'OKX' | 'GATE', coin: string): Promise<FundingPo
   } catch { return []; }
 }
 
-async function fetchVenueFunding(venue: ExchangeId, coin: string): Promise<FundingPoint[]> {
+async function fetchVenueFunding(venue: ExchangeId, coin: string, startMs?: number): Promise<FundingPoint[]> {
   const m = META[venue];
-  if (venue === 'KUCOIN') { const p = await getAdapter('KUCOIN').getFundingHistory(coin, m.earliest!); await sleep(PACING_MS.KUCOIN); return dedupeSort(p as FundingPoint[]); }
-  if (venue === 'BINANCE' || venue === 'ASTER') return fetchBinanceLike(venue, coin, m.earliest!);
-  if (venue === 'BYBIT') return fetchBybit(coin, m.earliest!);
-  if (venue === 'HL') return fetchHL(coin, m.earliest!);
-  if (venue === 'OKX' || venue === 'GATE') return fetchSeed(venue, coin);
+  if (venue === 'KUCOIN') { const p = await getAdapter('KUCOIN').getFundingHistory(coin, startMs ?? m.earliest!); await sleep(PACING_MS.KUCOIN); return dedupeSort(p as FundingPoint[]); }
+  if (venue === 'BINANCE' || venue === 'ASTER') return fetchBinanceLike(venue, coin, startMs ?? m.earliest!);
+  if (venue === 'BYBIT') return fetchBybit(coin, startMs ?? m.earliest!);
+  if (venue === 'HL') return fetchHL(coin, startMs ?? m.earliest!);
+  if (venue === 'OKX' || venue === 'GATE') return fetchSeed(venue, coin); // adapter window-bounded; ON CONFLICT dedupes
   return [];
 }
 
@@ -260,7 +271,7 @@ function mondayOf(msEpoch: number): string {
   return mon.toISOString().slice(0, 10);
 }
 
-async function insertEpisodes(pool: Pool, venue: string, symbol: string, ih: number, floor: number, source: string, eps: Episode[], check: boolean): Promise<number> {
+async function insertEpisodes(pool: Pool, venue: string, symbol: string, ih: number, floor: number, source: string, eps: Episode[], check: boolean, recloseCensored = false): Promise<number> {
   if (check || eps.length === 0) return 0;
   let inserted = 0;
   for (const batch of chunk(eps, 500)) {
@@ -271,7 +282,7 @@ async function insertEpisodes(pool: Pool, venue: string, symbol: string, ih: num
       params.push(venue, symbol, ih, e.entryMs, e.exitMs, e.entrySign, e.heldIntervals, e.gross, e.rtCost, e.net, e.grossApr, e.netApr, floor, e.exitReason, e.netPositive, mondayOf(e.entryMs), source);
     }
     const res = await pool.query(
-      `INSERT INTO funding_episodes (venue,symbol,interval_hours,entry_ts,exit_ts,entry_sign,held_intervals,gross_carry,rt_cost,net_carry,gross_apr,net_apr,entry_floor_apr,exit_reason,net_positive,cluster_week,source) VALUES ${vals.join(',')} ON CONFLICT (venue,symbol,entry_ts,entry_floor_apr) DO NOTHING`,
+      `INSERT INTO funding_episodes (venue,symbol,interval_hours,entry_ts,exit_ts,entry_sign,held_intervals,gross_carry,rt_cost,net_carry,gross_apr,net_apr,entry_floor_apr,exit_reason,net_positive,cluster_week,source) VALUES ${vals.join(',')} ${episodesConflictClause(recloseCensored)}`,
       params,
     );
     inserted += res.rowCount ?? 0;
@@ -280,22 +291,33 @@ async function insertEpisodes(pool: Pool, venue: string, symbol: string, ih: num
 }
 
 // ── phases ──
-async function phaseRaw(pool: Pool, venues: ExchangeId[], limit: number, check: boolean): Promise<void> {
+async function phaseRaw(pool: Pool, venues: ExchangeId[], limit: number, check: boolean, sinceCheckpoint = false): Promise<void> {
   const manifest = await buildManifest(limit);
   for (const venue of venues) {
     const m = META[venue]; const symbols = manifest[venue] ?? [];
+    let starts = new Map<string, number>();
+    if (sinceCheckpoint) {
+      const cp = await pool.query<{ symbol: string; max_ms: string }>(
+        `SELECT symbol, (extract(epoch from MAX(ts))*1000)::double precision AS max_ms FROM funding_rates_hist WHERE venue = $1 GROUP BY symbol`,
+        [venue],
+      );
+      starts = new Map(cp.rows.map((r) => [r.symbol, Number(r.max_ms)]));
+    }
     let rows = 0; let done = 0;
     for (const coin of symbols) {
-      const pts = await fetchVenueFunding(venue, coin);
+      const startMs = sinceCheckpoint
+        ? checkpointStartMs(starts.get(coin) ?? null, m.intervalHours, m.earliest, Date.now(), NEW_SYMBOL_LOOKBACK_D)
+        : undefined;
+      const pts = await fetchVenueFunding(venue, coin, startMs);
       rows += await insertRates(pool, venue, coin, m.intervalHours, pts, check);
       done++;
-      log(`raw ${venue} ${coin}: ${pts.length} pts (${done}/${symbols.length})`);
+      log(`raw ${venue} ${coin}: ${pts.length} pts (${done}/${symbols.length})${sinceCheckpoint ? ` [since ${new Date(startMs!).toISOString()}]` : ''}`);
     }
-    log(`RAW ${venue} DONE: ${symbols.length} symbols, ${rows} rows inserted${check ? ' [CHECK — no writes]' : ''}`);
+    log(`RAW ${venue} DONE: ${symbols.length} symbols, ${rows} rows inserted${check ? ' [CHECK — no writes]' : ''}${sinceCheckpoint ? ' [incremental]' : ''}`);
   }
 }
 
-async function phaseEpisodes(pool: Pool, venues: ExchangeId[], floors: number[], check: boolean): Promise<void> {
+async function phaseEpisodes(pool: Pool, venues: ExchangeId[], floors: number[], check: boolean, recloseCensored = false): Promise<void> {
   for (const venue of venues) {
     const m = META[venue];
     const symRes = await pool.query<{ symbol: string }>(`SELECT DISTINCT symbol FROM funding_rates_hist WHERE venue = $1`, [venue]);
@@ -308,10 +330,10 @@ async function phaseEpisodes(pool: Pool, venues: ExchangeId[], floors: number[],
       const series: FundingPoint[] = sRes.rows.map((x) => ({ time: Number(x.t), fundingRate: Number(x.r) }));
       for (const floor of floors) {
         const eps = buildEpisodes(series, { intervalHours: m.intervalHours, floorApr: floor, takerFee: m.taker, halfSpread: halfSpread(symbol), horizonDays: HORIZON_DAYS, cooldownIntervals: COOLDOWN });
-        total += await insertEpisodes(pool, venue, symbol, m.intervalHours, floor, m.source, eps, check);
+        total += await insertEpisodes(pool, venue, symbol, m.intervalHours, floor, m.source, eps, check, recloseCensored);
       }
     }
-    log(`EPISODES ${venue} DONE: ${symRes.rows.length} symbols × ${floors.length} floors, ${total} episodes${check ? ' [CHECK]' : ''}`);
+    log(`EPISODES ${venue} DONE: ${symRes.rows.length} symbols × ${floors.length} floors, ${total} episodes upserted${check ? ' [CHECK]' : ''}${recloseCensored ? ' [reclose-censored]' : ''}`);
   }
 }
 
@@ -319,19 +341,21 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const phase = argv.find((a) => !a.startsWith('--')) ?? 'schema';
   const check = argv.includes('--check');
+  const sinceCheckpoint = argv.includes('--since-checkpoint');
+  const recloseCensored = argv.includes('--reclose-censored');
   const venueArg = argv.find((a) => a.startsWith('--venue='))?.split('=')[1];
   const limit = Number(argv.find((a) => a.startsWith('--limit='))?.split('=')[1] ?? DEFAULT_SYMBOL_LIMIT);
   const floors = (argv.find((a) => a.startsWith('--floors='))?.split('=')[1]?.split(',').map((s) => Number(s) / 100)) ?? FLOORS_DEFAULT;
   const venues = venueArg ? (venueArg.split(',') as ExchangeId[]) : [...DEEP, ...FORWARD];
 
-  log(`EDGE-CARRY-BACKFILL-W1 phase=${phase} venues=${venues.join(',')} limit=${limit} floors=${floors.join(',')} check=${check}`);
+  log(`EDGE-CARRY-BACKFILL-W1 phase=${phase} venues=${venues.join(',')} limit=${limit} floors=${floors.join(',')} check=${check} sinceCheckpoint=${sinceCheckpoint} recloseCensored=${recloseCensored}`);
   const pool = makePool();
   try {
     if (!check) { await pool.query(SCHEMA_SQL); log('schema ensured'); }
     if (phase === 'schema') { log(check ? 'schema [CHECK — not applied]' : 'schema applied'); return; }
     if (phase === 'manifest') { const mani = await buildManifest(limit); log('manifest', JSON.stringify(mani)); return; }
-    if (phase === 'raw' || phase === 'all') await phaseRaw(pool, venues, limit, check);
-    if (phase === 'episodes' || phase === 'all') await phaseEpisodes(pool, venues, floors, check);
+    if (phase === 'raw' || phase === 'all') await phaseRaw(pool, venues, limit, check, sinceCheckpoint);
+    if (phase === 'episodes' || phase === 'all') await phaseEpisodes(pool, venues, floors, check, recloseCensored);
     if (phase === 'report') { log('report phase — see CH4 report generator (reads funding_episodes)'); }
   } finally {
     await pool.end();
@@ -342,4 +366,4 @@ if (require.main === module) {
   main().then(() => process.exit(0)).catch((e) => { console.error('[backfill] FATAL', e); process.exit(1); });
 }
 
-export { buildManifest, fetchVenueFunding, META, halfSpread, mondayOf, SCHEMA_SQL };
+export { buildManifest, fetchVenueFunding, META, halfSpread, mondayOf, SCHEMA_SQL, phaseRaw, phaseEpisodes };
