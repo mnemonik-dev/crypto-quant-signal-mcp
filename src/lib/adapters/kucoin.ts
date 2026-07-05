@@ -80,15 +80,30 @@ export function fromKucoinSymbol(symbol: string): string {
   return base;
 }
 
-async function kucoinGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES): Promise<T> {
+async function kucoinGet<T>(path: string, params?: Record<string, string | number>, retries = MAX_RETRIES, weightHint?: number): Promise<T> {
   // OPS-ADAPTER-RATELIMIT-UNIFY-W1: URL-build unchanged; fetch/retry/ban via upstreamFetch.
+  // EDGE-CARRY-BACKFILL-W1: optional weightHint (the batch funding-history endpoint is weight 5).
   const url = new URL(path, BASE_URL);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, String(v));
     }
   }
-  return upstreamFetch<T>({ ...VENUE_FETCH_CONFIGS.KUCOIN, transientRetries: retries }, { url: url.toString() });
+  return upstreamFetch<T>(
+    { ...VENUE_FETCH_CONFIGS.KUCOIN, transientRetries: retries },
+    { url: url.toString(), ...(weightHint != null ? { weightHint } : {}) },
+  );
+}
+
+// EDGE-CARRY-BACKFILL-W1 CH1 — public batch funding-history endpoint (verified DEEP from prod to ~2020-08).
+interface KucoinFundingRateHistEntry {
+  symbol: string;
+  fundingRate: number; // already a numeric fraction (e.g. 5.1e-05)
+  timepoint: number;   // ms epoch
+}
+interface KucoinFundingRatesEnvelope {
+  code: string;
+  data: KucoinFundingRateHistEntry[];
 }
 
 // ── Response shapes ──────────────────────────────────────────────────────
@@ -216,20 +231,51 @@ export class KuCoinAdapter implements ExchangeAdapter {
     }
   }
 
+  /**
+   * Funding-rate HISTORY via the public batch endpoint `/api/v1/contract/funding-rates`
+   * (EDGE-CARRY-BACKFILL-W1 CH1 prod-probe: DEEP to ~2020-08; ≤100 rows/call ≈ 33d, returns the
+   * most-recent window within [from,to] → page BACKWARD via `to`; public weight 5). Replaces the
+   * prior current-only impl — zero live consumers (the arb reads only HL's history), so the
+   * behavior change is serving-safe. Returns [startTime, now] ASCENDING; best-effort (returns the
+   * partial series on transport failure/ban — the shared transport NEVER retries a 418).
+   */
   async getFundingHistory(coin: string, startTime: number): Promise<{ time: number; fundingRate: number }[]> {
-    try {
-      const symbol = toKucoinSymbol(coin);
-      // KuCoin funding-rate endpoint returns CURRENT only (no batched
-      // history surfaced in public docs). Single-record sequence.
-      const raw = await kucoinGet<{ code: string; data: { symbol: string; granularity: number; timePoint: number; value: number; fundingTime: number } }>(`/api/v1/funding-rate/${symbol}/current`);
-      const r = raw?.data;
-      if (!r) return [];
-      const time = r.fundingTime || Date.now();
-      if (time < startTime) return [];
-      return [{ time, fundingRate: Number(r.value) || 0 }];
-    } catch {
-      return [];
+    const symbol = toKucoinSymbol(coin);
+    const out: { time: number; fundingRate: number }[] = [];
+    const seen = new Set<number>();
+    let to = Date.now();
+    const MAX_PAGES = 400; // safety cap (~36y at 33d/page) — real listings are < 7y
+    for (let page = 0; page < MAX_PAGES; page++) {
+      let data: KucoinFundingRateHistEntry[];
+      try {
+        const raw = await kucoinGet<KucoinFundingRatesEnvelope>(
+          '/api/v1/contract/funding-rates',
+          { symbol, from: startTime, to },
+          MAX_RETRIES,
+          5, // public weight 5
+        );
+        data = raw?.data ?? [];
+      } catch {
+        break; // best-effort — return what we already collected
+      }
+      if (data.length === 0) break;
+      let minTs = Number.POSITIVE_INFINITY;
+      for (const r of data) {
+        const t = Number(r.timepoint);
+        const rate = Number(r.fundingRate);
+        if (!Number.isFinite(t) || !Number.isFinite(rate)) continue;
+        if (t < minTs) minTs = t;
+        if (t >= startTime && !seen.has(t)) {
+          seen.add(t);
+          out.push({ time: t, fundingRate: rate });
+        }
+      }
+      if (!Number.isFinite(minTs) || minTs < startTime) break; // window covered
+      if (minTs >= to) break; // no backward progress — guard against a stuck cursor
+      to = minTs - 1; // page older
     }
+    out.sort((a, b) => a.time - b.time);
+    return out;
   }
 
   async getCurrentPrice(coin: string, _dex?: DexType): Promise<number | null> {
