@@ -66,6 +66,8 @@ describe('deriveTgBot — freshness mapping', () => {
 
 describe('formatAgentActivity — 🔁 TG bot line', () => {
   const base = {
+    totalCallsExternal: { last24h: 432 }, // 5 + 427 + 0 (Total Agent Calls; TG bot NOT folded in)
+    uniqueSessionsExternal: { last24h: 30 },
     externalGenuine: { free: 5, paid: 0, freeSessions: 5, paidSessions: 0 },
     externalAutomated: { total: 427, sessions: 28 },
     rawConcentration: { top1_pct: 19.4 },
@@ -80,6 +82,7 @@ describe('formatAgentActivity — 🔁 TG bot line', () => {
     expect(out).toBe(
       [
         '🤖 *Agent Activity (24h)*',
+        '• Total Agent Calls: 432',
         '• 🟢 Recognized clients: 5',
         '• 🔌 Raw API clients: 427   (top IP 19.4%)',
         '• 💳 Paid (x402 / a2mcp): 0',
@@ -87,12 +90,22 @@ describe('formatAgentActivity — 🔁 TG bot line', () => {
         '• Top assets (24h): BTC',
         '',
         '👥 *Sessions (24h)*',
+        '• Total Unique Sessions: 30',
         '• 🟢 Recognized clients: 5',
         '• 🔌 Raw API clients: 28',
         '• 💳 Paid: 0',
         '• 🔁 TG bot: 21 subscribers',
       ].join('\n'),
     );
+  });
+
+  it('OPS-DIGEST-TOTALS-W1: headline totals read the external totals and do NOT fold in the TG bot metric', () => {
+    const out = formatAgentActivity({
+      ...base, // totalCallsExternal 432, uniqueSessionsExternal 30
+      tgBot: { present: true, stale: false, calls_total: 24, calls_watch: 12, calls_scanwatch: 12, calls_scan: 0, subscribers: 21 },
+    });
+    expect(out).toContain('• Total Agent Calls: 432'); // NOT 432 + 24(bot alerts)
+    expect(out).toContain('• Total Unique Sessions: 30'); // NOT 30 + 21(subscribers)
   });
 
   it('renders "metrics stale" on both blocks when the row is stale', () => {

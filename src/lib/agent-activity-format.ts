@@ -60,8 +60,17 @@ export function formatAgentActivity(a: Record<string, unknown>): string {
       ? '• 🔁 TG bot: — (metrics stale)'
       : `• 🔁 TG bot: ${num(tgBot!.subscribers)} subscribers`;
 
+  // OPS-DIGEST-TOTALS-W1: per-block headline totals over the external AGENT channels
+  // (Total Agent Calls == Recognized + Raw + Paid == totalCallsExternal; Total Unique
+  // Sessions == distinct external session_ids). The 🔁 TG bot line is a distinct BRIDGED
+  // metric (the bot's own alert deliveries / subscriber count — a different unit than MCP
+  // agent calls/sessions) and is deliberately NOT folded into these totals.
+  const totalCallsExternal = a.totalCallsExternal as Record<string, unknown> | undefined;
+  const uniqueSessionsExternal = a.uniqueSessionsExternal as Record<string, unknown> | undefined;
+
   return [
     '🤖 *Agent Activity (24h)*',
+    `• Total Agent Calls: ${num(totalCallsExternal?.last24h)}`,
     `• 🟢 Recognized clients: ${num(genuine.free)}`,
     `• 🔌 Raw API clients: ${num(automated.total)}   (top IP ${num(rawConc.top1_pct)}%)`,
     `• 💳 Paid (x402 / a2mcp): ${num(genuine.paid)}`,
@@ -69,6 +78,7 @@ export function formatAgentActivity(a: Record<string, unknown>): string {
     `• Top assets (24h): ${assetList}`,
     '',
     '👥 *Sessions (24h)*',
+    `• Total Unique Sessions: ${num(uniqueSessionsExternal?.last24h)}`,
     `• 🟢 Recognized clients: ${num(genuine.freeSessions)}`,
     `• 🔌 Raw API clients: ${num(automated.sessions)}`,
     `• 💳 Paid: ${num(genuine.paidSessions)}`,
