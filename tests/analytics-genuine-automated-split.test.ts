@@ -15,8 +15,6 @@ describe('formatAgentActivity — digest renderer golden output (channel labels)
   it('renders the neutral channel-label calls block + Sessions block (no internal line)', () => {
     const payload = {
       totalCallsInternal: { last24h: 2036 }, // retained in payload, intentionally NOT rendered
-      totalCallsExternal: { last24h: 1069 }, // Total Agent Calls = 100 + 965 + 4 (recognized+raw+paid)
-      uniqueSessionsExternal: { last24h: 88 }, // Total Unique Sessions (distinct external session_ids)
       externalGenuine: { total: 104, free: 100, paid: 4, sessions: 61, freeSessions: 55, paidSessions: 3 },
       externalAutomated: { total: 965, sessions: 40 },
       externalConcentration: { top1_pct: 10.8, top5_pct: 46.9 }, // legacy all-external (kept, not used)
@@ -30,14 +28,14 @@ describe('formatAgentActivity — digest renderer golden output (channel labels)
     expect(formatAgentActivity(payload)).toBe(
       [
         '🤖 *Agent Activity (24h)*',
-        '• Total Agent Calls: 1069',
+        '• Total Agent Calls: 1069', // 100 + 965 + 4 (no TG bot in this payload)
         '• 🟢 Recognized clients: 100',
         '• 🔌 Raw API clients: 965   (top IP 22.5%)',
         '• 💳 Paid (x402 / a2mcp): 4',
         '• Top assets (24h): BTC, ETH, SOL',
         '',
         '👥 *Sessions (24h)*',
-        '• Total Unique Sessions: 88',
+        '• Total Unique Sessions: 98', // 55 + 40 + 3
         '• 🟢 Recognized clients: 55',
         '• 🔌 Raw API clients: 40',
         '• 💳 Paid: 3',
