@@ -16,6 +16,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
+import { dbQuery } from '../lib/performance-db.js';
 
 export interface Step { name: string; args: string[] }
 
@@ -67,6 +68,32 @@ export function runSteps(argv: string[], spawn: Spawner = spawnSync as unknown a
   return 0;
 }
 
+// EDGE-CARRY-SERVING-W2 R3 — housekeeping: prune carry_divergence_log rows older than the window.
+// Idempotent + fail-SOFT: a retention error NEVER fails the label run (housekeeping, logged only).
+export const DIVERGENCE_RETENTION_DAYS = 90;
+type RetentionQuery = (sql: string, params?: unknown[]) => Promise<unknown[]>;
+export async function sweepDivergenceRetention(query: RetentionQuery = dbQuery as RetentionQuery): Promise<number> {
+  try {
+    const deleted = await query(
+      `DELETE FROM carry_divergence_log WHERE scan_ts < now() - make_interval(days => $1) RETURNING id`,
+      [DIVERGENCE_RETENTION_DAYS],
+    );
+    const n = Array.isArray(deleted) ? deleted.length : 0;
+    console.log(`[nightly-carry-labeler] STEP divergence-retention OK (pruned ${n} rows older than ${DIVERGENCE_RETENTION_DAYS}d)`);
+    return n;
+  } catch (e) {
+    console.error(`[nightly-carry-labeler] STEP divergence-retention FAILED (non-fatal): ${String((e as Error).message ?? e).slice(0, 160)}`);
+    return -1;
+  }
+}
+
+export async function main(argv: string[]): Promise<number> {
+  const labelStatus = runSteps(argv);
+  // Runs regardless of the label-stream status but NEVER changes the exit code; skipped on --check.
+  if (!argv.includes('--check')) await sweepDivergenceRetention();
+  return labelStatus;
+}
+
 if (require.main === module) {
-  process.exit(runSteps(process.argv.slice(2)));
+  main(process.argv.slice(2)).then((code) => process.exit(code));
 }

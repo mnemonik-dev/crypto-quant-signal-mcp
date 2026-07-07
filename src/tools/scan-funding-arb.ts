@@ -17,6 +17,7 @@ import { annualizeFunding } from '../lib/rank-constants.js';
 import { FUNDING_VENUE_META, FUNDING_ARB_FETCH_ADAPTERS } from '../lib/funding-venues.js';
 import { fetchVenueUniverse } from '../lib/exchange-universe.js';
 import { getFreshCarryScores, carryKey, type CarryScores } from '../lib/carry-rank-reader.js';
+import { writeDivergenceLog } from '../lib/carry-divergence-log.js';
 
 // ── LATENCY-W1 C5: TTL caches for adapter calls (LRU-capped) ──
 //
@@ -573,14 +574,27 @@ function computeUrgency(
 const carryFlagsOn = (): boolean =>
   process.env.CARRY_RANKER_SOURCE === 'postgres' && process.env.CARRY_RANKER_ENABLED === 'true';
 
+/** EDGE-CARRY-SERVING-W2 — per-venue serving scope (the THIRD ignition key). `CARRY_RANKER_VENUES`
+ *  is a comma list of validated exchangeIds (e.g. "HL" or "HL,BYBIT"); empty/unset ⇒ empty set ⇒
+ *  the scoped re-rank applies to NO coin. The gate validated venues, not a global switch. */
+const carryAllowlist = (): Set<string> => {
+  const raw = process.env.CARRY_RANKER_VENUES;
+  if (!raw) return new Set();
+  return new Set(raw.split(',').map(v => v.trim().toUpperCase()).filter(Boolean));
+};
+
 /** Item score = MAX fresh score over the coin's QUOTED venue legs (venue-string → ExchangeId via
  *  FUNDING_VENUE_META). The ranker scored per-venue funding persistence; an arb's collectable leg
- *  is among its quoted venues. null = unscored (no fresh row for any leg). */
-function carryScoreFor(opp: FundingArbOpportunity, scores: CarryScores): number | null {
+ *  is among its quoted venues. null = unscored (no fresh row for any leg). When `allowlist` is
+ *  provided, ONLY legs whose exchangeId ∈ allowlist count (W2 per-venue scope); a coin with no
+ *  allowlisted leg is unscored ⇒ keeps its legacy position. `allowlist` undefined ⇒ full reach
+ *  (all legs) — used for the divergence EVIDENCE, which must accrue even while the allowlist is empty. */
+function carryScoreFor(opp: FundingArbOpportunity, scores: CarryScores, allowlist?: Set<string>): number | null {
   let best: number | null = null;
   for (const venueStr of Object.keys(opp.rates)) {
     const meta = FUNDING_VENUE_META[venueStr];
     if (!meta) continue;
+    if (allowlist && !allowlist.has(meta.exchangeId)) continue;
     const s = scores.byVenueSymbol.get(carryKey(meta.exchangeId, opp.coin));
     if (s !== undefined && (best === null || s > best)) best = s;
   }
@@ -588,12 +602,13 @@ function carryScoreFor(opp: FundingArbOpportunity, scores: CarryScores): number 
 }
 
 /** Scored items first (score desc; tie → legacy relative order), unscored after in legacy order.
- *  A permutation — same items, same fields; ordering is the ONLY change. */
-function carryOrder(opportunities: FundingArbOpportunity[], scores: CarryScores): { ordered: FundingArbOpportunity[]; nScored: number } {
+ *  A permutation — same items, same fields; ordering is the ONLY change. `allowlist` (W2) scopes
+ *  which venues' scores count; undefined ⇒ full reach. */
+function carryOrder(opportunities: FundingArbOpportunity[], scores: CarryScores, allowlist?: Set<string>): { ordered: FundingArbOpportunity[]; nScored: number } {
   const scored: { o: FundingArbOpportunity; s: number; i: number }[] = [];
   const unscored: FundingArbOpportunity[] = [];
   opportunities.forEach((o, i) => {
-    const s = carryScoreFor(o, scores);
+    const s = carryScoreFor(o, scores, allowlist);
     if (s === null) unscored.push(o);
     else scored.push({ o, s, i });
   });
@@ -626,27 +641,47 @@ async function applyCarryOrdering(opportunities: FundingArbOpportunity[]): Promi
     if (opportunities.length === 0) return opportunities;
     const scores = await getFreshCarryScores();
     if (!scores) return opportunities; // unavailable/stale → legacy (reader logged the episode)
-    const { ordered, nScored } = carryOrder(opportunities, scores);
+    const allowlist = carryAllowlist();
+    // FULL-reach order = the divergence EVIDENCE (n_scored/tau/overlap unchanged from W1; accrues
+    // even while the allowlist is empty). SCOPED order = what actually reorders the response.
+    const full = carryOrder(opportunities, scores);
+    const scoped = carryOrder(opportunities, scores, allowlist);
     const legacyCoins = opportunities.map(o => o.coin);
-    const carryCoins = ordered.map(o => o.coin);
+    const carryCoins = full.ordered.map(o => o.coin);
     const k = Math.min(5, opportunities.length);
     const topLegacy = new Set(legacyCoins.slice(0, k));
     const overlap = carryCoins.slice(0, k).filter(c => topLegacy.has(c)).length;
-    const applied = carryFlagsOn();
-    // Fire-and-forget forensic line — the flip evidence (parsed by the CH5 evidence pack).
-    console.log(`[carry-divergence] ${JSON.stringify({
+    // THREE-KEY ignition: SOURCE ∧ ENABLED ∧ (the scoped re-rank actually changes the order).
+    const scopedChangesOrder = scoped.ordered.some((o, i) => o.coin !== opportunities[i].coin);
+    const applied = carryFlagsOn() && scopedChangesOrder;
+    const venueScope = [...allowlist].sort().join(',');
+    const payload = {
       n: opportunities.length,
-      n_scored: nScored,
+      n_scored: full.nScored,
+      n_allowlist_scored: scoped.nScored, // W2 rider: attribution to the validated venue(s)
+      n_unscored: opportunities.length - full.nScored,
       kendall_tau: kendallTau(legacyCoins, carryCoins),
       top5_overlap: `${overlap}/${k}`,
       artifact_version: scores.artifactVersion,
+      venue_scope: venueScope,
       applied,
-    })}`);
-    return applied ? ordered : opportunities;
+    };
+    // W1 stdout line (kept) + W2 durable row (fire-and-forget — NOT awaited, never throws).
+    console.log(`[carry-divergence] ${JSON.stringify(payload)}`);
+    void writeDivergenceLog({
+      venueScope,
+      n: opportunities.length,
+      nScored: full.nScored,
+      tau: payload.kendall_tau,
+      top5Overlap: payload.top5_overlap,
+      applied,
+      payload,
+    });
+    return applied ? scoped.ordered : opportunities;
   } catch {
     return opportunities; // fail-open ALWAYS — never a throw into the tool path
   }
 }
 
 // Test seams (underscore convention — matches _setLiquidityOverrideForTest).
-export { carryOrder as _carryOrderForTest, kendallTau as _kendallTauForTest };
+export { carryOrder as _carryOrderForTest, kendallTau as _kendallTauForTest, carryAllowlist as _carryAllowlistForTest };

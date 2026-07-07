@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSteps, runSteps, type SpawnResult, type Step } from '../../src/scripts/nightly-carry-labeler.js';
+import { buildSteps, runSteps, sweepDivergenceRetention, DIVERGENCE_RETENTION_DAYS, type SpawnResult, type Step } from '../../src/scripts/nightly-carry-labeler.js';
 
 const names = (steps: Step[]): string[] => steps.map((s) => s.name);
 
@@ -46,5 +46,22 @@ describe('runSteps', () => {
   it('treats a spawn error like a failure', () => {
     const spawn = (): SpawnResult => ({ status: null, error: new Error('ENOENT') });
     expect(runSteps([], spawn)).toBe(1);
+  });
+});
+
+describe('sweepDivergenceRetention (EDGE-CARRY-SERVING-W2 — 90d housekeeping, fail-soft)', () => {
+  it('deletes rows older than the window and returns the pruned count', async () => {
+    const seen: { sql: string; params?: unknown[] }[] = [];
+    const query = async (sql: string, params?: unknown[]) => { seen.push({ sql, params }); return [{ id: 1 }, { id: 2 }, { id: 3 }]; };
+    expect(await sweepDivergenceRetention(query)).toBe(3);
+    expect(seen[0].sql).toMatch(/DELETE FROM carry_divergence_log WHERE scan_ts < now\(\) - make_interval\(days => \$1\)/);
+    expect(seen[0].sql).toContain('RETURNING id');
+    expect(seen[0].params).toEqual([DIVERGENCE_RETENTION_DAYS]);
+    expect(DIVERGENCE_RETENTION_DAYS).toBe(90);
+  });
+
+  it('fail-SOFT: a query error returns -1 and never throws (housekeeping never fails the label run)', async () => {
+    const query = async () => { throw new Error('pg down'); };
+    await expect(sweepDivergenceRetention(query)).resolves.toBe(-1);
   });
 });
