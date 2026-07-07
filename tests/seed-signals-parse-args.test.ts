@@ -179,3 +179,57 @@ describe('seed-signals parseArgs — --concurrency flag (OPS-SEED-ORCHESTRATOR-W
     );
   });
 });
+
+describe('seed-signals parseArgs — --exclude flag (OPS-SEED-PROMOTED-RAMP-W1)', () => {
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`__process_exit__:${code ?? 0}`);
+    }) as never);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('case 17 — absent --exclude defaults to [] (no exclusions)', () => {
+    const r = parseArgs(['--timeframe', '3m', '--status', 'promoted']);
+    expect(r.exclude).toEqual([]);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('case 18 — --exclude HL parses to ["HL"] and composes with --status promoted', () => {
+    const r = parseArgs(['--timeframe', '3m', '--status', 'promoted', '--exclude', 'HL']);
+    expect(r.exclude).toEqual(['HL']);
+    expect(r.statusFilter).toBe('promoted');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('case 19 — --exclude " HL , BINANCE " trims to ["HL", "BINANCE"]', () => {
+    const r = parseArgs(['--exclude', ' HL , BINANCE ', '--timeframe', '5m']);
+    expect(r.exclude).toEqual(['HL', 'BINANCE']);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('case 20 — --exclude FOO errors with invalid-id + exit(1)', () => {
+    expect(() =>
+      parseArgs(['--exclude', 'FOO', '--timeframe', '3m']),
+    ).toThrow(/__process_exit__:1/);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid exchange in --exclude: FOO'),
+    );
+  });
+
+  it('case 21 — empty --exclude value (e.g. "HL,,BINANCE") errors with exit(1)', () => {
+    expect(() =>
+      parseArgs(['--exclude', 'HL,,BINANCE', '--timeframe', '3m']),
+    ).toThrow(/__process_exit__:1/);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid --exclude value'),
+    );
+  });
+});

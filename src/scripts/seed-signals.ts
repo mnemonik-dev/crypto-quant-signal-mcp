@@ -195,7 +195,7 @@ export const ALL_EXCHANGE_IDS: ExchangeId[] = [
  *              Exposed for testability (vitest passes synthetic argv to
  *              `tests/seed-signals-parse-args.test.ts`).
  */
-export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number; statusFilter: VenueStatus | 'all' | null; explicitExchanges: boolean; concurrency: number } {
+export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: string; top: number; exchanges: ExchangeId[]; restrictedUniverse: number; statusFilter: VenueStatus | 'all' | null; explicitExchanges: boolean; concurrency: number; exclude: ExchangeId[] } {
   const args = argv;
 
   let timeframe = '15m';
@@ -322,7 +322,33 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): { timeframe: 
     concurrency = n;
   }
 
-  return { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges, concurrency };
+  // OPS-SEED-PROMOTED-RAMP-W1 (2026-07-07): --exclude <csv> removes venues from
+  // the resolved seed set (applied AFTER --status/--exchange selection in main()).
+  // Enables the ramp-proof "--status promoted --exclude HL" orchestrator line — HL
+  // is by-design ~48min/fire and MUST stay on its own legacy line, so it is
+  // excluded from the consolidated promoted fan-out while every OTHER promoted
+  // venue (incl. future promotions) auto-enrolls. Validated vs ALL_EXCHANGE_IDS;
+  // orthogonal to (composes with) --exchange/--exchange-list/--status.
+  let exclude: ExchangeId[] = [];
+  const exclIdx = args.indexOf('--exclude');
+  if (exclIdx !== -1 && args[exclIdx + 1]) {
+    const raw = args[exclIdx + 1];
+    const list = raw.split(',').map((s) => s.trim().toUpperCase());
+    if (list.length === 0 || list.some((s) => s.length === 0)) {
+      console.error(`Invalid --exclude value: "${raw}". Expected comma-separated ExchangeId values (e.g. HL).`);
+      process.exit(1);
+    }
+    const validSet = new Set<string>(ALL_EXCHANGE_IDS);
+    for (const ex of list) {
+      if (!validSet.has(ex)) {
+        console.error(`Invalid exchange in --exclude: ${ex}. Valid values: ${ALL_EXCHANGE_IDS.join(', ')}.`);
+        process.exit(1);
+      }
+    }
+    exclude = list as ExchangeId[];
+  }
+
+  return { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges, concurrency, exclude };
 }
 
 /**
@@ -949,7 +975,7 @@ async function main() {
   const seedTf = parseArgs().timeframe;
   return runAsBatch(async () => {
   const fireStartedAt = Date.now();
-  const { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges, concurrency } = parseArgs();
+  const { timeframe, top, exchanges, restrictedUniverse, statusFilter, explicitExchanges, concurrency, exclude } = parseArgs();
   const idempotencyWindow = IDEMPOTENCY_WINDOWS[timeframe] || 50 * 60;
 
   // SHADOW-SEED-W1: when --restricted-universe N is set (used by 1m + 3m
@@ -984,6 +1010,17 @@ async function main() {
       .filter(v => v.status !== 'retired')
       .map(v => v.exchange_id as ExchangeId);
     console.log(`[${ts()}] Venue-table-driven selection (${statusFilter ?? 'promoted+shadow'}): [${venuesToSeed.join(', ')}]`);
+  }
+
+  // OPS-SEED-PROMOTED-RAMP-W1 (2026-07-07): --exclude removes venues from the
+  // resolved set regardless of selection path. Primary use: "--status promoted
+  // --exclude HL" (HL stays on its own by-design-slow legacy line). Applied
+  // post-selection so it composes with both --exchange-list and --status.
+  if (exclude.length > 0) {
+    const before = venuesToSeed.length;
+    const excludeSet = new Set<ExchangeId>(exclude);
+    venuesToSeed = venuesToSeed.filter((v) => !excludeSet.has(v));
+    console.log(`[${ts()}] --exclude [${exclude.join(', ')}] removed ${before - venuesToSeed.length} venue(s) → seeding [${venuesToSeed.join(', ')}]`);
   }
 
   // OPS-SEED-ORCHESTRATOR-W1/CH1 — bounded-concurrency venue fan-out (the
