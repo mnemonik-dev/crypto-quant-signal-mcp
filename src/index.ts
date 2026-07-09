@@ -2126,6 +2126,50 @@ async function startHttp() {
         res.status(500).send('Internal error rendering subscriber tracker');
       }
     });
+
+    // H0-C4-MEASURE-CLOSE: always-on activation-funnel scoreboard (INTERNAL/META).
+    // JSON — the single getFunnelScoreboard() aggregation (composes the existing
+    // generateFunnelSnapshot + subscriber-attribution + Stripe census; adds no MCP
+    // tool, no version bump). Admin-gated like every /dashboard/api/* endpoint.
+    app.get('/dashboard/api/funnel-scoreboard', async (req, res) => {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      try {
+        const days = Math.min(Math.max(parseInt(String(req.query.days ?? '90'), 10) || 90, 1), 365);
+        const { getFunnelScoreboard } = await import('./lib/funnel-scoreboard.js');
+        const scoreboard = await getFunnelScoreboard({ days });
+        res.setHeader('Cache-Control', 'no-store');
+        res.json(scoreboard);
+      } catch (err) {
+        console.error(`[/dashboard/api/funnel-scoreboard] internal error: ${err instanceof Error ? err.message : err}`);
+        res.status(500).json({ error: 'Failed to compute funnel scoreboard' });
+      }
+    });
+
+    // HTML shell — cookie-gated EXACTLY like /dashboard (anonymous → 401; ?key= sets
+    // the session cookie then redirects). The served HTML embeds no data; it fetches
+    // the gated JSON above via a same-origin XHR carrying the admin cookie.
+    app.get('/dashboard/funnel', (req, res) => {
+      const key = req.query.key as string;
+      if (key && safeCompare(key, adminKey)) {
+        const sessionToken = createAdminSession();
+        res.setHeader('Set-Cookie', `${ADMIN_COOKIE_NAME}=${sessionToken}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${ADMIN_SESSION_TTL / 1000}${req.secure ? '; Secure' : ''}`);
+        return res.redirect(303, '/dashboard/funnel');
+      }
+      if (!isValidAdminSession(req.headers.cookie)) {
+        return res.status(401).send('Unauthorized — add ?key=YOUR_ADMIN_KEY to the URL');
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      // Lazy require keeps the shell out of the hot import graph; sync render.
+      import('./lib/funnel-dashboard-html.js')
+        .then(({ renderFunnelDashboardHtml }) => res.send(renderFunnelDashboardHtml()))
+        .catch((err) => {
+          console.error(`[/dashboard/funnel] render error: ${err instanceof Error ? err.message : err}`);
+          res.status(500).send('Internal error rendering funnel scoreboard');
+        });
+    });
   }
 
   // ── Public track record (no auth) ──

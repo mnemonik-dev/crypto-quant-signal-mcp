@@ -356,6 +356,73 @@ export async function getCustomerByEmail(email: string): Promise<{ apiKey: strin
   }
 }
 
+// ── Active-subscription tier census (H0-C4-MEASURE-CLOSE) ──
+//
+// The CANONICAL "paying subscribers" headline for the funnel scoreboard: a
+// read-only census of ALL active Stripe subscriptions grouped by price → tier,
+// reusing the SAME STARTER/PRO/ENTERPRISE_PRICE_ID map as validateApiKey (single
+// derivation — the price→tier logic lives in exactly one place). Read-only; no
+// tool-surface / envelope / mutation. Cached 5 min (operator-ratified) so an
+// admin dashboard reload does not re-page the Stripe API. Returns null when
+// Stripe is unconfigured → the caller falls back to the subscriber_profiles cache.
+
+export interface ActiveSubscriberTierCensus {
+  starter: number;
+  pro: number;
+  enterprise: number;
+  total: number;
+  source: 'stripe_live' | 'stripe_cache';
+  as_of: number; // epoch ms the underlying Stripe read completed
+}
+
+let tierCensusCache: { value: ActiveSubscriberTierCensus; expiresAt: number } | null = null;
+
+/** Map ONE subscription to its highest tier via the price-id map (enterprise > pro > starter). */
+function subscriptionTier(sub: { items: { data: Array<{ price: { id: string } }> } }): 'starter' | 'pro' | 'enterprise' | null {
+  let tier: 'starter' | 'pro' | 'enterprise' | null = null;
+  for (const item of sub.items.data) {
+    const priceId = item.price.id;
+    if (priceId === ENTERPRISE_PRICE_ID) return 'enterprise'; // enterprise wins outright
+    if (priceId === PRO_PRICE_ID) tier = 'pro';
+    else if (priceId === STARTER_PRICE_ID && tier !== 'pro') tier = 'starter';
+  }
+  return tier;
+}
+
+/**
+ * Count active Stripe subscriptions by tier. null when Stripe is unconfigured.
+ * Auto-pages the full active set (limit 100/page). Fail-open: on a Stripe error
+ * with a warm cache, returns the cached value (marked stripe_cache); with no
+ * cache, returns null so the caller degrades to subscriber_profiles.
+ */
+export async function countActiveSubscriptionsByTier(now: number = Date.now()): Promise<ActiveSubscriberTierCensus | null> {
+  if (!stripe) return null;
+  if (tierCensusCache && now < tierCensusCache.expiresAt) {
+    return { ...tierCensusCache.value, source: 'stripe_cache' };
+  }
+  try {
+    let starter = 0, pro = 0, enterprise = 0;
+    // Stripe SDK async iterator auto-pages through every active subscription.
+    for await (const sub of stripe.subscriptions.list({ status: 'active', limit: 100 })) {
+      const tier = subscriptionTier(sub);
+      if (tier === 'enterprise') enterprise++;
+      else if (tier === 'pro') pro++;
+      else if (tier === 'starter') starter++;
+      // A sub on no recognized price is not counted (avoids inflating the headline).
+    }
+    const value: ActiveSubscriberTierCensus = {
+      starter, pro, enterprise, total: starter + pro + enterprise,
+      source: 'stripe_live', as_of: now,
+    };
+    tierCensusCache = { value, expiresAt: now + CACHE_TTL_MS };
+    return value;
+  } catch (err) {
+    console.error('Stripe countActiveSubscriptionsByTier error:', err instanceof Error ? err.message : err);
+    if (tierCensusCache) return { ...tierCensusCache.value, source: 'stripe_cache' };
+    return null;
+  }
+}
+
 /**
  * Create a Stripe Billing Portal session and return the URL.
  * Trust+Sentinel: if Stripe ever returns "No configuration provided" (operator
