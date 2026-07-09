@@ -56,8 +56,11 @@ interface BuyerAgent {
     requirementData: Record<string, unknown>,
     opts?: { evaluatorAddress?: string },
   ): Promise<bigint>;
-  /** Off-chain job read (reliable HTTP API; TS-private in the SDK but present at runtime). */
-  api?: { getJob(chainId: number, jobId: string): Promise<{ status?: number | string } | null> };
+  /** Off-chain job read (reliable HTTP API; TS-private in the SDK but present at runtime).
+   *  NOTE: the /jobs/{id} response carries the status in `jobStatus` (a STRING enum), not `status`. */
+  api?: { getJob(chainId: number, jobId: string): Promise<{ jobStatus?: string; status?: number | string } | null> };
+  /** Obtain a JobSession handle for a jobId (idempotent via the SDK's sessionMap) — for poll-driven complete(). */
+  getOrCreateSession(jobId: bigint, chainId: number): BuyerSession;
 }
 
 const JOB_TIMEOUT_MS = 180_000; // 3 min/job (< the 5-min SLA); a stuck fund/submit resolves 'timeout'.
@@ -76,10 +79,13 @@ export interface BuyerArgs {
   execute: boolean;
   smoke: boolean;
   maxJobs: number;
+  /** true → skip-evaluation (seller auto-completes; jobs pay out but do NOT count toward graduation). */
+  skipEval: boolean;
 }
 export function parseArgs(argv: string[]): BuyerArgs {
   const execute = argv.includes('--execute');
   const smoke = argv.includes('--smoke');
+  const skipEval = argv.includes('--skip-eval');
   let maxJobs = 10;
   const i = argv.indexOf('--max-jobs');
   if (i >= 0 && argv[i + 1]) {
@@ -87,7 +93,7 @@ export function parseArgs(argv: string[]): BuyerArgs {
     if (Number.isFinite(n) && n > 0) maxJobs = n;
   }
   if (smoke) maxJobs = 1;
-  return { execute, smoke, maxJobs };
+  return { execute, smoke, maxJobs, skipEval };
 }
 
 export interface BuyerConfig {
@@ -193,16 +199,8 @@ export async function runGraduation(
 // ─────────────── live SDK wiring (dynamic import — ESM-only SDK from CJS) ───────────────
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Map a raw off-chain job status (numeric JobStatus index or string) → a terminal driver outcome. */
-function classifyStatus(raw: { status?: number | string } | null): JobOutcome | null {
-  if (!raw || raw.status == null) return null;
-  const st = raw.status;
-  // SDK on-chain JobStatus enum (baseAcpClient.js): OPEN=0 FUNDED=1 SUBMITTED=2 COMPLETED=3 REJECTED=4 EXPIRED=5
-  const name = typeof st === 'number' ? ['OPEN', 'FUNDED', 'SUBMITTED', 'COMPLETED', 'REJECTED', 'EXPIRED'][st] : String(st).toUpperCase();
-  if (name === 'COMPLETED') return 'completed';
-  if (name === 'REJECTED' || name === 'EXPIRED') return 'failed';
-  return null; // OPEN / FUNDED / SUBMITTED — still in progress
-}
+/** SDK on-chain JobStatus enum (baseAcpClient.js): OPEN=0 FUNDED=1 SUBMITTED=2 COMPLETED=3 REJECTED=4 EXPIRED=5 */
+const JOB_STATUS = ['OPEN', 'FUNDED', 'SUBMITTED', 'COMPLETED', 'REJECTED', 'EXPIRED'] as const;
 
 interface BuyerBundle {
   agent: BuyerAgent;
@@ -213,15 +211,17 @@ interface BuyerBundle {
 /**
  * Construct the buyer agent (mirrors provider.ts::createLiveAcpAgent) + a live driveJob.
  *
- * SKIP-EVALUATION mode (no `evaluatorAddress`): the seller's deliverable submission AUTO-COMPLETES the
- * job — the buyer never calls `complete()`, so it needs NO read after funding. This removes the fragile
- * buyer-side step that a transient off-chain 404 broke in the first smoke (self-eval stalled when the
- * buyer's `job.submitted` dispatch skipped on a `fetchJob` throw). The buyer's ONLY action is `fund`
- * (on `budget.set`). Completion is detected by whichever fires first: the `job.completed` event, OR an
- * independent off-chain status poll (`agent.api.getJob`, the reliable HTTP API — retried) as a backstop
- * for a missed final event. (A `fetchJob` throw only skips ONE dispatch; the socket survives.)
+ * EVALUATED mode (DEFAULT): the buyer is the job's evaluator (`evaluatorAddress = buyerAddress`) and
+ * `complete()`s each job after the seller submits — this is what ticks the Virtuals graduation
+ * "completed jobs" counter (skip-eval jobs pay out but do NOT count). Completion is POLL-driven: it reads
+ * the reliable off-chain status (`agent.api.getJob`, retried) and calls `complete()` on a
+ * `getOrCreateSession` handle (a bare provider call — no `_job` hydration, no socket). It does NOT rely on
+ * the `job.submitted` event, which a transient off-chain 404 dropped in the first smoke (a dropped
+ * dispatch permanently stalled self-eval). Funding stays event-driven on `budget.set` (empirically
+ * reliable). `--skip-eval` restores the seller-auto-complete path — cheaper, but those jobs do NOT count
+ * toward graduation.
  */
-async function createBuyerAgent(cfg: BuyerConfig, log: (m: string) => void): Promise<BuyerBundle> {
+async function createBuyerAgent(cfg: BuyerConfig, log: (m: string) => void, skipEval = false): Promise<BuyerBundle> {
   const sdk = await import('@virtuals-protocol/acp-node-v2');
   const { base } = await import('viem/chains');
   const serverUrl = cfg.network === 'testnet' ? sdk.ACP_TESTNET_SERVER_URL : sdk.ACP_SERVER_URL;
@@ -237,45 +237,36 @@ async function createBuyerAgent(cfg: BuyerConfig, log: (m: string) => void): Pro
     privyAppId,
   });
   const agent = (await sdk.AcpAgent.create({ provider })) as unknown as BuyerAgent;
+  const buyerAddress = cfg.buyer.walletAddress!;
   const seller = cfg.seller!;
   const chainId = chain.id;
 
-  // active-job state machine (sequential: exactly one in-flight). Buyer only funds; seller auto-completes.
-  const state: { jobId: string | null; price: number; funded: boolean; resolve: ((o: JobOutcome) => void) | null } = {
-    jobId: null,
-    price: 0,
-    funded: false,
-    resolve: null,
-  };
+  // active-job state (sequential: one in-flight). Funding is event-driven (budget.set); evaluation +
+  // terminal detection are poll-driven (robust to a dropped event).
+  const state: { jobId: string | null; price: number; funded: boolean } = { jobId: null, price: 0, funded: false };
   agent.on('entry', async (session, entry) => {
     if (!state.jobId || String(session.jobId) !== state.jobId || entry.kind !== 'system') return;
-    try {
-      switch (entry.event.type) {
-        case 'budget.set':
-          if (!state.funded) {
-            log(`  budget.set → fund $${state.price.toFixed(2)}`);
-            await session.fund(sdk.AssetToken.usdc(state.price, chainId));
-            state.funded = true;
-          }
-          break;
-        case 'job.completed':
-          state.resolve?.('completed');
-          break;
-        case 'job.rejected':
-        case 'job.expired':
-          state.resolve?.('failed');
-          break;
+    if (entry.event.type === 'budget.set' && !state.funded) {
+      try {
+        log(`  budget.set → fund $${state.price.toFixed(2)}`);
+        await session.fund(sdk.AssetToken.usdc(state.price, chainId));
+        state.funded = true;
+      } catch (e) {
+        log(`  fund (event) error: ${e instanceof Error ? e.message : String(e)}`);
       }
-    } catch (e) {
-      log(`  handler error: ${e instanceof Error ? e.message : String(e)}`);
     }
   });
 
-  /** Reliable off-chain status read (retries a transient 404 / not-yet-indexed on the HTTP API). */
-  const pollStatus = async (jobId: string): Promise<JobOutcome | null> => {
+  /** Reliable off-chain status read → numeric JobStatus (0-5) or null; retries a transient 404.
+   *  The /jobs/{id} response uses `jobStatus` (STRING enum, e.g. "SUBMITTED"); fall back to `status`. */
+  const pollRawStatus = async (jobId: string): Promise<number | null> => {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return classifyStatus((await agent.api?.getJob(chainId, jobId)) ?? null);
+        const raw = await agent.api?.getJob(chainId, jobId);
+        const s = raw?.jobStatus ?? raw?.status;
+        if (s == null) return null;
+        const st = typeof s === 'number' ? s : (JOB_STATUS as readonly string[]).indexOf(String(s).toUpperCase());
+        return st >= 0 ? st : null;
       } catch {
         await sleep(1200 * (attempt + 1));
       }
@@ -283,38 +274,57 @@ async function createBuyerAgent(cfg: BuyerConfig, log: (m: string) => void): Pro
     return null;
   };
 
+  /** Evaluator completes a SUBMITTED job (→ COMPLETED). `complete()` is a bare provider call (no `_job`
+   *  hydration, no socket), so a fresh getOrCreateSession handle works; retried against transient failures. */
+  const tryComplete = async (jobId: string): Promise<boolean> => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        await agent.getOrCreateSession(BigInt(jobId), chainId).complete('graduation-ok');
+        return true;
+      } catch (e) {
+        log(`  complete attempt ${attempt + 1} failed: ${e instanceof Error ? e.message : String(e)}`);
+        await sleep(1500 * (attempt + 1));
+      }
+    }
+    return false;
+  };
+
   const driveJob: DriveJob = async (offering, requirement) => {
-    // SKIP-EVAL: omit evaluatorAddress → the seller's submit auto-completes the job.
-    const jobId = await agent.createJobByOfferingName(chainId, offering.name, seller, requirement);
+    const jobId = await agent.createJobByOfferingName(
+      chainId,
+      offering.name,
+      seller,
+      requirement,
+      skipEval ? undefined : { evaluatorAddress: buyerAddress },
+    );
     const jid = String(jobId);
     state.jobId = jid;
     state.price = offeringPrice(offering);
     state.funded = false;
-    log(`  job ${jid} created (${offering.name}) [skip-eval → auto-complete on delivery]`);
+    log(`  job ${jid} created (${offering.name}) [${skipEval ? 'skip-eval → seller auto-completes' : 'self-eval → buyer evaluates on submit'}]`);
 
-    // whichever fires first: the job.completed event, OR the off-chain poll backstop.
-    let stopPoll = false;
-    const eventP = new Promise<JobOutcome>((r) => (state.resolve = r));
-    const pollP = (async (): Promise<JobOutcome> => {
-      const deadline = Date.now() + JOB_TIMEOUT_MS;
-      while (!stopPoll && Date.now() < deadline) {
-        await sleep(7000);
-        const s = await pollStatus(jid);
-        if (s) return s;
+    const deadline = Date.now() + JOB_TIMEOUT_MS;
+    let evaluated = false; // buyer already called complete() for this job (eval mode)
+    let outcome: JobOutcome = 'timeout';
+    while (Date.now() < deadline) {
+      await sleep(5000);
+      const st = await pollRawStatus(jid);
+      if (st === 3) { outcome = 'completed'; break; }            // COMPLETED
+      if (st === 4 || st === 5) { outcome = 'failed'; break; }   // REJECTED / EXPIRED
+      if (!skipEval && st === 2 && !evaluated) {                 // SUBMITTED → evaluate (complete)
+        log(`  job ${jid} submitted → evaluating (complete)`);
+        evaluated = await tryComplete(jid);
+        if (!evaluated) { outcome = 'error'; break; }
       }
-      return 'timeout';
-    })();
-    const outcome = await Promise.race([eventP, pollP]);
-    stopPoll = true;
+    }
 
     const stuck = outcome === 'timeout' && state.funded ? jid : null;
     state.jobId = null;
-    state.resolve = null;
-    if (stuck) log(`  ⚠ job ${stuck} funded but not observed complete within ${JOB_TIMEOUT_MS / 1000}s — SLA auto-refunds (~5m); investigate`);
+    if (stuck) log(`  ⚠ job ${stuck} funded but not completed within ${JOB_TIMEOUT_MS / 1000}s — SLA auto-refunds (~5m); investigate`);
     return outcome;
   };
 
-  return { agent, buyerAddress: cfg.buyer.walletAddress!, driveJob };
+  return { agent, buyerAddress, driveJob };
 }
 
 // ─────────────── entrypoint ───────────────
@@ -322,7 +332,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const cfg = resolveBuyerConfig(process.env);
   const log = (m: string): void => console.log(m);
-  log(`[ACP-BUYER] ${args.execute ? 'EXECUTE (real USDC)' : 'DRY-RUN (0 txns)'} · maxJobs=${args.maxJobs} · cap=$${cfg.maxSpendUsd} · network=${cfg.network}`);
+  log(`[ACP-BUYER] ${args.execute ? 'EXECUTE (real USDC)' : 'DRY-RUN (0 txns)'} · maxJobs=${args.maxJobs} · cap=$${cfg.maxSpendUsd} · network=${cfg.network} · mode=${args.skipEval ? 'skip-eval (does NOT count toward graduation)' : 'evaluated'}`);
 
   let offerings: OfferingLike[];
   let driveJob: DriveJob;
@@ -340,7 +350,7 @@ async function main(): Promise<void> {
     if (cfg.network !== 'mainnet') throw new Error('ACP_ENV must be "mainnet" (the live seller is on Base mainnet)');
     if (!cfg.seller) throw new Error('SELLER_WALLET_ADDRESS is required');
     if (!cfg.credsPresent) throw new Error('BUYER_WALLET_ADDRESS / BUYER_WALLET_ID / BUYER_SIGNER_PRIVATE_KEY required for --execute (see docs/RUNBOOK-VIRTUALS-ACP-GRADUATION.md)');
-    const bundle = await createBuyerAgent(cfg, log);
+    const bundle = await createBuyerAgent(cfg, log, args.skipEval);
     stop = () => bundle.agent.stop();
     await bundle.agent.start(() => log('[ACP-BUYER] connected — listening'));
     const detail = await bundle.agent.getAgentByWalletAddress(cfg.seller);

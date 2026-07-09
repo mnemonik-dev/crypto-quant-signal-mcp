@@ -32,7 +32,11 @@ const gr = (o: Partial<GraduationResult>): GraduationResult => ({ success: 0, ma
 
 describe('parseArgs', () => {
   it('dry-run by default (no --execute)', () => {
-    expect(parseArgs([])).toEqual({ execute: false, smoke: false, maxJobs: 10 });
+    expect(parseArgs([])).toEqual({ execute: false, smoke: false, maxJobs: 10, skipEval: false });
+  });
+  it('--skip-eval flips skipEval (default false — evaluated is the graduation-qualifying default)', () => {
+    expect(parseArgs([]).skipEval).toBe(false);
+    expect(parseArgs(['--skip-eval']).skipEval).toBe(true);
   });
   it('--execute enables real spend', () => {
     expect(parseArgs(['--execute']).execute).toBe(true);

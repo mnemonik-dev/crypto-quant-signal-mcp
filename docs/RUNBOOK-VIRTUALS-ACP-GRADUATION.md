@@ -87,11 +87,22 @@ JOBS counter is cumulative).
 
 ---
 
-## Step 6 — GRADUATE (Mr.1)
+## Step 6 — GRADUATE (Mr.1) — manual Virtuals review, NOT an instant button
 
-On the **seller** agent page (`0x195ae…`) → the **Graduate Agent** action (Agent Health panel) → submit
-the form. Review expects: 10 successful jobs (incl. 3 consecutive), valid offerings + real deliverables,
-an untokenized production agent. Approval → the agent appears in the **A2A / discovery tab**.
+Graduation is a **manual review by the Virtuals team**, gated on their side crediting the ≥10 completed
+jobs. Per the [Virtuals graduation docs](https://whitepaper.virtuals.io/get-started-with-acp/graduate-your-agent/graduation-process):
+once the threshold is credited, builders get a **"Congratulations" modal** with a **"Proceed to
+Graduation"** button, or can start from the agent profile via a **"Graduate Agent"** button — which links
+to a **submission form**. The form requires **evidence**: screenshots of the registered offerings on the
+ACP site **+ a short screen recording** showing the agent receiving a job via ACP and returning the right
+deliverable (and rejecting bad requests). Virtuals reviews within **~7 working days**; on approval the
+agent is marked **graduated** and surfaces in the **Agent-to-Agent (A2A) tab**.
+
+> ⚠️ **The trigger is gated on the agent's completed-jobs counter, which is Virtuals-side.** If the
+> profile's **JOBS** counter still reads 0 (and no modal/button appears) despite jobs that paid out, the
+> threshold hasn't been credited yet — either backend lag, or a job-mode/mainnet-vs-sandbox nuance.
+> Recheck after a while; if it persists, the definitive answer is with Virtuals support/Discord (it's
+> their manual gate). See status.md for the live investigation.
 
 ---
 
