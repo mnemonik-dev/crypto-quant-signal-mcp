@@ -46,8 +46,9 @@ export interface DeferredSignupDeps {
 
 async function defaultGetSignal(): Promise<StartFreeSignal> {
   // One real BTC/1h call — the "value" a first-time human sees before any email.
-  const r = (await getTradeSignal({ coin: 'BTC', timeframe: '1h' })) as unknown as { verdict?: string; confidence?: number | null };
-  return { asset: 'BTC', timeframe: '1h', verdict: r?.verdict ?? null, confidence: r?.confidence ?? null };
+  // TradeCallResult exposes the BUY/SELL/HOLD verdict as `call` (not `verdict`).
+  const r = (await getTradeSignal({ coin: 'BTC', timeframe: '1h' })) as unknown as { call?: string; verdict?: string; confidence?: number | null };
+  return { asset: 'BTC', timeframe: '1h', verdict: r?.call ?? r?.verdict ?? null, confidence: r?.confidence ?? null };
 }
 
 export const defaultDeferredSignupDeps: DeferredSignupDeps = {
