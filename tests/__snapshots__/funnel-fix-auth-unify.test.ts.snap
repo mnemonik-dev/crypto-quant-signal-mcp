@@ -1,0 +1,287 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`outer-flag integration on the 3 pages > /account + /referral OFF snapshots (legacy layout regression guard) 1`] = `
+"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/logo.png">
+<!-- BEGIN: AlgoVault canonical design loader (DESIGN-W2 / D2-C, cross-origin) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://algovault.com/_design/algovault-design.css">
+<!-- END: AlgoVault canonical design loader -->
+<!-- DESIGN-W10 / C2 / Q-W10-8: Tailwind CDN for canonical Nav utility classes -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: { 900: '#060a14', 800: '#0a0e1a', 700: '#0f1526', 600: '#161d30' },
+        mint: { 50: 'oklch(0.97 0.03 165)', 100: 'oklch(0.94 0.06 165)', 200: 'oklch(0.91 0.09 165)', 300: 'oklch(0.89 0.13 165)', 400: 'oklch(0.86 0.16 165)', 500: 'oklch(0.78 0.18 165)', 600: 'oklch(0.66 0.18 165)', 700: 'oklch(0.54 0.16 165)', 800: 'oklch(0.42 0.12 165)', 900: 'oklch(0.32 0.08 165)' },
+        steel: { 400: '#8b9bb5', 500: '#7b8ca0', 600: '#5e6d82' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font-text, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); background: var(--bg); color: var(--fg); margin: 0; padding: 0; }
+  .subtitle { color: var(--fg-3); margin-bottom: 32px; font-size: 14px; }
+  .tabs { display: flex; gap: 4px; background: oklch(0.16 0.012 265); border: 1px solid var(--line); border-radius: 10px; padding: 4px; margin-bottom: 20px; }
+  .tab { flex: 1; background: transparent; color: var(--fg-3); border: none; padding: 10px 16px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s, color 0.15s; }
+  .tab.active { background: oklch(0.22 0.014 265); color: var(--fg); }
+  .panel { padding: 0; }
+  .panel.hidden { display: none; }
+  .panel label { display: block; color: var(--fg-3); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .panel input { width: 100%; background: oklch(0.13 0.012 265); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; color: var(--fg); font-size: 14px; font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); margin-bottom: 16px; }
+  .panel input:focus { outline: none; border-color: var(--mint); }
+  .panel button { width: 100%; background: var(--mint); color: oklch(0.13 0.012 265); border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: filter 0.15s; }
+  .panel button:hover { filter: brightness(1.1); }
+  .panel .hint { color: var(--fg-3); font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+  .help-line { text-align: center; margin-top: 24px; color: var(--fg-3); font-size: 12px; }
+  .help-line a { color: var(--mint); text-decoration: none; }
+  .error-box { background: oklch(0.16 0.012 265); border: 1px solid oklch(0.55 0.18 25); border-radius: 12px; padding: 24px; }
+  .error-box h2 { color: oklch(0.7 0.18 25); font-size: 18px; margin-bottom: 12px; }
+  .error-box p { color: var(--fg-2); font-size: 14px; line-height: 1.5; }
+  .success-box { background: oklch(0.16 0.012 265); border: 1px solid var(--mint); border-radius: 12px; padding: 24px; }
+  .success-box h2 { color: var(--mint); font-size: 18px; margin-bottom: 12px; }
+  .success-box p { color: var(--fg-2); font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+</style>
+<title>AlgoVault — Account</title>
+</head>
+<body>
+<nav class="fixed top-0 w-full z-50 border-b border-white/5" style="background:rgba(6,10,20,0.85);backdrop-filter:blur(12px)">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <a href="https://algovault.com/" class="flex items-center gap-2.5" aria-label="AlgoVault home">
+      <img src="/logo.png" alt="AlgoVault Logo" class="w-7 h-7 rounded-md">
+      <span class="text-white font-semibold text-sm">AlgoVault Labs</span>
+    </a>
+    <div class="hidden sm:flex items-center gap-6 text-sm text-gray-400">
+      <a href="https://algovault.com/track-record" class="hover:text-white transition">Track Record</a>
+      <a href="https://algovault.com/how-it-works" class="hover:text-white transition">How it works</a>
+      <a href="https://algovault.com/#pricing" class="hover:text-white transition">Pricing</a>
+      <a href="https://algovault.com/integrations" class="hover:text-white transition">Integrations</a>
+      <a href="https://algovault.com/skills" class="hover:text-white transition">Skills</a>
+      <a href="https://algovault.com/docs.html" class="hover:text-white transition">Docs</a>
+      <a href="https://algovault.com/verify" class="hover:text-white transition">Verify</a>
+      <a href="https://api.algovault.com/account" class="text-mint-400 font-medium">Account</a>
+      <a href="https://api.algovault.com/signup" class="px-3 py-1 bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 rounded-full text-xs font-semibold transition">Signup</a>
+    </div>
+      <button type="button" data-mobile-nav-toggle id="mobile-nav-toggle" aria-label="Open menu" aria-controls="mobile-menu" aria-expanded="false" class="sm:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 text-gray-400 hover:text-white transition">
+        <svg data-mobile-nav-icon-open class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg data-mobile-nav-icon-close class="w-6 h-6 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+  </div>
+      <div id="mobile-menu" data-mobile-nav-panel class="hidden sm:hidden border-t border-white/5" style="background:rgba(6,10,20,0.97);backdrop-filter:blur(12px)">
+        <a href="https://algovault.com/track-record" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Track Record</a>
+        <a href="https://algovault.com/how-it-works" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">How it works</a>
+        <a href="https://algovault.com/#pricing" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Pricing</a>
+        <a href="https://algovault.com/integrations" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Integrations</a>
+        <a href="https://algovault.com/skills" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Skills</a>
+        <a href="https://algovault.com/docs.html" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Docs</a>
+        <a href="https://algovault.com/verify" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Verify</a>
+        <a href="https://api.algovault.com/account" class="block px-6 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition">Account</a>
+        <div class="px-6 py-3">
+          <a href="https://api.algovault.com/signup" class="block px-4 py-3 rounded-lg text-sm text-center bg-mint-500/15 border border-mint-500/30 text-mint-400 hover:bg-mint-500/25 font-semibold transition">Signup</a>
+        </div>
+      </div>
+</nav>
+<script>
+/* mobile-nav-header controller (shared, identical across all landing pages) */
+(function(){
+  var toggle = document.querySelector('[data-mobile-nav-toggle]');
+  var panel = document.getElementById('mobile-menu');
+  if (!toggle || !panel) return;
+  var nav = toggle.closest('nav');
+  var iconOpen = toggle.querySelector('[data-mobile-nav-icon-open]');
+  var iconClose = toggle.querySelector('[data-mobile-nav-icon-close]');
+  function isOpen(){ return !panel.classList.contains('hidden'); }
+  function setOpen(open){
+    panel.classList.toggle('hidden', !open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    if (iconOpen) iconOpen.classList.toggle('hidden', open);
+    if (iconClose) iconClose.classList.toggle('hidden', !open);
+  }
+  toggle.addEventListener('click', function(e){ e.stopPropagation(); setOpen(!isOpen()); });
+  panel.addEventListener('click', function(e){ if (e.target.closest('a')) setOpen(false); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && isOpen()) setOpen(false); });
+  document.addEventListener('click', function(e){ if (isOpen() && nav && !nav.contains(e.target)) setOpen(false); });
+})();
+</script>
+<main class="lp-account-desktop">
+  <div class="artboard" style="padding:100px 24px 64px;max-width:720px;margin:0 auto;width:100%">
+    <div class="bg-grid"></div>
+    <div class="bg-radial-accent"></div>
+    <div class="bg-noise"></div>
+    <div style="position:relative;z-index:1">
+      <div class="placeholder-cap" style="margin-bottom:14px">· account</div>
+      <h1 style="font-family:var(--font-display, 'Inter Tight', sans-serif);font-size:42px;line-height:1.1;letter-spacing:-0.025em;font-weight:500;margin:0 0 14px;color:var(--fg)">Your <span style="color: var(--accent, var(--mint))">Account</span></h1>
+      <div class="subtitle">Cancel, switch plans, update card, or recover a lost API key.</div>
+      <div class="tier-stat-card" style="padding:24px;gap:0">
+        <div class="tabs" role="tablist">
+          <button class="tab active" id="tab-key" type="button" onclick="switchTab('key')">I have my API key</button>
+          <button class="tab" id="tab-email" type="button" onclick="switchTab('email')">Recover lost key</button>
+          <button class="tab" id="tab-referral" type="button" onclick="switchTab('referral')">Referrals</button>
+        </div>
+        <form class="panel" id="panel-key" action="/account/portal" method="post">
+          <div class="hint">Paste your API key to open the Stripe Billing Portal — cancel, change plan, or update payment method.</div>
+          <label for="api_key">API Key</label>
+          <input type="password" id="api_key" name="api_key" placeholder="av_live_..." autocomplete="off" required>
+          <button type="submit">Open Billing Portal &rarr;</button>
+        </form>
+        <form class="panel hidden" id="panel-email" action="/account/recover-key" method="post">
+          <div class="hint">Enter your billing email and we'll send your active API key to that address. (No enumeration leak — same response whether or not the email is on file.)</div>
+          <label for="email">Billing email</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required>
+          <button type="submit">Email me my key</button>
+        </form>
+        <form class="panel hidden" id="panel-referral" action="/account/referrals" method="post">
+          <div class="hint">Paste your API key (av_live_ or av_free_) to see your referral code, share link, signups, and earnings.</div>
+          <label for="ref_api_key">API Key</label>
+          <input type="password" id="ref_api_key" name="api_key" placeholder="av_live_... or av_free_..." autocomplete="off" required>
+          <button type="submit">View my referrals &rarr;</button>
+          <div class="hint" style="margin-top:12px">No API key yet? <a href="https://algovault.com/referral" style="color:var(--mint);text-decoration:none">Get a free account + referral link &rarr;</a></div>
+        </form>
+        <div class="help-line">Need help? <a href="mailto:support@algovault.com">support@algovault.com</a></div>
+      </div>
+    </div>
+  </div>
+</main>
+<footer data-av-brand-footer="desktop" style="padding:44px 80px 56px;border-top:1px solid var(--line);background:oklch(0.13 0.012 265);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;font-size:13px;color:var(--fg-3)"><div style="display:flex;align-items:center;gap:10px"><img src="/logo.png" alt="AlgoVault" style="width:22px;height:22px;border-radius:6px;object-fit:contain;flex-shrink:0"/><span style="color:var(--fg-2)">Built by AlgoVault Labs</span></div><div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap"><a href="https://github.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">GitHub</a><a href="https://x.com/AlgoVaultLabs" target="_blank" rel="noopener noreferrer" style="color:var(--fg-3);text-decoration:none">X / Twitter</a><a href="https://api.algovault.com/signup" style="color:var(--fg-3);text-decoration:none">Signup</a><a href="https://algovault.com/referral" style="color:var(--fg-3);text-decoration:none">Refer &amp; Earn</a><a href="https://algovault.com/privacy" style="color:var(--fg-3);text-decoration:none">Privacy</a></div><div data-slot="social-proof-badges" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><a href="https://www.producthunt.com/products/algovault?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-algovault" target="_blank" rel="noopener noreferrer" style="display:inline-flex;border:1px solid var(--line);border-radius:4px;line-height:0"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1254662&theme=dark&size=small" alt="Algovault - On-chain-verified trade calls for AI agents | Product Hunt" style="width: 86px; height: 32px;" width="86" height="32" /></a></div></footer>
+<script>
+function switchTab(which){
+  ['key','email','referral'].forEach(function(t){
+    document.getElementById('tab-'+t).classList.toggle('active', which===t);
+    document.getElementById('panel-'+t).classList.toggle('hidden', which!==t);
+  });
+}
+</script>
+</body>
+</html>"
+`;
+
+exports[`outer-flag integration on the 3 pages > /account + /referral OFF snapshots (legacy layout regression guard) 2`] = `
+"<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="index,follow">
+<meta name="description" content="Refer a friend to AlgoVault and you both win: they get 500 bonus calls, you earn 30% of their subscription for 12 months, paid automatically.">
+<title>AlgoVault — Refer a friend, both win</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--fg-3:#8b949e;--mint:#3fb950}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5}
+  .wrap{max-width:720px;margin:0 auto;padding:40px 20px}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:1px;color:var(--fg-3);margin:28px 0 12px}
+  .sub{color:var(--fg-3);margin:0 0 24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin:0 0 16px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .code{font-size:22px;font-weight:700;color:var(--mint)}
+  .link{word-break:break-all;color:var(--mint);text-decoration:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .stat .n{font-size:22px;font-weight:700}
+  .stat .l{font-size:12px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.5px}
+  a{color:var(--mint)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--fg-3);text-transform:uppercase;font-size:11px;letter-spacing:.5px}
+  .muted{color:var(--fg-3);font-size:13px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
+</style></head>
+<body><div class="wrap">
+    <h1>Refer a friend — both win.</h1>
+    <p class="sub">Your friend gets 500 one-time bonus calls. You earn 30% of their subscription for 12 months — paid automatically.</p>
+    
+    <div class="card">
+      <h2 style="margin-top:0;text-transform:none;letter-spacing:0;font-size:20px;color:var(--fg)">Get your referral link — free, no card.</h2>
+      <form id="av-ref-form" data-source="referral-page" data-sharetext-prefix="I&#39;m using AlgoVault for verifiable crypto trade signals — composite BUY/SELL/HOLD across the top perp venues, on-chain track record. Grab 500 bonus calls free with my link: " style="margin:0">
+        <input type="email" id="av-ref-email" required autocomplete="email" placeholder="you@example.com"
+          style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px;margin:0 0 10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg-3);margin:0 0 14px">
+          <input type="checkbox" id="av-ref-consent"> Email me product updates
+        </label>
+        <button type="submit" id="av-ref-submit"
+          style="width:100%;font-weight:700;font-size:16px;color:var(--bg);background:var(--mint);border:none;padding:12px 24px;border-radius:10px;cursor:pointer">Create my link &rarr;</button>
+      </form>
+      <div id="av-ref-result" style="margin-top:14px"></div>
+      <p class="muted" style="margin:14px 0 0">Already have an account? <a href="https://api.algovault.com/account">Paste your key &rarr;</a></p>
+    </div>
+    <script>
+(function(){
+  var f=document.getElementById("av-ref-form"); if(!f) return;
+  var out=document.getElementById("av-ref-result"), btn=document.getElementById("av-ref-submit");
+  var origBtn=btn.textContent;
+  function errMsg(c){
+    if(c==="disposable_email") return "Please use a non-disposable email address.";
+    if(c==="no_mx") return "That email domain cannot receive mail - please check it.";
+    if(c==="invalid_email") return "Please enter a valid email address.";
+    return "Something went wrong - please try again.";
+  }
+  function fail(m){ out.innerHTML=""; var p=document.createElement("p"); p.className="muted"; p.style.color="#f85149"; p.textContent=m; out.appendChild(p); }
+  function shareRow(link){
+    var prefix=f.getAttribute("data-sharetext-prefix")||"";
+    var text=prefix+link;
+    var row=document.createElement("div"); row.style.cssText="display:flex;gap:8px;margin:12px 0 0;flex-wrap:wrap";
+    var bcss="font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--mint);background:transparent;color:var(--mint);cursor:pointer";
+    var copyBtn=document.createElement("button"); copyBtn.type="button"; copyBtn.textContent="Copy link"; copyBtn.style.cssText=bcss;
+    copyBtn.onclick=function(){ var ok=function(){copyBtn.textContent="Copied!";setTimeout(function(){copyBtn.textContent="Copy link";},1500);}; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok).catch(function(){copyBtn.textContent="Copy failed";}); } else { var t=document.createElement("textarea"); t.value=text; document.body.appendChild(t); t.select(); try{document.execCommand("copy");ok();}catch(e){} document.body.removeChild(t); } };
+    row.appendChild(copyBtn);
+    if(navigator.share){ var shareBtn=document.createElement("button"); shareBtn.type="button"; shareBtn.textContent="Share \\u2192"; shareBtn.style.cssText=bcss+";background:var(--mint);color:var(--bg)"; shareBtn.onclick=function(){ navigator.share({text:text}).catch(function(){}); }; row.appendChild(shareBtn); }
+    return row;
+  }
+  function success(data){
+    f.style.display="none"; out.innerHTML="";
+    if(data.bonus_calls){ var b=document.createElement("p"); b.style.cssText="color:var(--mint);font-weight:700;margin:0 0 10px;font-size:15px"; b.textContent="\\u2713 "+data.bonus_calls+" one-time bonus calls added (on top of your 100/mo free)!"; out.appendChild(b); }
+    var lbl=document.createElement("div"); lbl.className="l muted"; lbl.style.cssText="font-size:12px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.5px"; lbl.textContent="Your referral link"; out.appendChild(lbl);
+    var a=document.createElement("a"); a.className="link mono"; a.href=data.referral_link; a.textContent=data.referral_link; a.style.cssText="display:block;margin:6px 0 0"; out.appendChild(a);
+    out.appendChild(shareRow(data.referral_link));
+    var p=document.createElement("p"); p.className="muted"; p.style.margin="12px 0 0"; p.textContent="We emailed your free API key for next time."; out.appendChild(p);
+  }
+  f.addEventListener("submit",function(e){
+    e.preventDefault();
+    var email=(document.getElementById("av-ref-email").value||"").trim();
+    var consent=document.getElementById("av-ref-consent").checked;
+    var src=f.getAttribute("data-source")||"referral-page";
+    var ref=f.getAttribute("data-ref")||"";
+    var body={email:email,optin_consent:consent,source:src};
+    if(ref){ body.ref=ref; }
+    btn.disabled=true; btn.textContent="Creating..."; out.textContent="";
+    fetch("/api/signup-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+      .then(function(res){
+        btn.disabled=false; btn.textContent=origBtn;
+        if(res.s===200 && res.j && res.j.referral_link){ success(res.j); }
+        else { fail(errMsg((res.j&&res.j.error)||"error")); }
+      })
+      .catch(function(){ btn.disabled=false; btn.textContent=origBtn; fail("Something went wrong - please try again."); });
+  });
+})();
+</script>
+
+    <h2>How it works</h2>
+    <div class="card">
+      <ol style="margin:0;padding-left:20px;line-height:1.9">
+        <li><strong>Grab your link.</strong> Every account gets one automatically — find it in your account.</li>
+        <li><strong>Share it.</strong> Your friend gets 500 one-time bonus calls (on top of the free 100/mo) the moment they join.</li>
+        <li><strong>Earn.</strong> Get 30% of their subscription every month for 12 months — auto-credited.</li>
+      </ol>
+    </div>
+
+    <h2>FAQ</h2>
+    <div class="card">
+      <p><strong>Who can refer?</strong> Anyone — paid or free. No key yet? Create a free account above (just an email, no card) and your link is generated automatically.</p>
+      <p><strong>What counts?</strong> A friend who signs up or subscribes through your link.</p>
+      <p><strong>How am I paid?</strong> Commission is credited automatically to your next AlgoVault invoice. No active subscription? It accrues and is payable in USDC on Base once your balance reaches $50.</p>
+      <p style="margin-bottom:0"><strong>Full terms?</strong> Read the <a href="/referral-terms">referral terms</a> — including the required FTC disclosure when you promote your link.</p>
+    </div>
+
+    <p class="muted">Just want to use AlgoVault? No signup needed — <a href="https://algovault.com/#quickstart">start free in 30s</a>.</p>
+  </div></body></html>"
+`;

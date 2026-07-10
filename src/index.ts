@@ -1548,18 +1548,21 @@ async function startHttp() {
 
     // FUNNEL-FIX-HUMAN-SIGNUP-W1: render the value-before-email + OAuth options only when flagged;
     // each OAuth button renders ONLY when its real creds exist (no stub buttons shown to users).
-    const { isNewSignupEnabled, getAuthProvider } = await import('./lib/auth-providers.js');
+    const { isNewSignupEnabled, isUnifiedSigninEnabled, getAuthProvider } = await import('./lib/auth-providers.js');
     const newSignupEnabled = isNewSignupEnabled();
+    // FUNNEL-FIX-AUTH-UNIFY-W1: outer flag → the ONE shared sign-in card on the organic arm.
+    const unifiedSignin = isUnifiedSigninEnabled();
     const oauthProviders = { google: getAuthProvider('google').live, github: getAuthProvider('github').live };
+    const src = typeof req.query.src === 'string' ? req.query.src : null;
 
     // Organic visit (no session_id) — render paywall CTA + no API-key reveal.
     if (!sessionId) {
-      return res.send(getWelcomePageHtml(null, null, null, { utmSource, utmCampaign, newSignupEnabled, oauthProviders }));
+      return res.send(getWelcomePageHtml(null, null, null, { utmSource, utmCampaign, newSignupEnabled, oauthProviders, unifiedSignin, src }));
     }
 
     try {
       const { apiKey, tier, email } = await getCustomerApiKey(sessionId);
-      res.send(getWelcomePageHtml(apiKey, tier, email, { utmSource, utmCampaign, newSignupEnabled, oauthProviders }));
+      res.send(getWelcomePageHtml(apiKey, tier, email, { utmSource, utmCampaign, newSignupEnabled, oauthProviders, unifiedSignin, src }));
     } catch (err) {
       console.error('Welcome page error:', err instanceof Error ? err.message : err);
       res.status(500).send('Failed to retrieve your API key. Please contact support@algovault.com');
@@ -1594,10 +1597,22 @@ async function startHttp() {
   // destination (incentive-first; CTA routes anon visitors to /account). Served
   // on the apex via the Caddyfile `handle /referral` reverse_proxy (same path as
   // /track-record) so algovault.com/referral resolves; mirrors /referral-terms.
-  app.get('/referral', async (_req, res) => {
+  app.get('/referral', async (req, res) => {
     const { renderReferralLandingPage } = await import('./lib/referral-pages.js');
+    // FUNNEL-FIX-AUTH-UNIFY-W1: outer flag OFF → email-only legacy page (byte-identical);
+    // ON → the shared sign-in card (referral reachable by one-tap Google/GitHub).
+    const { isUnifiedSigninEnabled, isNewSignupEnabled, getAuthProvider } = await import('./lib/auth-providers.js');
+    const unifiedSignin = isUnifiedSigninEnabled();
+    const referralOpts = unifiedSignin
+      ? {
+          unifiedSignin,
+          newSignupEnabled: isNewSignupEnabled(),
+          oauthProviders: { google: getAuthProvider('google').live, github: getAuthProvider('github').live },
+          src: typeof req.query.src === 'string' ? req.query.src : null,
+        }
+      : {};
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(renderReferralLandingPage());
+    res.send(renderReferralLandingPage(referralOpts));
   });
   // REFERRAL-WEB-FIX-W1: the branded apex referee landing every web share link points
   // to. Validates ?ref= (invalid/missing → graceful general start-free, no bonus claim);

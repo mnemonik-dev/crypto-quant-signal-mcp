@@ -154,7 +154,22 @@ export function getAuthProvider(id: ProviderId, env: NodeJS.ProcessEnv = process
   return new StubProvider(id);
 }
 
-/** Is the new-signup flow enabled (outer firewall flag; default OFF). */
+/**
+ * Is the deferred-identity signup flow (start-free + OAuth routes) enabled?
+ * This is the INNER firewall — the /api/start-free + /auth/* routes 404 when off.
+ * (Currently flipped LIVE via NEW_SIGNUP_ENABLED=1.)
+ */
 export function isNewSignupEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.NEW_SIGNUP_ENABLED === '1' || env.NEW_SIGNUP_ENABLED === 'true';
+}
+
+/**
+ * FUNNEL-FIX-AUTH-UNIFY-W1 — OUTER firewall for the unified sign-in LAYOUT.
+ * When off (default), /welcome · /account · /referral render their LEGACY layouts
+ * byte-identically; when on, each renders the ONE shared `renderSigninComponent`.
+ * Composes over `isNewSignupEnabled` (the inner flag still gates start-free + OAuth).
+ * Ship DARK; Mr.1 owns the flip; instant rollback = unset.
+ */
+export function isUnifiedSigninEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.UNIFIED_SIGNIN_ENABLED === '1' || env.UNIFIED_SIGNIN_ENABLED === 'true';
 }

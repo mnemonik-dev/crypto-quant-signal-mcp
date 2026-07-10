@@ -17,6 +17,7 @@ import {
   formatUsdE2,
 } from './referral-constants.js';
 import { renderPlanCards, PLAN_CARDS_CSS } from './signup-flow.js';
+import { renderSigninComponent } from './signin-component.js';
 
 const FTC_URL = 'https://www.ecfr.gov/current/title-16/chapter-I/subchapter-B/part-255';
 const TERMS_PATH = '/referral-terms';
@@ -312,11 +313,24 @@ export function renderReferralSignupForm(opts?: { ref?: string; source?: string;
  * start-free → absolute apex #quickstart; the form POSTs same-origin /api/signup-email
  * (apex-proxied this wave).
  */
-export function renderReferralLandingPage(): string {
+export interface ReferralLandingOptions {
+  /** FUNNEL-FIX-AUTH-UNIFY-W1 outer flag → replace the email-only form with the shared sign-in card. */
+  unifiedSignin?: boolean;
+  oauthProviders?: { google: boolean; github: boolean };
+  newSignupEnabled?: boolean;
+  src?: string | null;
+}
+
+export function renderReferralLandingPage(opts: ReferralLandingOptions = {}): string {
+  // Unified: OAuth/email/start-free — the referral link becomes reachable by one-tap, not email-only.
+  // Legacy (flag off): the email-only signup form, byte-identical.
+  const signinBlock = opts.unifiedSignin
+    ? renderSigninComponent({ page: 'referral', oauthProviders: opts.oauthProviders, newSignupEnabled: opts.newSignupEnabled, src: opts.src })
+    : renderReferralSignupForm();
   const body = `
     <h1>Refer a friend — both win.</h1>
     <p class="sub">Your friend gets ${bonusCallsLabel()} one-time bonus calls. You earn ${commissionPct()} of their subscription for ${commissionMonthsLabel()} — paid automatically.</p>
-    ${renderReferralSignupForm()}
+    ${signinBlock}
 
     <h2>How it works</h2>
     <div class="card">

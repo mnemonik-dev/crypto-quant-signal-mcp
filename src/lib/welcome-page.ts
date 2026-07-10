@@ -10,6 +10,8 @@
  * bot validates via the internal-bypass-gated /api/bot/validate-key endpoint.
  */
 
+import { renderSigninComponent } from './signin-component.js';
+
 /**
  * Sanitize a UTM-ish param to safe URL-injection-free chars. Anything outside
  * [a-zA-Z0-9_:.-] is dropped; result is also length-capped. Empty when input
@@ -27,6 +29,10 @@ export interface WelcomePageOptions {
   newSignupEnabled?: boolean;
   /** Per-provider LIVE flag — an OAuth button renders ONLY when its real creds exist (no stub buttons to users). */
   oauthProviders?: { google: boolean; github: boolean };
+  /** FUNNEL-FIX-AUTH-UNIFY-W1: render the ONE shared sign-in card (UNIFIED_SIGNIN_ENABLED). Off ⇒ legacy layout byte-identical. */
+  unifiedSignin?: boolean;
+  /** First-touch ?src to preserve through the shared sign-in + OAuth redirect. */
+  src?: string | null;
 }
 
 export function getWelcomePageHtml(
@@ -53,11 +59,17 @@ export function getWelcomePageHtml(
   // who aren't ready to pay can opt in to ~1/mo product updates. Form POSTs
   // to /api/signup-email via fetch(); success swaps to ✓ message; failure
   // surfaces an inline error.
+  // FUNNEL-FIX-AUTH-UNIFY-W1: when the outer flag is on, the organic sign-in
+  // methods (start-free + OAuth + email) render as the ONE shared component.
+  const unifiedCard = opts.unifiedSignin
+    ? renderSigninComponent({ page: 'welcome', oauthProviders: opts.oauthProviders, newSignupEnabled: opts.newSignupEnabled, src: opts.src })
+    : '';
+
   const paywallCta = isOrganicVisit
     ? `<div class="paywall-cta">
          <div class="paywall-headline">Free-tier MCP access — 100 calls per month</div>
          <p class="paywall-body">Upgrade to Starter for 3,000 calls per month, full asset coverage, and unlimited Telegram bot alerts.</p>
-         ${opts.newSignupEnabled ? `
+         ${opts.unifiedSignin ? unifiedCard : `${opts.newSignupEnabled ? `
          <div class="startfree-block" style="margin:10px 0">
            <button type="button" class="paywall-btn" style="background:#238636;width:100%;border:0;cursor:pointer" onclick="avStartFree(this)">⚡ Start free — no card, no email · get a live BTC signal now</button>
            <div id="startfree-result" style="display:none;margin-top:10px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;font-size:13px"></div>
@@ -90,7 +102,7 @@ export function getWelcomePageHtml(
              </label>
              <div id="signup-email-error" class="signup-email-error" aria-live="polite"></div>
            </form>
-         </div>
+         </div>`}
          <a class="paywall-btn" href="/signup?plan=starter&utm_source=welcome_page${utmSource ? `_${utmSource}` : ''}${utmQuery}">Upgrade to Starter — $9.99/mo</a>
          <p class="paywall-fineprint">Or stay on the free tier — your API key is auto-provisioned on every <code>/signup</code> click. <a href="/signup?plan=pro${utmQuery}">Need higher volume? See Pro / Enterprise →</a></p>
        </div>`

@@ -24,6 +24,8 @@ import { sendKeyRecoveryEmail } from './email.js';
 import type { ReferralStatsView } from './referral-pages.js';
 import { renderBrandFooter } from './footer-content.js';
 import { renderSiteNav } from './site-nav.js';
+import { renderSigninComponent } from './signin-component.js';
+import { isUnifiedSigninEnabled, isNewSignupEnabled, getAuthProvider } from './auth-providers.js';
 
 // DESIGN-W10 / C2 / Q-W10-10: REPLACED body-flex-centering with var(--bg) layout.
 // Existing .tabs/.tab/.panel/.subtitle/.footer/.error/.success class blocks PRESERVED
@@ -115,7 +117,19 @@ function accountH1(prefix: string, accent: string): string {
   return `<h1 style="font-family:var(--font-display, 'Inter Tight', sans-serif);font-size:42px;line-height:1.1;letter-spacing:-0.025em;font-weight:500;margin:0 0 14px;color:var(--fg)">${prefix} <span style="color: var(--accent, var(--mint))">${accent}</span></h1>`;
 }
 
-export function getAccountPageHtml(): string {
+export interface AccountPageOptions {
+  /** FUNNEL-FIX-AUTH-UNIFY-W1 outer flag → render the shared sign-in card above the paste-key tabs. */
+  unifiedSignin?: boolean;
+  oauthProviders?: { google: boolean; github: boolean };
+  newSignupEnabled?: boolean;
+  src?: string | null;
+}
+
+export function getAccountPageHtml(opts: AccountPageOptions = {}): string {
+  // Unified sign-in as the PRIMARY (human login); the paste-key tabs below stay the secondary path.
+  const signinCard = opts.unifiedSignin
+    ? `<div style="margin-bottom:20px">${renderSigninComponent({ page: 'account', oauthProviders: opts.oauthProviders, newSignupEnabled: opts.newSignupEnabled, src: opts.src })}</div>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,7 +141,7 @@ ${ACCOUNT_NAV_HTML}
 ${accountArtboardOpen()}
       <div class="placeholder-cap" style="margin-bottom:14px">· account</div>
       ${accountH1('Your', 'Account')}
-      <div class="subtitle">Cancel, switch plans, update card, or recover a lost API key.</div>
+      <div class="subtitle">Cancel, switch plans, update card, or recover a lost API key.</div>${signinCard}
       <div class="tier-stat-card" style="padding:24px;gap:0">
         <div class="tabs" role="tablist">
           <button class="tab active" id="tab-key" type="button" onclick="switchTab('key')">I have my API key</button>
@@ -221,8 +235,18 @@ ${renderBrandFooter('desktop')}
 </html>`;
 }
 
-export function accountPageHandler(_req: Request, res: Response): void {
-  res.send(getAccountPageHtml());
+export function accountPageHandler(req: Request, res: Response): void {
+  // FUNNEL-FIX-AUTH-UNIFY-W1: outer flag OFF → byte-identical legacy page; ON → shared sign-in card on top.
+  const unifiedSignin = isUnifiedSigninEnabled();
+  const opts: AccountPageOptions = unifiedSignin
+    ? {
+        unifiedSignin,
+        newSignupEnabled: isNewSignupEnabled(),
+        oauthProviders: { google: getAuthProvider('google').live, github: getAuthProvider('github').live },
+        src: typeof req.query.src === 'string' ? req.query.src : null,
+      }
+    : {};
+  res.send(getAccountPageHtml(opts));
 }
 
 export async function accountPortalHandler(req: Request, res: Response): Promise<void> {
