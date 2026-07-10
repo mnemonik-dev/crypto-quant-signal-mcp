@@ -134,6 +134,7 @@ export function renderFunnelDashboardHtml(): string {
     "  el('cross').innerHTML='<div class=\"warn\"><b>Attribution is '+pct(directPct)+' blind.</b> Most human clicks + agent connects are untagged \\u201cdirect\\u201d \\u2014 you can\\u2019t yet tell which channel produces payers. Fix = UTM every owned link + server-side ?src= first-touch.</div>'"
     ,
     "    +'<div class=\"warn\"><b>No activation-timing stage.</b> Neither funnel measures time-to-first-call (TTFC) \\u2014 the documented precursor to retention + payment. Activated counts \\u22651 call but not <em>how fast</em>.</div>';",
+    "  var sc=d.source_channels;if(sc){var scrows=sc.by_source.map(function(x){return [x.source,x.medium,f(x.count),pct(x.pct)+(x.low_confidence?' n<30':'')];});table(el('srcchan'),['Source','Medium','Sessions','Share'],scrows);setText('srccov','Coverage '+pct(sc.coverage_pct)+' classified ('+f(sc.classified)+' of '+f(sc.total)+' sessions). '+esc(sc.note));}",
     // detail panels (retained)
     "  var rt=d.retention;if(rt){var d90=function(c){return c.d90==null?'\\u2014':pct(c.d90);};",
     "    table(el('rt-tier'),['Tier','d7','d14','d30','d90','sessions'],[['\\ud83d\\udfe2 Free',pct(rt.by_tier.free.d7),pct(rt.by_tier.free.d14),pct(rt.by_tier.free.d30),d90(rt.by_tier.free),f(rt.by_tier.free.cohort_size)],['\\ud83d\\udcb3 Paid',pct(rt.by_tier.paid.d7),pct(rt.by_tier.paid.d14),pct(rt.by_tier.paid.d30),d90(rt.by_tier.paid),f(rt.by_tier.paid.cohort_size)]]);",
@@ -164,6 +165,8 @@ export function renderFunnelDashboardHtml(): string {
     '<div class="hold" id="hold"></div>',
     '<div class="bridge" id="bridge"></div>',
     '<div class="st">Cross-cutting gaps (fix these to see clearly)</div><div class="cross" id="cross"></div>',
+    '<div class="st">Source-classified channels (first-touch) <span style="font-size:11px;font-weight:400;color:#8b949e;float:right">new-traffic-forward · coverage grows as the log-sampler + owned-link tags land</span></div>',
+    '<div id="srcchan"></div><div class="muted" id="srccov"></div>',
     '<div class="st">Retention detail — by tier &amp; by channel (internal bot excluded)</div>',
     '<div class="muted">By tier (free vs paid)</div><div id="rt-tier"></div>',
     '<div class="muted" style="margin-top:10px">By channel (connection ?src= source)</div><div id="rt-channel"></div>',

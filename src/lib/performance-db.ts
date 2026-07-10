@@ -309,6 +309,9 @@ const SIGNAL_MIGRATIONS: MigrationDescriptor[] = [
   { table: 'signals', column: 'return_1candle', type: 'REAL' },
   // v1.5: exchange column for multi-exchange support
   { table: 'signals', column: 'exchange', type: "TEXT NOT NULL DEFAULT 'HL'" },
+  // FUNNEL-FIX-ATTRIBUTION-W1: first-touch (write-once) + last-touch acquisition source.
+  { table: 'agent_sessions', column: 'first_touch_source', type: 'TEXT' },
+  { table: 'agent_sessions', column: 'last_touch_source', type: 'TEXT' },
   // R5 (2026-04-14): regime label for audit round H5
   { table: 'signals', column: 'regime', type: 'TEXT NULL' },
   // Merkle proof columns
@@ -431,7 +434,9 @@ const CREATE_AGENT_SESSIONS_SQL = `
     tiers_seen     TEXT NOT NULL DEFAULT '',
     first_tool     TEXT,
     first_tier     TEXT,
-    ip_hash_first  TEXT
+    ip_hash_first  TEXT,
+    first_touch_source TEXT,
+    last_touch_source  TEXT
   );
 `;
 
@@ -1042,8 +1047,11 @@ export async function upsertAgentSession(params: {
   tool: string;
   tier: string;
   ipHash: string | null;
+  /** FUNNEL-FIX-ATTRIBUTION-W1: classified acquisition source — first_touch is write-once. */
+  source?: string | null;
 }): Promise<void> {
   const { sessionId, tool, tier, ipHash } = params;
+  const src = params.source ?? null;
   const now = Date.now();
   const b = getBackend();
 
@@ -1065,12 +1073,12 @@ export async function upsertAgentSession(params: {
     if (existing.length === 0) {
       // First call — INSERT
       const insertSql = `INSERT INTO agent_sessions
-        (session_id, first_seen, last_seen, call_count, tools_used, tiers_seen, first_tool, first_tier, ip_hash_first)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        (session_id, first_seen, last_seen, call_count, tools_used, tiers_seen, first_tool, first_tier, ip_hash_first, first_touch_source, last_touch_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
       if (isPg && b instanceof PgBackend) {
-        await b.runAsync(insertSql, sessionId, now, now, 1, tool, tier, tool, tier, ipHash);
+        await b.runAsync(insertSql, sessionId, now, now, 1, tool, tier, tool, tier, ipHash, src, src);
       } else {
-        b.run(insertSql, sessionId, now, now, 1, tool, tier, tool, tier, ipHash);
+        b.run(insertSql, sessionId, now, now, 1, tool, tier, tool, tier, ipHash, src, src);
       }
       return;
     }
@@ -1083,13 +1091,17 @@ export async function upsertAgentSession(params: {
     const newToolsUsed = currentTools.join(',');
     const newTiersSeen = currentTiers.join(',');
 
+    // first_touch_source = COALESCE(existing, src) → WRITE-ONCE (only set when still NULL).
+    // last_touch_source = COALESCE(src, existing) → updated only when this hit HAS a source.
     const updateSql = `UPDATE agent_sessions
-      SET last_seen = ?, call_count = call_count + 1, tools_used = ?, tiers_seen = ?
+      SET last_seen = ?, call_count = call_count + 1, tools_used = ?, tiers_seen = ?,
+          first_touch_source = COALESCE(first_touch_source, ?),
+          last_touch_source = COALESCE(?, last_touch_source)
       WHERE session_id = ?`;
     if (isPg && b instanceof PgBackend) {
-      await b.runAsync(updateSql, now, newToolsUsed, newTiersSeen, sessionId);
+      await b.runAsync(updateSql, now, newToolsUsed, newTiersSeen, src, src, sessionId);
     } else {
-      b.run(updateSql, now, newToolsUsed, newTiersSeen, sessionId);
+      b.run(updateSql, now, newToolsUsed, newTiersSeen, src, src, sessionId);
     }
   } catch (e) {
     console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e);

@@ -30,6 +30,8 @@
  * is the default-deny terminal. `npm` is connect-uncapturable (see file
  * header) — kept as a forward-compat placeholder, NOT wired on any URL.
  */
+import { matchLlmClientUa, logUnmatchedUa } from './llm-clients.js';
+
 export const ATTRIBUTION_SOURCES = [
   'chatgpt',
   'claude',
@@ -45,7 +47,11 @@ export const ATTRIBUTION_SOURCES = [
   'github',
   'docs',
   'x',
-  'unknown', // default-deny terminal — an untagged connect is unknown, not "direct"
+  // FUNNEL-FIX-ATTRIBUTION-W1 — LLM-client channels (UA-matched via llm-clients.ts once observed):
+  'cursor', 'windsurf', 'cline', 'continue', 'zed', 'copilot',
+  // FUNNEL-FIX-ATTRIBUTION-W1 — inbound referrer channels (referer-domain-matched):
+  'devto', 'medium', 'lobehub', 'producthunt', 'reddit', 'organic',
+  'unknown', // default-deny terminal — an untagged/unclassified hit is unknown, not "direct"
 ] as const;
 
 export type AttributionSource = (typeof ATTRIBUTION_SOURCES)[number];
@@ -60,19 +66,37 @@ export interface ResolvedSource {
   source_confidence: SourceConfidence;
 }
 
+// FUNNEL-FIX-ATTRIBUTION-W1: the UA→client heuristic map moved to the extensible
+// `llm-clients.ts` SoT (add-a-row once a real UA is observed). Referer classification below.
+
 /**
- * UA→slug heuristic map. Ordered: first match wins. Deliberately NARROW — only
- * patterns that identify an acquisition CHANNEL (not merely a generic client)
- * with reasonable confidence, to avoid false attribution. New pattern = one row.
- *
- * Note: most MCP clients (Cursor, Cline, Windsurf, …) are not channels in the
- * enum, so their UA correctly resolves to `unknown` unless `?src=`-tagged. The
- * connector channels (ChatGPT App, Claude Connectors) carry identifying UAs.
+ * Inbound-referrer host → source (deterministic — a known referrer domain IS a channel).
+ * Owned-surface + organic domains, seeded from the ratified Q3 map. Extend = one row.
  */
-const UA_HEURISTICS: ReadonlyArray<{ pattern: RegExp; source: AttributionSource }> = [
-  { pattern: /chatgpt|openai/i, source: 'chatgpt' },
-  { pattern: /claude|anthropic/i, source: 'claude' },
+const REFERER_DOMAIN_MAP: ReadonlyArray<{ pattern: RegExp; source: AttributionSource }> = [
+  { pattern: /(^|\.)x\.com$|(^|\.)twitter\.com$/i, source: 'x' },
+  { pattern: /(^|\.)github\.com$/i, source: 'github' },
+  { pattern: /(^|\.)npmjs\.com$/i, source: 'npm' },
+  { pattern: /(^|\.)dev\.to$/i, source: 'devto' },
+  { pattern: /(^|\.)medium\.com$/i, source: 'medium' },
+  { pattern: /(^|\.)lobehub\.com$/i, source: 'lobehub' },
+  { pattern: /(^|\.)producthunt\.com$/i, source: 'producthunt' },
+  { pattern: /(^|\.)reddit\.com$/i, source: 'reddit' },
+  { pattern: /(^|\.)smithery\.ai$/i, source: 'smithery' },
+  { pattern: /(^|\.)glama\.ai$/i, source: 'glama' },
+  { pattern: /(^|\.)pulsemcp\.com$/i, source: 'pulsemcp' },
+  { pattern: /(^|\.)mcp\.so$/i, source: 'mcp_so' },
+  { pattern: /(^|\.)(google|bing|duckduckgo|ecosia)\./i, source: 'organic' },
 ];
+
+/** Classify a Referer URL by its host against the domain map. null if none/unparseable. Pure. */
+export function classifyReferer(referer: unknown): AttributionSource | null {
+  if (typeof referer !== 'string' || !referer) return null;
+  let host: string;
+  try { host = new URL(referer).hostname.toLowerCase(); } catch { return null; }
+  for (const r of REFERER_DOMAIN_MAP) if (r.pattern.test(host)) return r.source;
+  return null;
+}
 
 /** Type guard: is `v` a known attribution slug? */
 export function isAttributionSource(v: unknown): v is AttributionSource {
@@ -112,16 +136,59 @@ export function resolveSource(input: {
   origin?: unknown;
   referer?: unknown;
 }): ResolvedSource {
+  // (1) explicit ?src= / utm (deterministic).
   const tagged = normalizeSrcParam(input.srcParam);
   if (tagged) return { source: tagged, source_confidence: 'deterministic' };
 
+  // (2) FUNNEL-FIX-ATTRIBUTION-W1: Referer domain (deterministic — a known referrer host).
+  const referred = classifyReferer(input.referer);
+  if (referred) return { source: referred, source_confidence: 'deterministic' };
+
+  // (3) LLM-client UA (heuristic; extensible map). Unmatched non-empty UAs are log-sampled
+  //     (forensic) so a real cursor/windsurf UA can be turned into a row later.
   const ua = typeof input.userAgent === 'string' ? input.userAgent : '';
   if (ua) {
-    for (const h of UA_HEURISTICS) {
-      if (h.pattern.test(ua)) return { source: h.source, source_confidence: 'heuristic' };
-    }
+    const client = matchLlmClientUa(ua);
+    if (client) return { source: client, source_confidence: 'heuristic' };
+    logUnmatchedUa(ua);
   }
+
+  // (4) default-deny.
   return { source: 'unknown', source_confidence: 'unknown' };
+}
+
+/** Coarse medium for a resolved source (for the classified-channel panel). Pure. */
+export type SourceMedium = 'listing' | 'social' | 'agent' | 'organic' | 'referral' | 'direct';
+export function mediumForSource(source: AttributionSource): SourceMedium {
+  switch (source) {
+    case 'x': return 'social';
+    case 'chatgpt': case 'claude': case 'cursor': case 'windsurf': case 'cline':
+    case 'continue': case 'zed': case 'copilot': return 'agent';
+    case 'smithery': case 'glama': case 'pulsemcp': case 'mcp_so': case 'bazaar':
+    case 'agentkit': case 'elizaos': case 'llamahub': case 'npm': case 'lobehub':
+    case 'producthunt': return 'listing';
+    case 'organic': return 'organic';
+    case 'github': case 'docs': case 'devto': case 'medium': case 'reddit': return 'referral';
+    default: return 'direct'; // 'unknown' → the honest direct/unknown residual
+  }
+}
+
+export interface ClassifiedSource {
+  source: AttributionSource;
+  medium: SourceMedium;
+  confidence: SourceConfidence;
+}
+
+/**
+ * FUNNEL-FIX-ATTRIBUTION-W1 — the richer entry point: resolve `{source, medium, confidence}`
+ * from all connection-layer signals (?src/utm → Referer → LLM-client UA → default-deny).
+ * Never fabricates a channel. Feeds the classified-channel panel + the first-touch stamp.
+ */
+export function classifySource(input: {
+  srcParam?: unknown; userAgent?: unknown; origin?: unknown; referer?: unknown;
+}): ClassifiedSource {
+  const { source, source_confidence } = resolveSource(input);
+  return { source, medium: mediumForSource(source), confidence: source_confidence };
 }
 
 // ── connect-emit dedup (mirrors track-token.ts shouldEmitForRequest) ──────────

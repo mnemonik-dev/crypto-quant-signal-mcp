@@ -31,6 +31,7 @@ import {
 } from './subscriber-attribution.js';
 import { countActiveSubscriptionsByTier, type ActiveSubscriberTierCensus } from './stripe.js';
 import { getUsageStats } from './analytics.js';
+import { mediumForSource, type AttributionSource } from './attribution-sources.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_WINDOWS_DAYS = [7, 14, 30, 90] as const;
@@ -551,6 +552,14 @@ export interface FunnelScoreboard {
   human_funnel: HumanFunnel;
   agent_funnel: AgentFunnel;
   hold_upside: HoldUpside;
+  /** FUNNEL-FIX-ATTRIBUTION-W1: source-classified channel breakdown (first_touch_source), windowed. */
+  source_channels: {
+    by_source: Array<{ source: string; medium: string; count: number; pct: number | null; low_confidence: boolean }>;
+    total: number;
+    classified: number;
+    coverage_pct: number | null; // classified / total (share NOT direct/unknown)
+    note: string;
+  };
   daily: Array<{ date: string; signup_intent: number; conversions: number }>;
   warnings: string[];
 }
@@ -783,6 +792,36 @@ export async function getFunnelScoreboard(
     getHoldUpside(window, deps),
   ]);
 
+  // ── FUNNEL-FIX-ATTRIBUTION-W1: source-classified channels (first_touch_source), windowed ──
+  const srcThresholdMs = days >= 365 && window === 'all' ? 0 : nowMs - days * DAY_MS;
+  let srcRows: Array<{ source: string | null; c: number | string }> = [];
+  try {
+    srcRows = await deps.query<{ source: string | null; c: number | string }>(
+      `SELECT first_touch_source AS source, COUNT(*) AS c FROM agent_sessions WHERE first_tier <> 'internal' AND first_seen >= ? GROUP BY first_touch_source`,
+      [srcThresholdMs],
+    );
+  } catch (err) {
+    warnings.push(`source_channels read failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const srcTotal = srcRows.reduce((s, r) => s + (safeCount(r.c) ?? 0), 0);
+  const srcClassified = srcRows.filter(r => r.source && r.source !== 'unknown').reduce((s, r) => s + (safeCount(r.c) ?? 0), 0);
+  const source_channels: FunnelScoreboard['source_channels'] = {
+    by_source: srcRows.map(r => {
+      const count = safeCount(r.c) ?? 0;
+      return {
+        source: r.source || 'direct/unknown',
+        medium: r.source ? mediumForSource(r.source as AttributionSource) : 'direct',
+        count,
+        pct: srcTotal > 0 ? count / srcTotal : null,
+        low_confidence: lowConfidence(count),
+      };
+    }).sort((a, b) => b.count - a.count),
+    total: srcTotal,
+    classified: srcClassified,
+    coverage_pct: srcTotal > 0 ? srcClassified / srcTotal : null,
+    note: 'first_touch_source per session (write-once), new-traffic-forward — pre-fix sessions have no source (counted as direct/unknown). Internal bot excluded.',
+  };
+
   // ── Daily timeseries (signup intent + conversions) ──
   const signupDaily = bucketDaily(signupRows.map(r => toEpochMs(r.created_at)), nowMs, Math.min(days, 90));
   const convDaily = bucketDaily(profiles.map(p => toEpochMs(p.converted_at)), nowMs, Math.min(days, 90));
@@ -808,6 +847,7 @@ export async function getFunnelScoreboard(
     human_funnel,
     agent_funnel,
     hold_upside,
+    source_channels,
     daily,
     warnings,
   };

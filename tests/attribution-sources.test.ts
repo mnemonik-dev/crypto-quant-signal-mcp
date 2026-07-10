@@ -23,14 +23,17 @@ describe('attribution-sources — SoT enum', () => {
     for (const s of [
       'chatgpt', 'claude', 'smithery', 'glama', 'pulsemcp', 'mcp_so',
       'bazaar', 'agentkit', 'elizaos', 'llamahub', 'npm', 'github', 'docs', 'x', 'unknown',
+      // FUNNEL-FIX-ATTRIBUTION-W1 ratified additions (LLM-client + inbound-referrer channels):
+      'cursor', 'windsurf', 'cline', 'continue', 'zed', 'copilot',
+      'devto', 'medium', 'lobehub', 'producthunt', 'reddit', 'organic',
     ]) {
       expect(set.has(s as never)).toBe(true);
     }
     // A4: `direct` was intentionally dropped (an untagged connect is `unknown`).
     expect(set.has('direct' as never)).toBe(false);
-    // 15 slugs, no duplicates.
-    expect(ATTRIBUTION_SOURCES.length).toBe(15);
-    expect(new Set(ATTRIBUTION_SOURCES).size).toBe(15);
+    // 15 original + 12 FUNNEL-FIX-ATTRIBUTION-W1 = 27 slugs, no duplicates.
+    expect(ATTRIBUTION_SOURCES.length).toBe(27);
+    expect(new Set(ATTRIBUTION_SOURCES).size).toBe(27);
   });
 
   it('isAttributionSource is a correct type guard', () => {

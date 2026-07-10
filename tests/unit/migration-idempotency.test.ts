@@ -30,6 +30,9 @@ const ALL_SIGNAL_COLS = [
   'pfe_return_pct', 'mae_return_pct', 'pfe_price', 'mae_price', 'pfe_candles', 'return_1candle',
   'exchange', 'regime',
   'signal_hash', 'merkle_batch_id', 'merkle_proof',
+  // FUNNEL-FIX-ATTRIBUTION-W1: agent_sessions first/last-touch source (the mock returns these
+  // for every table introspect, so "all present" covers both tables).
+  'first_touch_source', 'last_touch_source',
 ];
 
 interface MockPgBackend {
@@ -61,7 +64,7 @@ describe('OPS-HOUSEKEEPING-W1 Phase B: runPgMigrationsAsync idempotency', () => 
     const alterCount = await runPgMigrationsAsync(b as any);
     expect(alterCount).toBe(0);
     // Exactly one introspect query fired (NOT 13 individual ALTERs)
-    expect(b.query).toHaveBeenCalledTimes(1);
+    expect(b.query).toHaveBeenCalledTimes(2); // 2 distinct tables now: signals + agent_sessions
     expect(b.execAsync).toHaveBeenCalledTimes(0);
   });
 
@@ -75,7 +78,7 @@ describe('OPS-HOUSEKEEPING-W1 Phase B: runPgMigrationsAsync idempotency', () => 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const alterCount = await runPgMigrationsAsync(b as any);
     expect(alterCount).toBe(3);
-    expect(b.query).toHaveBeenCalledTimes(1);
+    expect(b.query).toHaveBeenCalledTimes(2); // 2 distinct tables now: signals + agent_sessions
     expect(b.execAsync).toHaveBeenCalledTimes(3);
 
     // Verify the ALTER calls target ONLY the missing columns
@@ -88,15 +91,15 @@ describe('OPS-HOUSEKEEPING-W1 Phase B: runPgMigrationsAsync idempotency', () => 
     expect(altered.some((sql: string) => sql.includes('ADD COLUMN IF NOT EXISTS exchange'))).toBe(false);
   });
 
-  // ── Test 3: Empty schema → all 13 SIGNAL_MIGRATIONS run ──
-  it('empty schema (no migration columns present) → all 13 ALTERs fire', async () => {
+  // ── Test 3: Empty schema → all SIGNAL_MIGRATIONS run ──
+  it('empty schema (no migration columns present) → all 15 ALTERs fire', async () => {
     const b = mockPg([]); // No migration columns in the table
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const alterCount = await runPgMigrationsAsync(b as any);
-    // SIGNAL_MIGRATIONS.length is 13 (drift guard — update if list grows)
-    expect(alterCount).toBe(13);
-    expect(b.query).toHaveBeenCalledTimes(1);
-    expect(b.execAsync).toHaveBeenCalledTimes(13);
+    // SIGNAL_MIGRATIONS.length is 15 (13 signals + 2 agent_sessions; drift guard — update if list grows)
+    expect(alterCount).toBe(15);
+    expect(b.query).toHaveBeenCalledTimes(2); // 2 distinct tables now: signals + agent_sessions
+    expect(b.execAsync).toHaveBeenCalledTimes(15);
   });
 
   // ── Test 4: ALTER calls use `IF NOT EXISTS` defense-in-depth ──

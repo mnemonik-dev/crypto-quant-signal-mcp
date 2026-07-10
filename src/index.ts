@@ -31,7 +31,7 @@ import { buildErc8004ReputationBody } from './lib/erc8004-reputation.js';
 import { verifyProof } from './lib/merkle.js';
 import { warmTierCaches } from './lib/asset-tiers.js';
 import { EXCHANGES, EXCHANGE_COUNT, TIMEFRAME_COUNT, getAssetCount, floorRoundTo10 } from './lib/capabilities.js';
-import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, getRequestSessionId, getRequestIpHash, getRequestVerdict, setRequestVerdict, initQuotaDb, checkQuota, checkInternalBypass, recordAhaMilestoneCrossing } from './lib/license.js';
+import { resolveLicense, resolveLicenseSync, requestContext, getRequestLicense, getRequestSessionId, getRequestIpHash, getRequestSource, getRequestVerdict, setRequestVerdict, initQuotaDb, checkQuota, checkInternalBypass, recordAhaMilestoneCrossing } from './lib/license.js';
 import { initX402, settleX402Async, buildX402PaymentRequiredResult } from './lib/x402.js';
 import { mountX402HttpRoutes, HTTP_TOOLS } from './lib/x402-http-routes.js';
 import { mountOkxA2mcpRoutes } from './lib/okx-a2mcp.js';
@@ -71,7 +71,7 @@ import {
 } from './lib/track-token.js';
 import { recordMcpToolsListEvent } from './lib/tools-list-event.js';
 import { classifyTraffic } from './lib/traffic-classifier.js';
-import { resolveSource, shouldEmitConnect } from './lib/attribution-sources.js';
+import { resolveSource, classifySource, shouldEmitConnect } from './lib/attribution-sources.js';
 import {
   isStripeConfigured,
   constructWebhookEvent,
@@ -481,6 +481,7 @@ function createServer(): McpServer {
             tool: toolNameForAnalytics,
             tier: license.tier,
             ipHash: getRequestIpHash() ?? null,
+            source: getRequestSource() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
         // P0 VERDICT-WITH-RECEIPTS-W1: content[0] stays the JSON envelope (now with
@@ -550,6 +551,7 @@ function createServer(): McpServer {
             tool: 'scan_funding_arb',
             tier: license.tier,
             ipHash: getRequestIpHash() ?? null,
+            source: getRequestSource() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
@@ -592,6 +594,7 @@ function createServer(): McpServer {
             tool: 'get_market_regime',
             tier: license.tier,
             ipHash: getRequestIpHash() ?? null,
+            source: getRequestSource() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
@@ -700,6 +703,7 @@ function createServer(): McpServer {
             tool: 'scan_trade_calls',
             tier: license.tier,
             ipHash: getRequestIpHash() ?? null,
+            source: getRequestSource() ?? null,
           }).catch((e) => console.debug('upsertAgentSession failed:', e instanceof Error ? e.message : e));
         }
         // content[0] = the JSON envelope (with the shared `_receipts` block).
@@ -3157,9 +3161,19 @@ async function startHttp() {
       recordMcpToolsListEvent({ sessionId, licenseTier: license.tier, identityTier });
     }
 
+    // FUNNEL-FIX-ATTRIBUTION-W1: resolve the classified acquisition source ONCE here (request
+    // headers in scope) and thread it via the ALS to the agent_sessions first-touch stamp.
+    // Additive — resolveSessionIdentity + the stateless resolver are untouched.
+    const attributionSource = classifySource({
+      srcParam: req.query?.src,
+      userAgent: req.headers['user-agent'],
+      origin: req.headers['origin'],
+      referer: req.headers['referer'],
+    }).source;
+
     // Run the entire request handling inside AsyncLocalStorage context
     // so tool handlers read the correct per-request license
-    await requestContext.run({ license, sessionId, ipHash, isAutomated: requestAuthenticity.is_automated }, async () => {
+    await requestContext.run({ license, sessionId, ipHash, isAutomated: requestAuthenticity.is_automated, source: attributionSource }, async () => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
 

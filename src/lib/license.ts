@@ -51,6 +51,13 @@ interface RequestContext {
    * emit — the SAME verdict feeds both. Absent (edge paths) → fail-open FALSE.
    */
   isAutomated?: boolean;
+  /**
+   * FUNNEL-FIX-ATTRIBUTION-W1: the classifed acquisition source (classifySource) for
+   * this request, resolved ONCE at the /mcp POST layer where headers are in scope, then
+   * read at the agent_sessions write to stamp first_touch (write-once) + last_touch.
+   * Additive; does NOT touch resolveSessionIdentity. Absent (edge paths) → not stamped.
+   */
+  source?: string;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();
@@ -73,6 +80,11 @@ export function getRequestSessionId(): string | undefined {
 
 export function getRequestIpHash(): string | undefined {
   return requestContext.getStore()?.ipHash;
+}
+
+/** FUNNEL-FIX-ATTRIBUTION-W1: the classified acquisition source for the current request. */
+export function getRequestSource(): string | undefined {
+  return requestContext.getStore()?.source;
 }
 
 /** Store the tool verdict so HTTP handler can skip x402 settlement for HOLD. */
